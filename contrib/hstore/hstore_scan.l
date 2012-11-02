@@ -1,0 +1,262 @@
+%{
+struct {
+    char    *strbuf;
+    int     length;
+    int     total;
+} string;
+
+/* No reason to constrain amount of data slurped */
+/* #define YY_READ_BUF_SIZE 16777216 */
+
+/* Handles to the buffer that the lexer uses internally */
+static YY_BUFFER_STATE scanbufhandle;
+static char *scanbuf;
+static int	scanbuflen;
+
+static void addstring(bool init, char *s, int l);
+static void addchar(bool init, char s);
+
+%}
+
+%option 8bit
+%option never-interactive
+%option nodefault
+%option noinput
+%option nounput
+%option noyywrap
+%option warn
+%option prefix="hstore_yy"
+%option bison-bridge
+
+%x xQUOTED
+%x xNONQUOTED
+
+any			[^\,\"\=\> \t\n\r\f\\]
+
+
+%%
+
+<INITIAL>\,						{ return *yytext; }
+
+<INITIAL>\=\>					{ return DELIMITER_P; }
+
+<INITIAL>[ \t\n\r\f]+			{ /* ignore */ }
+
+<INITIAL>\=/[^\>]				{
+									addchar(true, '=');
+									BEGIN xNONQUOTED;
+								}
+									
+<INITIAL>\>						{
+									addchar(true, yytext[0]);
+									BEGIN xNONQUOTED;
+								}
+<INITIAL>\\.					{
+									addchar(true, yytext[1]);
+									BEGIN xNONQUOTED;
+								}
+
+<INITIAL>({any}|\>)+			{
+									addstring(true, yytext, yyleng);
+									BEGIN xNONQUOTED;
+								}
+									
+<INITIAL>\" 					{
+									addchar(true, '\0');
+									BEGIN xQUOTED;
+								}
+
+<INITIAL>\=						{	/* =<<EOF>> */
+									addchar(true, '=');
+									yylval->str.val = string.strbuf;
+									yylval->str.len = string.length;
+									return STRING_P;
+								}
+
+<xNONQUOTED>({any}|\>|\")+		{ addstring(false, yytext, yyleng); }
+
+<xNONQUOTED>\=/[^\>]			{ addchar(false, *yytext); }
+
+<xNONQUOTED>[ \t\n\r\f]+		{ 
+									yylval->str.val = string.strbuf;
+									yylval->str.len = string.length;
+									BEGIN INITIAL;
+									return pg_strncasecmp("null", string.strbuf, string.length) ? STRING_P : NULL_P;
+								}
+
+<xNONQUOTED>\=					{	/* =<<EOF>> */
+									addchar(false, '=');
+									yylval->str.val = string.strbuf;
+									yylval->str.len = string.length;
+									BEGIN INITIAL;
+									return STRING_P;
+								}
+
+<xNONQUOTED>\,					{
+									yylval->str.val = string.strbuf;
+									yylval->str.len = string.length;
+									yyless(0);
+									BEGIN INITIAL;
+									return pg_strncasecmp("null", string.strbuf, string.length) ? STRING_P : NULL_P;;
+								}
+
+<xNONQUOTED><<EOF>>				{ 
+									yylval->str.val = string.strbuf;
+									yylval->str.len = string.length;
+									BEGIN INITIAL;
+									return pg_strncasecmp("null", string.strbuf, string.length) ? STRING_P : NULL_P;
+								}
+
+<xNONQUOTED>\=\>				{
+									yylval->str.val = string.strbuf;
+									yylval->str.len = string.length;
+									yyless(0);
+									BEGIN INITIAL;
+									return pg_strncasecmp("null", string.strbuf, string.length) ? STRING_P : NULL_P;
+								}
+									
+
+<xNONQUOTED,xQUOTED>\\.  		{ addchar(false, yytext[1]); }
+
+<INITIAL,xNONQUOTED,xQUOTED>\\ 	{ yyerror("Unexpected end after backslesh"); }
+
+<xQUOTED><<EOF>>				{ yyerror("Unexpected end of quoted string"); }
+
+<xQUOTED>\"						{
+									yylval->str.val = string.strbuf;
+									yylval->str.len = string.length;
+									BEGIN INITIAL;
+									return STRING_P;
+								}
+
+<xQUOTED>[^\\\"]+   			{ addstring(false, yytext, yyleng); }
+
+<INITIAL><<EOF>>				{ yyterminate(); }
+
+%%
+
+void
+yyerror(const char *message)
+{
+	if (*yytext == YY_END_OF_BUFFER_CHAR)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				 errmsg("bad hstore representation"),
+				 /* translator: %s is typically "syntax error" */
+				 errdetail("%s at end of input", message)));
+	}
+	else
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				 errmsg("bad hstore representation"),
+				 /* translator: first %s is typically "syntax error" */
+				 errdetail("%s at or near \"%s\"", message, yytext)));
+	}
+}
+
+
+/*
+ * Called before any actual parsing is done
+ */
+static void
+hstore_scanner_init(const char *str)
+{
+	Size	slen = strlen(str);
+
+	/*
+	 * Might be left over after ereport()
+	 */
+	if (YY_CURRENT_BUFFER)
+		yy_delete_buffer(YY_CURRENT_BUFFER);
+
+	/*
+	 * Make a scan buffer with special termination needed by flex.
+	 */
+
+	scanbuflen = slen;
+	scanbuf = palloc(slen + 2);
+	memcpy(scanbuf, str, slen);
+	scanbuf[slen] = scanbuf[slen + 1] = YY_END_OF_BUFFER_CHAR;
+	scanbufhandle = yy_scan_buffer(scanbuf, slen + 2);
+
+	BEGIN(INITIAL);
+}
+
+
+/*
+ * Called after parsing is done to clean up after hstore_scanner_init()
+ */
+static void
+hstore_scanner_finish(void)
+{
+	yy_delete_buffer(scanbufhandle);
+	pfree(scanbuf);
+}
+
+static void
+addstring(bool init, char *s, int l) {
+	if (init) {
+		string.total = 32;
+		string.strbuf = palloc(string.total);
+		string.length = 0;
+	}
+
+	if (s && l) {
+		while(string.length + l + 1 >= string.total) {
+			string.total *= 2;
+			string.strbuf=realloc(string.strbuf, string.total);
+		}
+
+		memcpy(string.strbuf+string.length, s, l);
+		string.length+=l;
+	}
+}
+
+static void
+addchar(bool init, char s) {
+	if (init) {
+		string.total = 32;
+		string.strbuf = palloc(string.total);
+		string.length = 0;
+	}
+
+	if (s != '\0') {
+		if(string.length + 2 >= string.total) {
+			string.total*=2;
+			string.strbuf=realloc(string.strbuf, string.total);
+		}
+
+		string.strbuf[ string.length++ ] = s;
+	}
+}
+
+
+Pairs* 
+parseHStore(const char *str, int *npairs) {
+	List		*parseresult;
+	Pairs		*result = NULL;
+
+	hstore_scanner_init(str);
+
+	if (hstore_yyparse((void*)&parseresult) != 0)
+		hstore_yyerror("bugus input");
+
+	hstore_scanner_finish();
+
+	*npairs = list_length(parseresult);
+
+	if (*npairs > 0) {
+		int			i = 0;
+		ListCell	*cell;
+
+		result = palloc(sizeof(*result) * *npairs);
+
+		foreach(cell, parseresult) {
+			result[i++] = *(Pairs*)lfirst(cell);
+		}
+	}
+
+	return result;
+}

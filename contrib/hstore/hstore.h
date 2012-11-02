@@ -159,6 +159,7 @@ typedef struct
 	bool		needfree;		/* need to pfree the value? */
 } Pairs;
 
+extern Pairs* parseHStore(const char *str, int *npairs);
 extern int	hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen);
 extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
 
