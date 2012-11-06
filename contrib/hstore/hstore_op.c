@@ -98,10 +98,10 @@ hstoreArrayToPairs(ArrayType *a, int *npairs)
 		{
 			key_pairs[j].key = VARDATA(key_datums[i]);
 			key_pairs[j].keylen = VARSIZE(key_datums[i]) - VARHDRSZ;
-			key_pairs[j].val = NULL;
-			key_pairs[j].vallen = 0;
+			key_pairs[j].val.text.val = NULL;
+			key_pairs[j].val.text.vallen = 0;
 			key_pairs[j].needfree = 0;
-			key_pairs[j].isnull = 1;
+			key_pairs[j].valtype = valNull;
 			j++;
 		}
 	}
@@ -667,9 +667,9 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 		{
 			out_pairs[out_count].key = key_pairs[i].key;
 			bufsiz += (out_pairs[out_count].keylen = key_pairs[i].keylen);
-			out_pairs[out_count].val = HS_VAL(entries, ptr, idx);
-			bufsiz += (out_pairs[out_count].vallen = HS_VALLEN(entries, idx));
-			out_pairs[out_count].isnull = HS_VALISNULL(entries, idx);
+			out_pairs[out_count].val.text.val = HS_VAL(entries, ptr, idx);
+			bufsiz += (out_pairs[out_count].val.text.vallen = HS_VALLEN(entries, idx));
+			out_pairs[out_count].valtype = HS_VALISNULL(entries, idx) ? valNull : valText;
 			out_pairs[out_count].needfree = false;
 			++out_count;
 		}

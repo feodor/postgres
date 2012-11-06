@@ -87,33 +87,33 @@ typedef struct
  * position in the destination. lots of modification and multiple
  * evaluation here.
  */
-#define HS_COPYITEM(dent_,dbuf_,dptr_,sptr_,klen_,vlen_,vnull_)			\
-	do {																\
-		memcpy((dptr_), (sptr_), (klen_)+(vlen_));						\
-		(dptr_) += (klen_)+(vlen_);										\
-		(dent_)++->entry = ((dptr_) - (dbuf_) - (vlen_)) & HENTRY_POSMASK; \
-		(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)		\
-							 | ((vnull_) ? HENTRY_ISNULL : 0));			\
+#define HS_COPYITEM(dent_,dbuf_,dptr_,sptr_,klen_,vlen_,vnull_)				\
+	do {																	\
+		memcpy((dptr_), (sptr_), (klen_)+(vlen_));							\
+		(dptr_) += (klen_)+(vlen_);											\
+		(dent_)++->entry = ((dptr_) - (dbuf_) - (vlen_)) & HENTRY_POSMASK; 	\
+		(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)			\
+							 | ((vnull_) ? HENTRY_ISNULL : 0));				\
 	} while(0)
 
 /*
  * add one key/item pair, from a Pairs structure, into an
  * under-construction hstore
  */
-#define HS_ADDITEM(dent_,dbuf_,dptr_,pair_)								\
-	do {																\
-		memcpy((dptr_), (pair_).key, (pair_).keylen);					\
-		(dptr_) += (pair_).keylen;										\
-		(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;		\
-		if ((pair_).isnull)												\
-			(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)	\
-								 | HENTRY_ISNULL);						\
-		else															\
-		{																\
-			memcpy((dptr_), (pair_).val, (pair_).vallen);				\
-			(dptr_) += (pair_).vallen;									\
-			(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;	\
-		}																\
+#define HS_ADDITEM(dent_,dbuf_,dptr_,pair_)									\
+	do {																	\
+		memcpy((dptr_), (pair_).key, (pair_).keylen);						\
+		(dptr_) += (pair_).keylen;											\
+		(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;			\
+		if ((pair_).valtype == valNull)										\
+			(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)		\
+								 | HENTRY_ISNULL);							\
+		else																\
+		{																	\
+			memcpy((dptr_), (pair_).val.text.val, (pair_).val.text.vallen);	\
+			(dptr_) += (pair_).val.text.vallen;								\
+			(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;		\
+		}																	\
 	} while (0)
 
 /* finalize a newly-constructed hstore */
@@ -149,13 +149,31 @@ extern HStore *hstoreUpgrade(Datum orig);
  * Pairs is a "decompressed" representation of one key/value pair.
  * The two strings are not necessarily null-terminated.
  */
-typedef struct
+typedef struct Pairs
 {
 	char	   *key;
-	char	   *val;
 	size_t		keylen;
-	size_t		vallen;
-	bool		isnull;			/* value is null? */
+	enum		{
+		valText = 0,
+		valArray,
+		valHstore,
+		valNull
+	}	valtype;
+	union {
+		struct {
+			char	   		*val;
+			size_t			vallen;
+		} text;
+		struct {
+			char			**elems;
+			int				*elens;
+			int				nelems;
+		} array;
+		struct {
+			struct Pairs* 	pairs;
+			int				npaires;
+		} hstore;
+	} val;
 	bool		needfree;		/* need to pfree the value? */
 } Pairs;
 

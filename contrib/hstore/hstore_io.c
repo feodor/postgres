@@ -59,7 +59,7 @@ hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen)
 	if (l < 2)
 	{
 		if (l == 1)
-			*buflen = a->keylen + ((a->isnull) ? 0 : a->vallen);
+			*buflen = a->keylen + ((a->valtype == valNull) ? 0 : a->val.text.vallen);
 		return l;
 	}
 
@@ -74,12 +74,12 @@ hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen)
 			if (ptr->needfree)
 			{
 				pfree(ptr->key);
-				pfree(ptr->val);
+				pfree(ptr->val.text.val);
 			}
 		}
 		else
 		{
-			*buflen += res->keylen + ((res->isnull) ? 0 : res->vallen);
+			*buflen += res->keylen + ((res->valtype == valNull) ? 0 : res->val.text.vallen);
 			res++;
 			memcpy(res, ptr, sizeof(Pairs));
 		}
@@ -87,7 +87,7 @@ hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen)
 		ptr++;
 	}
 
-	*buflen += res->keylen + ((res->isnull) ? 0 : res->vallen);
+	*buflen += res->keylen + ((res->valtype == valNull) ? 0 : res->val.text.vallen);
 	return res + 1 - a;
 }
 
@@ -201,15 +201,15 @@ hstore_recv(PG_FUNCTION_ARGS)
 		rawlen = pq_getmsgint(buf, 4);
 		if (rawlen < 0)
 		{
-			pairs[i].val = NULL;
-			pairs[i].vallen = 0;
-			pairs[i].isnull = true;
+			pairs[i].val.text.val = NULL;
+			pairs[i].val.text.vallen = 0;
+			pairs[i].valtype = valNull;
 		}
 		else
 		{
-			pairs[i].val = pq_getmsgtext(buf, rawlen, &len);
-			pairs[i].vallen = hstoreCheckValLen(len);
-			pairs[i].isnull = false;
+			pairs[i].val.text.val = pq_getmsgtext(buf, rawlen, &len);
+			pairs[i].val.text.vallen = hstoreCheckValLen(len);
+			pairs[i].valtype = valText;
 		}
 	}
 
@@ -241,18 +241,18 @@ hstore_from_text(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(1))
 	{
-		p.vallen = 0;
-		p.isnull = true;
+		p.val.text.vallen = 0;
+		p.valtype = valNull;
 	}
 	else
 	{
 		val = PG_GETARG_TEXT_PP(1);
-		p.val = VARDATA_ANY(val);
-		p.vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(val));
-		p.isnull = false;
+		p.val.text.val = VARDATA_ANY(val);
+		p.val.text.vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(val));
+		p.valtype = valText;
 	}
 
-	out = hstorePairs(&p, 1, p.keylen + p.vallen);
+	out = hstorePairs(&p, 1, p.keylen + p.val.text.vallen);
 
 	PG_RETURN_POINTER(out);
 }
@@ -344,19 +344,19 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 		if (!value_nulls || value_nulls[i])
 		{
 			pairs[i].key = VARDATA_ANY(key_datums[i]);
-			pairs[i].val = NULL;
+			pairs[i].val.text.val = NULL;
 			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key_datums[i]));
-			pairs[i].vallen = 4;
-			pairs[i].isnull = true;
+			pairs[i].val.text.vallen = 4;
+			pairs[i].valtype = valNull;
 			pairs[i].needfree = false;
 		}
 		else
 		{
 			pairs[i].key = VARDATA_ANY(key_datums[i]);
-			pairs[i].val = VARDATA_ANY(value_datums[i]);
+			pairs[i].val.text.val = VARDATA_ANY(value_datums[i]);
 			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key_datums[i]));
-			pairs[i].vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(value_datums[i]));
-			pairs[i].isnull = false;
+			pairs[i].val.text.vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(value_datums[i]));
+			pairs[i].valtype = valText;
 			pairs[i].needfree = false;
 		}
 	}
@@ -431,19 +431,19 @@ hstore_from_array(PG_FUNCTION_ARGS)
 		if (in_nulls[i * 2 + 1])
 		{
 			pairs[i].key = VARDATA_ANY(in_datums[i * 2]);
-			pairs[i].val = NULL;
+			pairs[i].val.text.val = NULL;
 			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
-			pairs[i].vallen = 4;
-			pairs[i].isnull = true;
+			pairs[i].val.text.vallen = 4;
+			pairs[i].valtype = valNull;
 			pairs[i].needfree = false;
 		}
 		else
 		{
 			pairs[i].key = VARDATA_ANY(in_datums[i * 2]);
-			pairs[i].val = VARDATA_ANY(in_datums[i * 2 + 1]);
+			pairs[i].val.text.val = VARDATA_ANY(in_datums[i * 2 + 1]);
 			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
-			pairs[i].vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(in_datums[i * 2 + 1]));
-			pairs[i].isnull = false;
+			pairs[i].val.text.vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(in_datums[i * 2 + 1]));
+			pairs[i].valtype = valText;
 			pairs[i].needfree = false;
 		}
 	}
@@ -587,9 +587,9 @@ hstore_from_record(PG_FUNCTION_ARGS)
 
 		if (!nulls || nulls[i])
 		{
-			pairs[j].val = NULL;
-			pairs[j].vallen = 4;
-			pairs[j].isnull = true;
+			pairs[j].val.text.val = NULL;
+			pairs[j].val.text.vallen = 4;
+			pairs[j].valtype = valNull;
 			pairs[j].needfree = false;
 			++j;
 			continue;
@@ -612,9 +612,9 @@ hstore_from_record(PG_FUNCTION_ARGS)
 
 		value = OutputFunctionCall(&column_info->proc, values[i]);
 
-		pairs[j].val = value;
-		pairs[j].vallen = hstoreCheckValLen(strlen(value));
-		pairs[j].isnull = false;
+		pairs[j].val.text.val = value;
+		pairs[j].val.text.vallen = hstoreCheckValLen(strlen(value));
+		pairs[j].valtype = valText;
 		pairs[j].needfree = false;
 		++j;
 	}

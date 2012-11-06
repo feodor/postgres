@@ -1,9 +1,5 @@
 %{
-struct {
-    char    *strbuf;
-    int     length;
-    int     total;
-} string;
+static string scanstring;
 
 /* No reason to constrain amount of data slurped */
 /* #define YY_READ_BUF_SIZE 16777216 */
@@ -31,12 +27,12 @@ static void addchar(bool init, char s);
 %x xQUOTED
 %x xNONQUOTED
 
-any			[^\,\"\=\> \t\n\r\f\\]
+any			[^\,\{\}\[\]\"\=\> \t\n\r\f\\]
 
 
 %%
 
-<INITIAL>\,						{ return *yytext; }
+<INITIAL>[\,\{\}\[\]]				{ return *yytext; }
 
 <INITIAL>\=\>					{ return DELIMITER_P; }
 
@@ -68,51 +64,47 @@ any			[^\,\"\=\> \t\n\r\f\\]
 
 <INITIAL>\=						{	/* =<<EOF>> */
 									addchar(true, '=');
-									yylval->str.val = string.strbuf;
-									yylval->str.len = string.length;
+									yylval->str = scanstring;
 									return STRING_P;
 								}
 
-<xNONQUOTED>({any}|\>|\")+		{ addstring(false, yytext, yyleng); }
+<xNONQUOTED>({any}|[\>\"\{\}\[\]])+		{ 
+									addstring(false, yytext, yyleng); 
+								}
 
 <xNONQUOTED>\=/[^\>]			{ addchar(false, *yytext); }
 
 <xNONQUOTED>[ \t\n\r\f]+		{ 
-									yylval->str.val = string.strbuf;
-									yylval->str.len = string.length;
+									yylval->str = scanstring;
 									BEGIN INITIAL;
-									return pg_strncasecmp("null", string.strbuf, string.length) ? STRING_P : NULL_P;
+									return pg_strncasecmp("null", scanstring.val, scanstring.len) ? STRING_P : NULL_P;
 								}
 
 <xNONQUOTED>\=					{	/* =<<EOF>> */
 									addchar(false, '=');
-									yylval->str.val = string.strbuf;
-									yylval->str.len = string.length;
+									yylval->str = scanstring;
 									BEGIN INITIAL;
 									return STRING_P;
 								}
 
 <xNONQUOTED>\,					{
-									yylval->str.val = string.strbuf;
-									yylval->str.len = string.length;
+									yylval->str = scanstring;
 									yyless(0);
 									BEGIN INITIAL;
-									return pg_strncasecmp("null", string.strbuf, string.length) ? STRING_P : NULL_P;;
+									return pg_strncasecmp("null", scanstring.val, scanstring.len) ? STRING_P : NULL_P;
 								}
 
 <xNONQUOTED><<EOF>>				{ 
-									yylval->str.val = string.strbuf;
-									yylval->str.len = string.length;
+									yylval->str = scanstring;
 									BEGIN INITIAL;
-									return pg_strncasecmp("null", string.strbuf, string.length) ? STRING_P : NULL_P;
+									return pg_strncasecmp("null", scanstring.val, scanstring.len) ? STRING_P : NULL_P;
 								}
 
 <xNONQUOTED>\=\>				{
-									yylval->str.val = string.strbuf;
-									yylval->str.len = string.length;
+									yylval->str = scanstring;
 									yyless(0);
 									BEGIN INITIAL;
-									return pg_strncasecmp("null", string.strbuf, string.length) ? STRING_P : NULL_P;
+									return pg_strncasecmp("null", scanstring.val, scanstring.len) ? STRING_P : NULL_P;
 								}
 									
 
@@ -123,8 +115,7 @@ any			[^\,\"\=\> \t\n\r\f\\]
 <xQUOTED><<EOF>>				{ yyerror("Unexpected end of quoted string"); }
 
 <xQUOTED>\"						{
-									yylval->str.val = string.strbuf;
-									yylval->str.len = string.length;
+									yylval->str = scanstring;
 									BEGIN INITIAL;
 									return STRING_P;
 								}
@@ -198,45 +189,43 @@ hstore_scanner_finish(void)
 static void
 addstring(bool init, char *s, int l) {
 	if (init) {
-		string.total = 32;
-		string.strbuf = palloc(string.total);
-		string.length = 0;
+		scanstring.total = 32;
+		scanstring.val = palloc(scanstring.total);
+		scanstring.len = 0;
 	}
 
 	if (s && l) {
-		while(string.length + l + 1 >= string.total) {
-			string.total *= 2;
-			string.strbuf=realloc(string.strbuf, string.total);
+		while(scanstring.len + l + 1 >= scanstring.total) {
+			scanstring.total *= 2;
+			scanstring.val=realloc(scanstring.val, scanstring.total);
 		}
 
-		memcpy(string.strbuf+string.length, s, l);
-		string.length+=l;
+		memcpy(scanstring.val+scanstring.len, s, l);
+		scanstring.len+=l;
 	}
 }
 
 static void
 addchar(bool init, char s) {
 	if (init) {
-		string.total = 32;
-		string.strbuf = palloc(string.total);
-		string.length = 0;
+		scanstring.total = 32;
+		scanstring.val = palloc(scanstring.total);
+		scanstring.len = 0;
 	}
 
 	if (s != '\0') {
-		if(string.length + 2 >= string.total) {
-			string.total*=2;
-			string.strbuf=realloc(string.strbuf, string.total);
+		if(scanstring.len + 2 >= scanstring.total) {
+			scanstring.total*=2;
+			scanstring.val=realloc(scanstring.val, scanstring.total);
 		}
 
-		string.strbuf[ string.length++ ] = s;
+		scanstring.val[ scanstring.len++ ] = s;
 	}
 }
-
 
 Pairs* 
 parseHStore(const char *str, int *npairs) {
 	List		*parseresult;
-	Pairs		*result = NULL;
 
 	hstore_scanner_init(str);
 
@@ -245,18 +234,5 @@ parseHStore(const char *str, int *npairs) {
 
 	hstore_scanner_finish();
 
-	*npairs = list_length(parseresult);
-
-	if (*npairs > 0) {
-		int			i = 0;
-		ListCell	*cell;
-
-		result = palloc(sizeof(*result) * *npairs);
-
-		foreach(cell, parseresult) {
-			result[i++] = *(Pairs*)lfirst(cell);
-		}
-	}
-
-	return result;
+	return convertListToPairs(parseresult, npairs);
 }
