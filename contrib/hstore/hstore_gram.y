@@ -162,15 +162,6 @@ pair:
 			$$->valtype = valNull;
 			$$->needfree = true;
 		}
-	| key DELIMITER_P '{' '}'		{
-			$$ = palloc(sizeof(*$$));
-			$$->key = $1.val;
-			$$->keylen = $1.len;
-			$$->valtype = valHstore;
-			$$->val.hstore.pairs = NULL;
-			$$->val.hstore.npaires = 0;
-			$$->needfree = true;
-		}
 	| key DELIMITER_P '{' list_pairs '}'		{
 			$$ = palloc(sizeof(*$$));
 			$$->key = $1.val;
@@ -179,17 +170,7 @@ pair:
 			$$->val.hstore.pairs =  convertListToPairs($4, &$$->val.hstore.npaires);
 			$$->needfree = true;
 		}
-	| key DELIMITER_P '[' ']'		{
-			$$ = palloc(sizeof(*$$));
-			$$->key = $1.val;
-			$$->keylen = $1.len;
-			$$->valtype = valArray;
-			$$->val.array.elems = NULL;
-			$$->val.array.elens = NULL;
-			$$->val.array.nelems = 0;
-			$$->needfree = true;
-		}
-	| key DELIMITER_P '[' array ']'		{
+	| key DELIMITER_P '{' array '}'		{
 			$$ = palloc(sizeof(*$$));
 			$$->key = $1.val;
 			$$->keylen = $1.len;

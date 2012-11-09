@@ -27,12 +27,12 @@ static void addchar(bool init, char s);
 %x xQUOTED
 %x xNONQUOTED
 
-any			[^\,\{\}\[\]\"\=\> \t\n\r\f\\]
+any			[^\,\{\}\"\=\> \t\n\r\f\\]
 
 
 %%
 
-<INITIAL>[\,\{\}\[\]]				{ return *yytext; }
+<INITIAL>[\,\{\}]				{ return *yytext; }
 
 <INITIAL>\=\>					{ return DELIMITER_P; }
 
@@ -68,7 +68,7 @@ any			[^\,\{\}\[\]\"\=\> \t\n\r\f\\]
 									return STRING_P;
 								}
 
-<xNONQUOTED>({any}|[\>\"\{\}\[\]])+		{ 
+<xNONQUOTED>({any}|[\>\"\{\}])+	{ 
 									addstring(false, yytext, yyleng); 
 								}
 
