@@ -9,6 +9,8 @@
 #include "catalog/pg_type.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
+#include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
@@ -43,6 +45,117 @@ comparePairs(const void *a, const void *b)
 	return (pa->keylen > pb->keylen) ? 1 : -1;
 }
 
+static void
+freePair(Pairs *ptr)
+{
+	int	i;
+
+	pfree(ptr->key);
+
+	switch(ptr->valtype) 
+	{
+		case valText:
+			pfree(ptr->val.text.val);
+			break;
+		case valArray:
+			for(i=0; i<ptr->val.array.nelems; i++)
+				if (ptr->val.array.elems[i])
+					pfree(ptr->val.array.elems[i]);
+			pfree(ptr->val.array.elems);
+			break;
+		case valHstore:
+			for(i=0; i<ptr->val.hstore.npairs; i++)
+				freePair(ptr->val.hstore.pairs + i);
+			pfree(ptr->val.hstore.pairs);
+			break;
+		case valFormedArray:
+			pfree(ptr->val.formedArray);
+			break;
+		case valFormedHstore:
+			pfree(ptr->val.formedHStore);
+			break;
+		default:
+			Assert(ptr->valtype == valNull);
+	}
+}
+
+static void
+countPairValueSize(Pairs *ptr)
+{
+	switch(ptr->valtype) {
+		case valNull:
+			ptr->anyvallen = 0;
+			break;
+		case valText:
+			ptr->anyvallen = ptr->val.text.vallen;
+			break;
+		case valArray:
+			{
+				int i;
+				Datum		*datums = palloc(sizeof(Datum) * ptr->val.array.nelems);
+				bool		*nulls = palloc(sizeof(bool) * ptr->val.array.nelems);
+				int			dims[1];
+				int			lbs[1];
+
+				for(i=0; i<ptr->val.array.nelems; i++)
+				{
+					if (ptr->val.array.elems[i]) 
+					{
+						datums[i] = PointerGetDatum(
+									cstring_to_text_with_len(ptr->val.array.elems[i], ptr->val.array.elens[i]));
+						nulls[i] = false;
+					}
+					else
+					{
+						datums[i] = (Datum)0;
+						nulls[i] = true;
+					}
+				}
+
+				dims[0] = ptr->val.array.nelems;
+				lbs[0] = 1;
+					
+				 ptr->val.formedArray = construct_md_array(datums, nulls, 1, dims, lbs, 
+														   TEXTOID, -1, false, 'i');
+				 ptr->valtype = valFormedArray;
+			}
+			/* continue */
+		case valFormedArray:
+			ptr->anyvallen = VARSIZE_ANY(ptr->val.formedArray);
+			break;
+		case valHstore:
+			{
+				int32	buflen;
+
+				ptr->val.hstore.npairs = hstoreUniquePairs(ptr->val.hstore.pairs, 
+															ptr->val.hstore.npairs, 
+															&buflen);
+
+				ptr->val.formedHStore = hstorePairs(ptr->val.hstore.pairs, 
+													ptr->val.hstore.npairs, 
+													buflen);
+
+				ptr->valtype = valFormedHstore;
+			}
+			/* continue */
+		case valFormedHstore:
+			ptr->anyvallen = VARSIZE_ANY(ptr->val.formedHStore);
+			break;
+		default:
+			elog(ERROR,"Unknown pair type: %d", ptr->valtype);
+	}
+}
+
+static int32
+align_buflen(Pairs *a, int32 buflen) {
+	buflen += a->keylen;
+
+	if (a->valtype == valFormedArray || a->valtype == valFormedHstore)
+		buflen = INTALIGN(buflen);
+
+	return buflen + a->anyvallen;
+}
+
 /*
  * this code still respects pairs.needfree, even though in general
  * it should never be called in a context where anything needs freeing.
@@ -56,10 +169,14 @@ hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen)
 			   *res;
 
 	*buflen = 0;
+
 	if (l < 2)
 	{
 		if (l == 1)
-			*buflen = a->keylen + ((a->valtype == valNull) ? 0 : a->val.text.vallen);
+		{
+			countPairValueSize(a);
+			*buflen = align_buflen(a, *buflen);
+		}
 		return l;
 	}
 
@@ -72,14 +189,12 @@ hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen)
 			memcmp(ptr->key, res->key, res->keylen) == 0)
 		{
 			if (ptr->needfree)
-			{
-				pfree(ptr->key);
-				pfree(ptr->val.text.val);
-			}
+				freePair(ptr);
 		}
 		else
 		{
-			*buflen += res->keylen + ((res->valtype == valNull) ? 0 : res->val.text.vallen);
+			countPairValueSize(res);
+			*buflen = align_buflen(res, *buflen);
 			res++;
 			memcpy(res, ptr, sizeof(Pairs));
 		}
@@ -87,7 +202,9 @@ hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen)
 		ptr++;
 	}
 
-	*buflen += res->keylen + ((res->valtype == valNull) ? 0 : res->val.text.vallen);
+	countPairValueSize(res);
+	*buflen = align_buflen(res, *buflen);
+
 	return res + 1 - a;
 }
 
@@ -855,6 +972,8 @@ hstore_out(PG_FUNCTION_ARGS)
 			   *ptr;
 	char	   *base = STRPTR(in);
 	HEntry	   *entries = ARRPTR(in);
+	char	   **nestedDatum;
+	int	 	   *nestedLength;
 
 	if (count == 0)
 	{
@@ -864,6 +983,8 @@ hstore_out(PG_FUNCTION_ARGS)
 	}
 
 	buflen = 0;
+	nestedDatum = palloc(sizeof(*nestedDatum) * count);
+	nestedLength = palloc(sizeof(*nestedLength) * count);
 
 	/*
 	 * this loop overestimates due to pessimistic assumptions about escaping,
@@ -878,9 +999,37 @@ hstore_out(PG_FUNCTION_ARGS)
 		/* include "" and => and comma-space */
 		buflen += 6 + 2 * HS_KEYLEN(entries, i);
 		/* include "" only if nonnull */
-		buflen += 2 + (HS_VALISNULL(entries, i)
-					   ? 2
-					   : 2 * HS_VALLEN(entries, i));
+	
+		buflen += 2;
+
+		if (HS_VALISNULL(entries, i))
+		{
+			buflen += 2;
+		}
+		else if (HS_VALISARRAY(entries, i))
+		{
+			char *p = HS_VAL(entries, base, i);
+
+			while (INTALIGN(p - (char*)base) != (p - (char*)base))
+				p++;
+			nestedDatum[i] = DatumGetPointer(OidOutputFunctionCall(F_ARRAY_OUT, PointerGetDatum(p)));
+			nestedLength[i] = strlen(nestedDatum[i]);
+			buflen += nestedLength[i];
+		} 
+		else if (HS_VALISHSTORE(entries, i))
+		{
+			char *p = HS_VAL(entries, base, i);
+
+			while (INTALIGN(p - (char*)base) != (p - (char*)base))
+				p++;
+			nestedDatum[i] = DatumGetPointer(DirectFunctionCall1(hstore_out, PointerGetDatum(p)));
+			nestedLength[i] = strlen(nestedDatum[i]);
+			buflen += nestedLength[i] + 2 /* {} */;
+		}
+		else
+		{
+			buflen += 2 * HS_VALLEN(entries, i);
+		}
 	}
 
 	out = ptr = palloc(buflen);
@@ -899,6 +1048,18 @@ hstore_out(PG_FUNCTION_ARGS)
 			*ptr++ = 'L';
 			*ptr++ = 'L';
 		}
+		else if (HS_VALISARRAY(entries, i))
+		{
+			memcpy(ptr, nestedDatum[i], nestedLength[i]);
+			ptr += nestedLength[i];
+		}
+		else if (HS_VALISHSTORE(entries, i))
+		{
+			*ptr++ = '{';
+			memcpy(ptr, nestedDatum[i], nestedLength[i]);
+			ptr += nestedLength[i];
+			*ptr++ = '}';
+		}
 		else
 		{
 			*ptr++ = '"';
@@ -911,6 +1072,8 @@ hstore_out(PG_FUNCTION_ARGS)
 			*ptr++ = ',';
 			*ptr++ = ' ';
 		}
+
+		Assert(ptr-out < buflen);
 	}
 	*ptr = '\0';
 

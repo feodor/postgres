@@ -68,7 +68,7 @@ any			[^\,\{\}\"\=\> \t\n\r\f\\]
 									return STRING_P;
 								}
 
-<xNONQUOTED>({any}|[\>\"\{\}])+	{ 
+<xNONQUOTED>({any}|[\>\"])+		{ 
 									addstring(false, yytext, yyleng); 
 								}
 
@@ -87,7 +87,7 @@ any			[^\,\{\}\"\=\> \t\n\r\f\\]
 									return STRING_P;
 								}
 
-<xNONQUOTED>\,					{
+<xNONQUOTED>[\,\{\}]				{
 									yylval->str = scanstring;
 									yyless(0);
 									BEGIN INITIAL;

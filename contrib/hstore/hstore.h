@@ -20,13 +20,17 @@ typedef struct
 	uint32		entry;
 } HEntry;
 
-#define HENTRY_ISFIRST 0x80000000
-#define HENTRY_ISNULL  0x40000000
-#define HENTRY_POSMASK 0x3FFFFFFF
+#define HENTRY_ISFIRST	0x80000000
+#define HENTRY_ISNULL	0x40000000
+#define HENTRY_ISARRAY	0x20000000
+#define HENTRY_ISHSTORE	0x10000000
+#define HENTRY_POSMASK 	0x0FFFFFFF
 
 /* note possible multiple evaluations, also access to prior array element */
 #define HSE_ISFIRST(he_) (((he_).entry & HENTRY_ISFIRST) != 0)
 #define HSE_ISNULL(he_) (((he_).entry & HENTRY_ISNULL) != 0)
+#define HSE_ISARRAY(he_) (((he_).entry & HENTRY_ISARRAY) != 0)
+#define HSE_ISHSTORE(he_) (((he_).entry & HENTRY_ISHSTORE) != 0)
 #define HSE_ENDPOS(he_) ((he_).entry & HENTRY_POSMASK)
 #define HSE_OFF(he_) (HSE_ISFIRST(he_) ? 0 : HSE_ENDPOS((&(he_))[-1]))
 #define HSE_LEN(he_) (HSE_ISFIRST(he_)	\
@@ -34,12 +38,10 @@ typedef struct
 					  : HSE_ENDPOS(he_) - HSE_ENDPOS((&(he_))[-1]))
 
 /*
- * determined by the size of "endpos" (ie HENTRY_POSMASK), though this is a
- * bit academic since currently varlenas (and hence both the input and the
- * whole hstore) have the same limit
+ * determined by the size of "endpos" (ie HENTRY_POSMASK)
  */
-#define HSTORE_MAX_KEY_LEN 0x3FFFFFFF
-#define HSTORE_MAX_VALUE_LEN 0x3FFFFFFF
+#define HSTORE_MAX_KEY_LEN 		0x0FFFFFFF
+#define HSTORE_MAX_VALUE_LEN 	0x0FFFFFFF
 
 typedef struct
 {
@@ -72,6 +74,8 @@ typedef struct
 #define HS_KEYLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)]))
 #define HS_VALLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)+1]))
 #define HS_VALISNULL(arr_,i_) (HSE_ISNULL((arr_)[2*(i_)+1]))
+#define HS_VALISARRAY(arr_,i_) (HSE_ISARRAY((arr_)[2*(i_)+1]))
+#define HS_VALISHSTORE(arr_,i_) (HSE_ISHSTORE((arr_)[2*(i_)+1]))
 
 /*
  * currently, these following macros are the _only_ places that rely
@@ -100,20 +104,46 @@ typedef struct
  * add one key/item pair, from a Pairs structure, into an
  * under-construction hstore
  */
-#define HS_ADDITEM(dent_,dbuf_,dptr_,pair_)									\
-	do {																	\
-		memcpy((dptr_), (pair_).key, (pair_).keylen);						\
-		(dptr_) += (pair_).keylen;											\
-		(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;			\
-		if ((pair_).valtype == valNull)										\
-			(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)		\
-								 | HENTRY_ISNULL);							\
-		else																\
-		{																	\
-			memcpy((dptr_), (pair_).val.text.val, (pair_).val.text.vallen);	\
-			(dptr_) += (pair_).val.text.vallen;								\
-			(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;		\
-		}																	\
+#define HS_ADDITEM(dent_,dbuf_,dptr_,pair_)											\
+	do {																			\
+		memcpy((dptr_), (pair_).key, (pair_).keylen);								\
+		(dptr_) += (pair_).keylen;													\
+		(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;					\
+		switch((pair_).valtype) {													\
+			case valNull:															\
+				(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)			\
+									 | HENTRY_ISNULL);								\
+				break;																\
+			case valText:															\
+				memcpy((dptr_), (pair_).val.text.val, (pair_).val.text.vallen);		\
+				(dptr_) += (pair_).val.text.vallen;									\
+				(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;			\
+				break;																\
+			case valFormedArray:													\
+				while (INTALIGN((dptr_) - (dbuf_)) != ((dptr_) - (dbuf_))) 			\
+				{																	\
+					*(dptr_) = '\0';												\
+					(dptr_)++;														\
+				}																	\
+				memcpy((dptr_), (pair_).val.formedArray, (pair_).anyvallen);		\
+				(dptr_) += (pair_).anyvallen;										\
+				(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)			\
+									 | HENTRY_ISARRAY);								\
+				break;																\
+			case valFormedHstore:													\
+				while (INTALIGN((dptr_) - (dbuf_)) != ((dptr_) - (dbuf_))) 			\
+				{																	\
+					*(dptr_) = '\0';												\
+					(dptr_)++;														\
+				}																	\
+				memcpy((dptr_), (pair_).val.formedHStore, (pair_).anyvallen);		\
+				(dptr_) += (pair_).anyvallen;										\
+				(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)			\
+									 | HENTRY_ISHSTORE);							\
+				break;																\
+			default:																\
+				elog(ERROR,"HS_ADDITEM fails for pair type: %d", (pair_).valtype);	\
+		}																			\
 	} while (0)
 
 /* finalize a newly-constructed hstore */
@@ -154,10 +184,12 @@ typedef struct Pairs
 	char	   *key;
 	size_t		keylen;
 	enum		{
-		valText = 0,
-		valArray,
-		valHstore,
-		valNull
+		valText 			= 0,
+		valArray 			= ~HENTRY_ISARRAY,
+		valHstore 			= ~HENTRY_ISHSTORE,
+		valNull				= HENTRY_ISNULL,
+		valFormedArray 		= HENTRY_ISARRAY,
+		valFormedHstore 	= HENTRY_ISHSTORE
 	}	valtype;
 	union {
 		struct {
@@ -171,9 +203,12 @@ typedef struct Pairs
 		} array;
 		struct {
 			struct Pairs* 	pairs;
-			int				npaires;
+			int				npairs;
 		} hstore;
+		ArrayType			*formedArray;
+		HStore				*formedHStore;
 	} val;
+	int32		anyvallen;
 	bool		needfree;		/* need to pfree the value? */
 } Pairs;
 

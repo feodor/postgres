@@ -167,7 +167,7 @@ pair:
 			$$->key = $1.val;
 			$$->keylen = $1.len;
 			$$->valtype = valHstore;
-			$$->val.hstore.pairs =  convertListToPairs($4, &$$->val.hstore.npaires);
+			$$->val.hstore.pairs =  convertListToPairs($4, &$$->val.hstore.npairs);
 			$$->needfree = true;
 		}
 	| key DELIMITER_P '{' array '}'		{
