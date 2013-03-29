@@ -3,7 +3,7 @@
  * fd.c
  *	  Virtual file descriptor code.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -30,11 +30,29 @@
  * routines (e.g., open(2) and fopen(3)) themselves.  Otherwise, we
  * may find ourselves short of real file descriptors anyway.
  *
- * This file used to contain a bunch of stuff to support RAID levels 0
- * (jbod), 1 (duplex) and 5 (xor parity).  That stuff is all gone
- * because the parallel query processing code that called it is all
- * gone.  If you really need it you could get it from the original
- * POSTGRES source.
+ * INTERFACE ROUTINES
+ *
+ * PathNameOpenFile and OpenTemporaryFile are used to open virtual files.
+ * A File opened with OpenTemporaryFile is automatically deleted when the
+ * File is closed, either explicitly or implicitly at end of transaction or
+ * process exit. PathNameOpenFile is intended for files that are held open
+ * for a long time, like relation files. It is the caller's responsibility
+ * to close them, there is no automatic mechanism in fd.c for that.
+ *
+ * AllocateFile, AllocateDir, OpenPipeStream and OpenTransientFile are
+ * wrappers around fopen(3), opendir(3), popen(3) and open(2), respectively.
+ * They behave like the corresponding native functions, except that the handle
+ * is registered with the current subtransaction, and will be automatically
+ * closed at abort. These are intended for short operations like reading a
+ * configuration file, and there is a fixed limit on the number of files that
+ * can be opened using these functions at any one time.
+ *
+ * Finally, BasicOpenFile is just a thin wrapper around open() that can
+ * release file descriptors in use by the virtual file descriptors if
+ * necessary. There is no automatic cleanup of file descriptors returned by
+ * BasicOpenFile, it is solely the caller's responsibility to close the file
+ * descriptor by calling close(2).
+ *
  *-------------------------------------------------------------------------
  */
 
@@ -53,6 +71,7 @@
 #include "access/xact.h"
 #include "catalog/catalog.h"
 #include "catalog/pg_tablespace.h"
+#include "common/relpath.h"
 #include "pgstat.h"
 #include "storage/fd.h"
 #include "storage/ipc.h"
@@ -94,11 +113,11 @@ int			max_files_per_process = 1000;
 
 /*
  * Maximum number of file descriptors to open for either VFD entries or
- * AllocateFile/AllocateDir operations.  This is initialized to a conservative
- * value, and remains that way indefinitely in bootstrap or standalone-backend
- * cases.  In normal postmaster operation, the postmaster calls
- * set_max_safe_fds() late in initialization to update the value, and that
- * value is then inherited by forked subprocesses.
+ * AllocateFile/AllocateDir/OpenTransientFile operations.  This is initialized
+ * to a conservative value, and remains that way indefinitely in bootstrap or
+ * standalone-backend cases.  In normal postmaster operation, the postmaster
+ * calls set_max_safe_fds() late in initialization to update the value, and
+ * that value is then inherited by forked subprocesses.
  *
  * Note: the value of max_files_per_process is taken into account while
  * setting this variable, and so need not be tested separately.
@@ -171,10 +190,10 @@ static bool have_xact_temporary_files = false;
 static uint64 temporary_files_size = 0;
 
 /*
- * List of stdio FILEs and <dirent.h> DIRs opened with AllocateFile
- * and AllocateDir.
+ * List of OS handles opened with AllocateFile, AllocateDir and
+ * OpenTransientFile.
  *
- * Since we don't want to encourage heavy use of AllocateFile or AllocateDir,
+ * Since we don't want to encourage heavy use of those functions,
  * it seems OK to put a pretty small maximum limit on the number of
  * simultaneously allocated descs.
  */
@@ -183,7 +202,9 @@ static uint64 temporary_files_size = 0;
 typedef enum
 {
 	AllocateDescFile,
-	AllocateDescDir
+	AllocateDescPipe,
+	AllocateDescDir,
+	AllocateDescRawFD
 } AllocateDescKind;
 
 typedef struct
@@ -193,6 +214,7 @@ typedef struct
 	{
 		FILE	   *file;
 		DIR		   *dir;
+		int			fd;
 	}			desc;
 	SubTransactionId create_subid;
 } AllocateDesc;
@@ -1523,8 +1545,104 @@ TryAgain:
 	return NULL;
 }
 
+
 /*
- * Free an AllocateDesc of either type.
+ * Like AllocateFile, but returns an unbuffered fd like open(2)
+ */
+int
+OpenTransientFile(FileName fileName, int fileFlags, int fileMode)
+{
+	int			fd;
+
+
+	DO_DB(elog(LOG, "OpenTransientFile: Allocated %d (%s)",
+			   numAllocatedDescs, fileName));
+
+	/*
+	 * The test against MAX_ALLOCATED_DESCS prevents us from overflowing
+	 * allocatedFiles[]; the test against max_safe_fds prevents BasicOpenFile
+	 * from hogging every one of the available FDs, which'd lead to infinite
+	 * looping.
+	 */
+	if (numAllocatedDescs >= MAX_ALLOCATED_DESCS ||
+		numAllocatedDescs >= max_safe_fds - 1)
+		elog(ERROR, "exceeded MAX_ALLOCATED_DESCS while trying to open file \"%s\"",
+			 fileName);
+
+	fd = BasicOpenFile(fileName, fileFlags, fileMode);
+
+	if (fd >= 0)
+	{
+		AllocateDesc *desc = &allocatedDescs[numAllocatedDescs];
+
+		desc->kind = AllocateDescRawFD;
+		desc->desc.fd = fd;
+		desc->create_subid = GetCurrentSubTransactionId();
+		numAllocatedDescs++;
+
+		return fd;
+	}
+
+	return -1;					/* failure */
+}
+
+/*
+ * Routines that want to initiate a pipe stream should use OpenPipeStream
+ * rather than plain popen().  This lets fd.c deal with freeing FDs if
+ * necessary.  When done, call ClosePipeStream rather than pclose.
+ */
+FILE *
+OpenPipeStream(const char *command, const char *mode)
+{
+	FILE	   *file;
+
+	DO_DB(elog(LOG, "OpenPipeStream: Allocated %d (%s)",
+			   numAllocatedDescs, command));
+
+	/*
+	 * The test against MAX_ALLOCATED_DESCS prevents us from overflowing
+	 * allocatedFiles[]; the test against max_safe_fds prevents AllocateFile
+	 * from hogging every one of the available FDs, which'd lead to infinite
+	 * looping.
+	 */
+	if (numAllocatedDescs >= MAX_ALLOCATED_DESCS ||
+		numAllocatedDescs >= max_safe_fds - 1)
+		elog(ERROR, "exceeded MAX_ALLOCATED_DESCS while trying to execute command \"%s\"",
+			 command);
+
+TryAgain:
+	fflush(stdout);
+	fflush(stderr);
+	errno = 0;
+	if ((file = popen(command, mode)) != NULL)
+	{
+		AllocateDesc *desc = &allocatedDescs[numAllocatedDescs];
+
+		desc->kind = AllocateDescPipe;
+		desc->desc.file = file;
+		desc->create_subid = GetCurrentSubTransactionId();
+		numAllocatedDescs++;
+		return desc->desc.file;
+	}
+
+	if (errno == EMFILE || errno == ENFILE)
+	{
+		int			save_errno = errno;
+
+		ereport(LOG,
+				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
+				 errmsg("out of file descriptors: %m; release and retry")));
+		errno = 0;
+		if (ReleaseLruFile())
+			goto TryAgain;
+		errno = save_errno;
+	}
+
+	return NULL;
+}
+
+/*
+ * Free an AllocateDesc of any type.
  *
  * The argument *must* point into the allocatedDescs[] array.
  */
@@ -1539,8 +1657,14 @@ FreeDesc(AllocateDesc *desc)
 		case AllocateDescFile:
 			result = fclose(desc->desc.file);
 			break;
+		case AllocateDescPipe:
+			result = pclose(desc->desc.file);
+			break;
 		case AllocateDescDir:
 			result = closedir(desc->desc.dir);
+			break;
+		case AllocateDescRawFD:
+			result = close(desc->desc.fd);
 			break;
 		default:
 			elog(ERROR, "AllocateDesc kind not recognized");
@@ -1583,6 +1707,33 @@ FreeFile(FILE *file)
 	return fclose(file);
 }
 
+/*
+ * Close a file returned by OpenTransientFile.
+ *
+ * Note we do not check close's return value --- it is up to the caller
+ * to handle close errors.
+ */
+int
+CloseTransientFile(int fd)
+{
+	int			i;
+
+	DO_DB(elog(LOG, "CloseTransientFile: Allocated %d", numAllocatedDescs));
+
+	/* Remove fd from list of allocated files, if it's present */
+	for (i = numAllocatedDescs; --i >= 0;)
+	{
+		AllocateDesc *desc = &allocatedDescs[i];
+
+		if (desc->kind == AllocateDescRawFD && desc->desc.fd == fd)
+			return FreeDesc(desc);
+	}
+
+	/* Only get here if someone passes us a file not in allocatedDescs */
+	elog(WARNING, "fd passed to CloseTransientFile was not obtained from OpenTransientFile");
+
+	return close(fd);
+}
 
 /*
  * Routines that want to use <dirent.h> (ie, DIR*) should use AllocateDir
@@ -1721,6 +1872,31 @@ FreeDir(DIR *dir)
 	return closedir(dir);
 }
 
+
+/*
+ * Close a pipe stream returned by OpenPipeStream.
+ */
+int
+ClosePipeStream(FILE *file)
+{
+	int			i;
+
+	DO_DB(elog(LOG, "ClosePipeStream: Allocated %d", numAllocatedDescs));
+
+	/* Remove file from list of allocated files, if it's present */
+	for (i = numAllocatedDescs; --i >= 0;)
+	{
+		AllocateDesc *desc = &allocatedDescs[i];
+
+		if (desc->kind == AllocateDescPipe && desc->desc.file == file)
+			return FreeDesc(desc);
+	}
+
+	/* Only get here if someone passes us a file not in allocatedDescs */
+	elog(WARNING, "file passed to ClosePipeStream was not obtained from OpenPipeStream");
+
+	return pclose(file);
+}
 
 /*
  * closeAllVfds
@@ -1874,7 +2050,7 @@ AtProcExit_Files(int code, Datum arg)
  * exiting. If that's the case, we should remove all temporary files; if
  * that's not the case, we are being called for transaction commit/abort
  * and should only remove transaction-local temp files.  In either case,
- * also clean up "allocated" stdio files and dirs.
+ * also clean up "allocated" stdio files, dirs and fds.
  */
 static void
 CleanupTempFiles(bool isProcExit)
@@ -1916,7 +2092,7 @@ CleanupTempFiles(bool isProcExit)
 		have_xact_temporary_files = false;
 	}
 
-	/* Clean up "allocated" stdio files and dirs. */
+	/* Clean up "allocated" stdio files, dirs and fds. */
 	while (numAllocatedDescs > 0)
 		FreeDesc(&allocatedDescs[0]);
 }

@@ -5,12 +5,19 @@ top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
 
-# On some platforms we can only build PL/Python if libpython is a
-# shared library.  Since there is no official way to determine this
-# (at least not in pre-2.3 Python), we see if there is a file that is
-# named like a shared library.
+# We need libpython as a shared library.  In Python >=2.5, configure
+# asks Python directly.  But because this has been broken in Debian
+# for a long time (http://bugs.debian.org/695979), and to support
+# older Python versions, we see if there is a file that is named like
+# a shared library as a fallback.  (Note that this is wrong on OS X,
+# where DLSUFFIX is .so, but libpython is a .dylib.  Python <2.5 is
+# therefore not supported on OS X.)
+ifeq (1,$(python_enable_shared))
+shared_libpython = yes
+else
 ifneq (,$(wildcard $(python_libdir)/libpython*$(DLSUFFIX)*))
 shared_libpython = yes
+endif
 endif
 
 # Windows needs to convert backslashed paths to normal slashes,
@@ -21,16 +28,8 @@ python_includespec := $(subst \,/,$(python_includespec))
 override python_libspec =
 endif
 
-# Darwin (OS X) has its own ideas about how to do this.
-ifeq ($(PORTNAME), darwin)
-shared_libpython = yes
-override python_libspec = -framework Python
-override python_additional_libs =
-endif
-
-# If we don't have a shared library and the platform doesn't allow it
-# to work without, we have to skip it.
-ifneq (,$(findstring yes, $(shared_libpython)$(allow_nonpic_in_shlib)))
+# If we don't have a shared library, we have to skip it.
+ifeq ($(shared_libpython),yes)
 
 override CPPFLAGS := -I. -I$(srcdir) $(python_includespec) $(CPPFLAGS)
 
@@ -67,7 +66,7 @@ OBJS += libpython${pytverstr}.a
 libpython${pytverstr}.a: python${pytverstr}.def
 	dlltool --dllname python${pytverstr}.dll --def python${pytverstr}.def --output-lib  libpython${pytverstr}.a
 WD=$(subst \,/,$(WINDIR))
-python${pytverstr}.def: $(WD)/system32/python${pytverstr}.dll
+python${pytverstr}.def:
 	pexports $(WD)/system32/python${pytverstr}.dll > python${pytverstr}.def
 endif
 

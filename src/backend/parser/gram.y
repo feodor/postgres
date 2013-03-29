@@ -6,7 +6,7 @@
  * gram.y
  *	  POSTGRESQL BISON rules/actions
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -121,6 +121,13 @@ typedef struct PrivTarget
 #define CAS_NOT_VALID				0x10
 #define CAS_NO_INHERIT				0x20
 
+/*
+ * In the IntoClause structure there is a char value which will eventually be
+ * set to RELKIND_RELATION or RELKIND_MATVIEW based on the relkind field in
+ * the statement-level structure, which is an ObjectType. Define the default
+ * here, which should always be overridden later.
+ */
+#define INTO_CLAUSE_RELKIND_DEFAULT	'\0'
 
 #define parser_yyerror(msg)  scanner_yyerror(msg, yyscanner)
 #define parser_errposition(pos)  scanner_errposition(pos, yyscanner)
@@ -164,6 +171,7 @@ static void SplitColQualList(List *qualList,
 static void processCASbits(int cas_bits, int location, const char *constrType,
 			   bool *deferrable, bool *initdeferred, bool *not_valid,
 			   bool *no_inherit, core_yyscan_t yyscanner);
+static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 
 %}
 
@@ -247,6 +255,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 		DeallocateStmt PrepareStmt ExecuteStmt
 		DropOwnedStmt ReassignOwnedStmt
 		AlterTSConfigurationStmt AlterTSDictionaryStmt
+		CreateMatViewStmt RefreshMatViewStmt
 
 %type <node>	select_no_parens select_with_parens select_clause
 				simple_select values_clause
@@ -321,7 +330,6 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <list>	stmtblock stmtmulti
 				OptTableElementList TableElementList OptInherit definition
 				OptTypedTableElementList TypedTableElementList
-				OptForeignTableElementList ForeignTableElementList
 				reloptions opt_reloptions
 				OptWith opt_distinct opt_definition func_args func_args_list
 				func_args_with_defaults func_args_with_defaults_list
@@ -350,7 +358,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <defelt>	fdw_option
 
 %type <range>	OptTempTableName
-%type <into>	into_clause create_as_target
+%type <into>	into_clause create_as_target create_mv_target
 
 %type <defelt>	createfunc_opt_item common_func_opt_item dostmt_opt_item
 %type <fun_param> func_arg func_arg_with_default table_func_column
@@ -359,8 +367,10 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 
 %type <boolean>  opt_trusted opt_restart_seqs
 %type <ival>	 OptTemp
+%type <ival>	 OptNoLog
 %type <oncommit> OnCommitOption
 
+%type <ival>	for_locking_strength
 %type <node>	for_locking_item
 %type <list>	for_locking_clause opt_for_locking_clause for_locking_items
 %type <list>	locked_rels_list
@@ -379,7 +389,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <boolean> opt_freeze opt_default opt_recheck
 %type <defelt>	opt_binary opt_oids copy_delimiter
 
-%type <boolean> copy_from
+%type <boolean> copy_from opt_program
 
 %type <ival>	opt_column event cursor_options opt_hold opt_set_data
 %type <objtype>	reindex_type drop_type comment_type security_label_type
@@ -397,7 +407,6 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 %type <vsetstmt> set_rest set_rest_more SetResetClause FunctionSetResetClause
 
 %type <node>	TableElement TypedTableElement ConstraintElem TableFuncElement
-				ForeignTableElement
 %type <node>	columnDef columnOptions
 %type <defelt>	def_elem reloption_elem old_aggr_elem
 %type <node>	def_arg columnElem where_clause where_or_current_clause
@@ -555,7 +564,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 	LEADING LEAKPROOF LEAST LEFT LEVEL LIKE LIMIT LISTEN LOAD LOCAL
 	LOCALTIME LOCALTIMESTAMP LOCATION LOCK_P
 
-	MAPPING MATCH MAXVALUE MINUTE_P MINVALUE MODE MONTH_P MOVE
+	MAPPING MATCH MATERIALIZED MAXVALUE MINUTE_P MINVALUE MODE MONTH_P MOVE
 
 	NAME_P NAMES NATIONAL NATURAL NCHAR NEXT NO NONE
 	NOT NOTHING NOTIFY NOTNULL NOWAIT NULL_P NULLIF
@@ -566,11 +575,11 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 
 	PARSER PARTIAL PARTITION PASSING PASSWORD PLACING PLANS POSITION
 	PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
-	PRIOR PRIVILEGES PROCEDURAL PROCEDURE
+	PRIOR PRIVILEGES PROCEDURAL PROCEDURE PROGRAM
 
 	QUOTE
 
-	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REINDEX
+	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REFRESH REINDEX
 	RELATIVE_P RELEASE RENAME REPEATABLE REPLACE REPLICA
 	RESET RESTART RESTRICT RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK
 	ROW ROWS RULE
@@ -743,6 +752,7 @@ stmt :
 			| CreateForeignTableStmt
 			| CreateFunctionStmt
 			| CreateGroupStmt
+			| CreateMatViewStmt
 			| CreateOpClassStmt
 			| CreateOpFamilyStmt
 			| AlterOpFamilyStmt
@@ -788,6 +798,7 @@ stmt :
 			| IndexStmt
 			| InsertStmt
 			| ListenStmt
+			| RefreshMatViewStmt
 			| LoadStmt
 			| LockStmt
 			| NotifyStmt
@@ -1014,6 +1025,14 @@ AlterRoleSetStmt:
 				{
 					AlterRoleSetStmt *n = makeNode(AlterRoleSetStmt);
 					n->role = $3;
+					n->database = $4;
+					n->setstmt = $5;
+					$$ = (Node *)n;
+				}
+			| ALTER ROLE ALL opt_in_database SetResetClause
+				{
+					AlterRoleSetStmt *n = makeNode(AlterRoleSetStmt);
+					n->role = NULL;
 					n->database = $4;
 					n->setstmt = $5;
 					$$ = (Node *)n;
@@ -1694,9 +1713,9 @@ DiscardStmt:
 
 /*****************************************************************************
  *
- *	ALTER [ TABLE | INDEX | SEQUENCE | VIEW ] variations
+ *	ALTER [ TABLE | INDEX | SEQUENCE | VIEW | MATERIALIZED VIEW ] variations
  *
- * Note: we accept all subcommands for each of the four variants, and sort
+ * Note: we accept all subcommands for each of the five variants, and sort
  * out what's really legal at execution time.
  *****************************************************************************/
 
@@ -1770,6 +1789,24 @@ AlterTableStmt:
 					n->relation = $5;
 					n->cmds = $6;
 					n->relkind = OBJECT_VIEW;
+					n->missing_ok = true;
+					$$ = (Node *)n;
+				}
+		|	ALTER MATERIALIZED VIEW qualified_name alter_table_cmds
+				{
+					AlterTableStmt *n = makeNode(AlterTableStmt);
+					n->relation = $4;
+					n->cmds = $5;
+					n->relkind = OBJECT_MATVIEW;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
+		|	ALTER MATERIALIZED VIEW IF_P EXISTS qualified_name alter_table_cmds
+				{
+					AlterTableStmt *n = makeNode(AlterTableStmt);
+					n->relation = $6;
+					n->cmds = $7;
+					n->relkind = OBJECT_MATVIEW;
 					n->missing_ok = true;
 					$$ = (Node *)n;
 				}
@@ -2299,7 +2336,10 @@ ClosePortalStmt:
  *
  *		QUERY :
  *				COPY relname [(columnList)] FROM/TO file [WITH] [(options)]
- *				COPY ( SELECT ... ) TO file [WITH] [(options)]
+ *				COPY ( SELECT ... ) TO file	[WITH] [(options)]
+ *
+ *				where 'file' can be one of:
+ *				{ PROGRAM 'command' | STDIN | STDOUT | 'filename' }
  *
  *				In the preferred syntax the options are comma-separated
  *				and use generic identifiers instead of keywords.  The pre-9.0
@@ -2314,14 +2354,21 @@ ClosePortalStmt:
  *****************************************************************************/
 
 CopyStmt:	COPY opt_binary qualified_name opt_column_list opt_oids
-			copy_from copy_file_name copy_delimiter opt_with copy_options
+			copy_from opt_program copy_file_name copy_delimiter opt_with copy_options
 				{
 					CopyStmt *n = makeNode(CopyStmt);
 					n->relation = $3;
 					n->query = NULL;
 					n->attlist = $4;
 					n->is_from = $6;
-					n->filename = $7;
+					n->is_program = $7;
+					n->filename = $8;
+
+					if (n->is_program && n->filename == NULL)
+						ereport(ERROR,
+								(errcode(ERRCODE_SYNTAX_ERROR),
+								 errmsg("STDIN/STDOUT not allowed with PROGRAM"),
+								 parser_errposition(@8)));
 
 					n->options = NIL;
 					/* Concatenate user-supplied flags */
@@ -2329,21 +2376,29 @@ CopyStmt:	COPY opt_binary qualified_name opt_column_list opt_oids
 						n->options = lappend(n->options, $2);
 					if ($5)
 						n->options = lappend(n->options, $5);
-					if ($8)
-						n->options = lappend(n->options, $8);
-					if ($10)
-						n->options = list_concat(n->options, $10);
+					if ($9)
+						n->options = lappend(n->options, $9);
+					if ($11)
+						n->options = list_concat(n->options, $11);
 					$$ = (Node *)n;
 				}
-			| COPY select_with_parens TO copy_file_name opt_with copy_options
+			| COPY select_with_parens TO opt_program copy_file_name opt_with copy_options
 				{
 					CopyStmt *n = makeNode(CopyStmt);
 					n->relation = NULL;
 					n->query = $2;
 					n->attlist = NIL;
 					n->is_from = false;
-					n->filename = $4;
-					n->options = $6;
+					n->is_program = $4;
+					n->filename = $5;
+					n->options = $7;
+
+					if (n->is_program && n->filename == NULL)
+						ereport(ERROR,
+								(errcode(ERRCODE_SYNTAX_ERROR),
+								 errmsg("STDIN/STDOUT not allowed with PROGRAM"),
+								 parser_errposition(@5)));
+
 					$$ = (Node *)n;
 				}
 		;
@@ -2351,6 +2406,11 @@ CopyStmt:	COPY opt_binary qualified_name opt_column_list opt_oids
 copy_from:
 			FROM									{ $$ = TRUE; }
 			| TO									{ $$ = FALSE; }
+		;
+
+opt_program:
+			PROGRAM									{ $$ = TRUE; }
+			| /* EMPTY */							{ $$ = FALSE; }
 		;
 
 /*
@@ -2382,6 +2442,10 @@ copy_opt_item:
 			| OIDS
 				{
 					$$ = makeDefElem("oids", (Node *)makeInteger(TRUE));
+				}
+			| FREEZE
+				{
+					$$ = makeDefElem("freeze", (Node *)makeInteger(TRUE));
 				}
 			| DELIMITER opt_as Sconst
 				{
@@ -3149,6 +3213,7 @@ CreateAsStmt:
 					CreateTableAsStmt *ctas = makeNode(CreateTableAsStmt);
 					ctas->query = $6;
 					ctas->into = $4;
+					ctas->relkind = OBJECT_TABLE;
 					ctas->is_select_into = false;
 					/* cram additional flags into the IntoClause */
 					$4->rel->relpersistence = $2;
@@ -3167,6 +3232,7 @@ create_as_target:
 					$$->onCommit = $4;
 					$$->tableSpaceName = $5;
 					$$->skipData = false;		/* might get changed later */
+					$$->relkind = INTO_CLAUSE_RELKIND_DEFAULT;
 				}
 		;
 
@@ -3174,6 +3240,65 @@ opt_with_data:
 			WITH DATA_P								{ $$ = TRUE; }
 			| WITH NO DATA_P						{ $$ = FALSE; }
 			| /*EMPTY*/								{ $$ = TRUE; }
+		;
+
+
+/*****************************************************************************
+ *
+ *		QUERY :
+ *				CREATE MATERIALIZED VIEW relname AS SelectStmt
+ *
+ *****************************************************************************/
+
+CreateMatViewStmt:
+		CREATE OptNoLog MATERIALIZED VIEW create_mv_target AS SelectStmt opt_with_data
+				{
+					CreateTableAsStmt *ctas = makeNode(CreateTableAsStmt);
+					ctas->query = $7;
+					ctas->into = $5;
+					ctas->relkind = OBJECT_MATVIEW;
+					ctas->is_select_into = false;
+					/* cram additional flags into the IntoClause */
+					$5->rel->relpersistence = $2;
+					$5->skipData = !($8);
+					$$ = (Node *) ctas;
+				}
+		;
+
+create_mv_target:
+			qualified_name opt_column_list opt_reloptions OptTableSpace
+				{
+					$$ = makeNode(IntoClause);
+					$$->rel = $1;
+					$$->colNames = $2;
+					$$->options = $3;
+					$$->onCommit = ONCOMMIT_NOOP;
+					$$->tableSpaceName = $4;
+					$$->skipData = false;		/* might get changed later */
+					$$->relkind = INTO_CLAUSE_RELKIND_DEFAULT;
+				}
+		;
+
+OptNoLog:	UNLOGGED					{ $$ = RELPERSISTENCE_UNLOGGED; }
+			| /*EMPTY*/					{ $$ = RELPERSISTENCE_PERMANENT; }
+		;
+
+
+/*****************************************************************************
+ *
+ *		QUERY :
+ *				REFRESH MATERIALIZED VIEW qualified_name
+ *
+ *****************************************************************************/
+
+RefreshMatViewStmt:
+			REFRESH MATERIALIZED VIEW qualified_name opt_with_data
+				{
+					RefreshMatViewStmt *n = makeNode(RefreshMatViewStmt);
+					n->relation = $4;
+					n->skipData = !($5);
+					$$ = (Node *) n;
+				}
 		;
 
 
@@ -3694,6 +3819,15 @@ AlterExtensionContentsStmt:
 					n->objname = $6;
 					$$ = (Node *)n;
 				}
+			| ALTER EXTENSION name add_drop MATERIALIZED VIEW any_name
+				{
+					AlterExtensionContentsStmt *n = makeNode(AlterExtensionContentsStmt);
+					n->extname = $3;
+					n->action = $4;
+					n->objtype = OBJECT_MATVIEW;
+					n->objname = $7;
+					$$ = (Node *)n;
+				}
 			| ALTER EXTENSION name add_drop FOREIGN TABLE any_name
 				{
 					AlterExtensionContentsStmt *n = makeNode(AlterExtensionContentsStmt);
@@ -4001,55 +4135,35 @@ AlterForeignServerStmt: ALTER SERVER name foreign_server_version alter_generic_o
 
 CreateForeignTableStmt:
 		CREATE FOREIGN TABLE qualified_name
-			OptForeignTableElementList
+			'(' OptTableElementList ')'
 			SERVER name create_generic_options
 				{
 					CreateForeignTableStmt *n = makeNode(CreateForeignTableStmt);
 					$4->relpersistence = RELPERSISTENCE_PERMANENT;
 					n->base.relation = $4;
-					n->base.tableElts = $5;
+					n->base.tableElts = $6;
 					n->base.inhRelations = NIL;
 					n->base.if_not_exists = false;
 					/* FDW-specific data */
-					n->servername = $7;
-					n->options = $8;
+					n->servername = $9;
+					n->options = $10;
 					$$ = (Node *) n;
 				}
 		| CREATE FOREIGN TABLE IF_P NOT EXISTS qualified_name
-			OptForeignTableElementList
+			'(' OptTableElementList ')'
 			SERVER name create_generic_options
 				{
 					CreateForeignTableStmt *n = makeNode(CreateForeignTableStmt);
 					$7->relpersistence = RELPERSISTENCE_PERMANENT;
 					n->base.relation = $7;
-					n->base.tableElts = $8;
+					n->base.tableElts = $9;
 					n->base.inhRelations = NIL;
 					n->base.if_not_exists = true;
 					/* FDW-specific data */
-					n->servername = $10;
-					n->options = $11;
+					n->servername = $12;
+					n->options = $13;
 					$$ = (Node *) n;
 				}
-		;
-
-OptForeignTableElementList:
-			'(' ForeignTableElementList ')'			{ $$ = $2; }
-			| '(' ')'								{ $$ = NIL; }
-		;
-
-ForeignTableElementList:
-			ForeignTableElement
-				{
-					$$ = list_make1($1);
-				}
-			| ForeignTableElementList ',' ForeignTableElement
-				{
-					$$ = lappend($1, $3);
-				}
-		;
-
-ForeignTableElement:
-			columnDef					{ $$ = $1; }
 		;
 
 /*****************************************************************************
@@ -4364,7 +4478,6 @@ DropTrigStmt:
  *
  *		QUERIES :
  *				CREATE EVENT TRIGGER ...
- *				DROP EVENT TRIGGER ...
  *				ALTER EVENT TRIGGER ...
  *
  *****************************************************************************/
@@ -5020,6 +5133,7 @@ DropStmt:	DROP drop_type IF_P EXISTS any_name_list opt_drop_behavior
 drop_type:	TABLE									{ $$ = OBJECT_TABLE; }
 			| SEQUENCE								{ $$ = OBJECT_SEQUENCE; }
 			| VIEW									{ $$ = OBJECT_VIEW; }
+			| MATERIALIZED VIEW						{ $$ = OBJECT_MATVIEW; }
 			| INDEX									{ $$ = OBJECT_INDEX; }
 			| FOREIGN TABLE							{ $$ = OBJECT_FOREIGN_TABLE; }
 			| EVENT TRIGGER 						{ $$ = OBJECT_EVENT_TRIGGER; }
@@ -5080,19 +5194,25 @@ opt_restart_seqs:
  *	The COMMENT ON statement can take different forms based upon the type of
  *	the object associated with the comment. The form of the statement is:
  *
- *	COMMENT ON [ [ DATABASE | DOMAIN | INDEX | SEQUENCE | TABLE | TYPE | VIEW |
- *				   COLLATION | CONVERSION | LANGUAGE | OPERATOR CLASS |
- *				   LARGE OBJECT | CAST | COLUMN | SCHEMA | TABLESPACE |
- *				   EXTENSION | ROLE | TEXT SEARCH PARSER |
- *				   TEXT SEARCH DICTIONARY | TEXT SEARCH TEMPLATE |
- *				   TEXT SEARCH CONFIGURATION | FOREIGN TABLE |
- *				   FOREIGN DATA WRAPPER | SERVER | EVENT TRIGGER ] <objname> |
+ *	COMMENT ON [ [ CONVERSION | COLLATION | DATABASE | DOMAIN |
+ *                 EXTENSION | EVENT TRIGGER | FOREIGN DATA WRAPPER |
+ *                 FOREIGN TABLE | INDEX | [PROCEDURAL] LANGUAGE |
+ *                 MATERIALIZED VIEW | ROLE | SCHEMA | SEQUENCE |
+ *                 SERVER | TABLE | TABLESPACE |
+ *                 TEXT SEARCH CONFIGURATION | TEXT SEARCH DICTIONARY |
+ *                 TEXT SEARCH PARSER | TEXT SEARCH TEMPLATE | TYPE |
+ *                 VIEW] <objname> |
  *				 AGGREGATE <aggname> (arg1, ...) |
- *				 FUNCTION <funcname> (arg1, arg2, ...) |
- *				 OPERATOR <op> (leftoperand_typ, rightoperand_typ) |
- *				 TRIGGER <triggername> ON <relname> |
+ *				 CAST (<src type> AS <dst type>) |
+ *				 COLUMN <relname>.<colname> |
  *				 CONSTRAINT <constraintname> ON <relname> |
- *				 RULE <rulename> ON <relname> ]
+ *				 FUNCTION <funcname> (arg1, arg2, ...) |
+ *				 LARGE OBJECT <oid> |
+ *				 OPERATOR <op> (leftoperand_typ, rightoperand_typ) |
+ *				 OPERATOR CLASS <name> USING <access-method> |
+ *				 OPERATOR FAMILY <name> USING <access-method> |
+ *				 RULE <rulename> ON <relname> |
+ *				 TRIGGER <triggername> ON <relname> ]
  *			   IS 'text'
  *
  *****************************************************************************/
@@ -5216,38 +5336,6 @@ CommentStmt:
 					n->comment = $7;
 					$$ = (Node *) n;
 				}
-			| COMMENT ON TEXT_P SEARCH PARSER any_name IS comment_text
-				{
-					CommentStmt *n = makeNode(CommentStmt);
-					n->objtype = OBJECT_TSPARSER;
-					n->objname = $6;
-					n->comment = $8;
-					$$ = (Node *) n;
-				}
-			| COMMENT ON TEXT_P SEARCH DICTIONARY any_name IS comment_text
-				{
-					CommentStmt *n = makeNode(CommentStmt);
-					n->objtype = OBJECT_TSDICTIONARY;
-					n->objname = $6;
-					n->comment = $8;
-					$$ = (Node *) n;
-				}
-			| COMMENT ON TEXT_P SEARCH TEMPLATE any_name IS comment_text
-				{
-					CommentStmt *n = makeNode(CommentStmt);
-					n->objtype = OBJECT_TSTEMPLATE;
-					n->objname = $6;
-					n->comment = $8;
-					$$ = (Node *) n;
-				}
-			| COMMENT ON TEXT_P SEARCH CONFIGURATION any_name IS comment_text
-				{
-					CommentStmt *n = makeNode(CommentStmt);
-					n->objtype = OBJECT_TSCONFIGURATION;
-					n->objname = $6;
-					n->comment = $8;
-					$$ = (Node *) n;
-				}
 		;
 
 comment_type:
@@ -5260,6 +5348,7 @@ comment_type:
 			| DOMAIN_P							{ $$ = OBJECT_DOMAIN; }
 			| TYPE_P							{ $$ = OBJECT_TYPE; }
 			| VIEW								{ $$ = OBJECT_VIEW; }
+			| MATERIALIZED VIEW					{ $$ = OBJECT_MATVIEW; }
 			| COLLATION							{ $$ = OBJECT_COLLATION; }
 			| CONVERSION_P						{ $$ = OBJECT_CONVERSION; }
 			| TABLESPACE						{ $$ = OBJECT_TABLESPACE; }
@@ -5269,6 +5358,10 @@ comment_type:
 			| SERVER							{ $$ = OBJECT_FOREIGN_SERVER; }
 			| FOREIGN DATA_P WRAPPER			{ $$ = OBJECT_FDW; }
 			| EVENT TRIGGER						{ $$ = OBJECT_EVENT_TRIGGER; }
+			| TEXT_P SEARCH CONFIGURATION		{ $$ = OBJECT_TSCONFIGURATION; }
+			| TEXT_P SEARCH DICTIONARY			{ $$ = OBJECT_TSDICTIONARY; }
+			| TEXT_P SEARCH PARSER				{ $$ = OBJECT_TSPARSER; }
+			| TEXT_P SEARCH TEMPLATE			{ $$ = OBJECT_TSTEMPLATE; }
 		;
 
 comment_text:
@@ -5361,6 +5454,7 @@ security_label_type:
 			| TABLESPACE						{ $$ = OBJECT_TABLESPACE; }
 			| TYPE_P							{ $$ = OBJECT_TYPE; }
 			| VIEW								{ $$ = OBJECT_VIEW; }
+			| MATERIALIZED VIEW					{ $$ = OBJECT_MATVIEW; }
 		;
 
 security_label:	Sconst				{ $$ = $1; }
@@ -6772,7 +6866,7 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 				{
 					RenameStmt *n = makeNode(RenameStmt);
 					n->renameType = OBJECT_FDW;
-					n->subname = $5;
+					n->object = list_make1(makeString($5));
 					n->newname = $8;
 					n->missing_ok = false;
 					$$ = (Node *)n;
@@ -6800,7 +6894,7 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 				{
 					RenameStmt *n = makeNode(RenameStmt);
 					n->renameType = OBJECT_LANGUAGE;
-					n->subname = $4;
+					n->object = list_make1(makeString($4));
 					n->newname = $7;
 					n->missing_ok = false;
 					$$ = (Node *)n;
@@ -6810,7 +6904,7 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 					RenameStmt *n = makeNode(RenameStmt);
 					n->renameType = OBJECT_OPCLASS;
 					n->object = $4;
-					n->subname = $6;
+					n->objarg = list_make1(makeString($6));
 					n->newname = $9;
 					n->missing_ok = false;
 					$$ = (Node *)n;
@@ -6820,7 +6914,7 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 					RenameStmt *n = makeNode(RenameStmt);
 					n->renameType = OBJECT_OPFAMILY;
 					n->object = $4;
-					n->subname = $6;
+					n->objarg = list_make1(makeString($6));
 					n->newname = $9;
 					n->missing_ok = false;
 					$$ = (Node *)n;
@@ -6838,7 +6932,7 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 				{
 					RenameStmt *n = makeNode(RenameStmt);
 					n->renameType = OBJECT_FOREIGN_SERVER;
-					n->subname = $3;
+					n->object = list_make1(makeString($3));
 					n->newname = $6;
 					n->missing_ok = false;
 					$$ = (Node *)n;
@@ -6900,6 +6994,26 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 					n->relation = $5;
 					n->subname = NULL;
 					n->newname = $8;
+					n->missing_ok = true;
+					$$ = (Node *)n;
+				}
+			| ALTER MATERIALIZED VIEW qualified_name RENAME TO name
+				{
+					RenameStmt *n = makeNode(RenameStmt);
+					n->renameType = OBJECT_MATVIEW;
+					n->relation = $4;
+					n->subname = NULL;
+					n->newname = $7;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
+			| ALTER MATERIALIZED VIEW IF_P EXISTS qualified_name RENAME TO name
+				{
+					RenameStmt *n = makeNode(RenameStmt);
+					n->renameType = OBJECT_MATVIEW;
+					n->relation = $6;
+					n->subname = NULL;
+					n->newname = $9;
 					n->missing_ok = true;
 					$$ = (Node *)n;
 				}
@@ -6965,6 +7079,28 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 					n->missing_ok = true;
 					$$ = (Node *)n;
 				}
+			| ALTER MATERIALIZED VIEW qualified_name RENAME opt_column name TO name
+				{
+					RenameStmt *n = makeNode(RenameStmt);
+					n->renameType = OBJECT_COLUMN;
+					n->relationType = OBJECT_MATVIEW;
+					n->relation = $4;
+					n->subname = $7;
+					n->newname = $9;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
+			| ALTER MATERIALIZED VIEW IF_P EXISTS qualified_name RENAME opt_column name TO name
+				{
+					RenameStmt *n = makeNode(RenameStmt);
+					n->renameType = OBJECT_COLUMN;
+					n->relationType = OBJECT_MATVIEW;
+					n->relation = $6;
+					n->subname = $9;
+					n->newname = $11;
+					n->missing_ok = true;
+					$$ = (Node *)n;
+				}
 			| ALTER TABLE relation_expr RENAME CONSTRAINT name TO name
 				{
 					RenameStmt *n = makeNode(RenameStmt);
@@ -6997,6 +7133,16 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 					n->missing_ok = true;
 					$$ = (Node *)n;
 				}
+			| ALTER RULE name ON qualified_name RENAME TO name
+				{
+					RenameStmt *n = makeNode(RenameStmt);
+					n->renameType = OBJECT_RULE;
+					n->relation = $5;
+					n->subname = $3;
+					n->newname = $8;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
 			| ALTER TRIGGER name ON qualified_name RENAME TO name
 				{
 					RenameStmt *n = makeNode(RenameStmt);
@@ -7011,7 +7157,7 @@ RenameStmt: ALTER AGGREGATE func_name aggr_args RENAME TO name
 				{
 					RenameStmt *n = makeNode(RenameStmt);
 					n->renameType = OBJECT_EVENT_TRIGGER;
-					n->subname = $4;
+					n->object = list_make1(makeString($4));
 					n->newname = $7;
 					$$ = (Node *)n;
 				}
@@ -7307,6 +7453,24 @@ AlterObjectSchemaStmt:
 					n->objectType = OBJECT_VIEW;
 					n->relation = $5;
 					n->newschema = $8;
+					n->missing_ok = true;
+					$$ = (Node *)n;
+				}
+			| ALTER MATERIALIZED VIEW qualified_name SET SCHEMA name
+				{
+					AlterObjectSchemaStmt *n = makeNode(AlterObjectSchemaStmt);
+					n->objectType = OBJECT_MATVIEW;
+					n->relation = $4;
+					n->newschema = $7;
+					n->missing_ok = false;
+					$$ = (Node *)n;
+				}
+			| ALTER MATERIALIZED VIEW IF_P EXISTS qualified_name SET SCHEMA name
+				{
+					AlterObjectSchemaStmt *n = makeNode(AlterObjectSchemaStmt);
+					n->objectType = OBJECT_MATVIEW;
+					n->relation = $6;
+					n->newschema = $9;
 					n->missing_ok = true;
 					$$ = (Node *)n;
 				}
@@ -7832,6 +7996,30 @@ ViewStmt: CREATE OptTemp VIEW qualified_name opt_column_list opt_reloptions
 					n->query = $10;
 					n->replace = true;
 					n->options = $8;
+					$$ = (Node *) n;
+				}
+		| CREATE OptTemp RECURSIVE VIEW qualified_name '(' columnList ')' opt_reloptions
+				AS SelectStmt
+				{
+					ViewStmt *n = makeNode(ViewStmt);
+					n->view = $5;
+					n->view->relpersistence = $2;
+					n->aliases = $7;
+					n->query = makeRecursiveViewSelect(n->view->relname, n->aliases, $11);
+					n->replace = false;
+					n->options = $9;
+					$$ = (Node *) n;
+				}
+		| CREATE OR REPLACE OptTemp RECURSIVE VIEW qualified_name '(' columnList ')' opt_reloptions
+				AS SelectStmt
+				{
+					ViewStmt *n = makeNode(ViewStmt);
+					n->view = $7;
+					n->view->relpersistence = $4;
+					n->aliases = $9;
+					n->query = makeRecursiveViewSelect(n->view->relname, n->aliases, $13);
+					n->replace = true;
+					n->options = $11;
 					$$ = (Node *) n;
 				}
 		;
@@ -8464,6 +8652,8 @@ ExplainableStmt:
 			| DeleteStmt
 			| DeclareCursorStmt
 			| CreateAsStmt
+			| CreateMatViewStmt
+			| RefreshMatViewStmt
 			| ExecuteStmt					/* by default all are $$=$1 */
 		;
 
@@ -8548,6 +8738,7 @@ ExecuteStmt: EXECUTE name execute_param_clause
 					n->params = $8;
 					ctas->query = (Node *) n;
 					ctas->into = $4;
+					ctas->relkind = OBJECT_TABLE;
 					ctas->is_select_into = false;
 					/* cram additional flags into the IntoClause */
 					$4->rel->relpersistence = $2;
@@ -8896,9 +9087,10 @@ select_with_parens:
  * The duplicative productions are annoying, but hard to get rid of without
  * creating shift/reduce conflicts.
  *
- *	FOR UPDATE/SHARE may be before or after LIMIT/OFFSET.
+ *	The locking clause (FOR UPDATE etc) may be before or after LIMIT/OFFSET.
  *	In <=7.2.X, LIMIT/OFFSET had to be after FOR UPDATE
- *	We now support both orderings, but prefer LIMIT/OFFSET before FOR UPDATE/SHARE
+ *	We now support both orderings, but prefer LIMIT/OFFSET before the locking
+ * clause.
  *	2002-08-28 bjm
  */
 select_no_parens:
@@ -9094,6 +9286,7 @@ into_clause:
 					$$->onCommit = ONCOMMIT_NOOP;
 					$$->tableSpaceName = NULL;
 					$$->skipData = false;
+					$$->relkind = INTO_CLAUSE_RELKIND_DEFAULT;
 				}
 			| /*EMPTY*/
 				{ $$ = NULL; }
@@ -9317,22 +9510,21 @@ for_locking_items:
 		;
 
 for_locking_item:
-			FOR UPDATE locked_rels_list opt_nowait
+			for_locking_strength locked_rels_list opt_nowait
 				{
 					LockingClause *n = makeNode(LockingClause);
-					n->lockedRels = $3;
-					n->forUpdate = TRUE;
-					n->noWait = $4;
+					n->lockedRels = $2;
+					n->strength = $1;
+					n->noWait = $3;
 					$$ = (Node *) n;
 				}
-			| FOR SHARE locked_rels_list opt_nowait
-				{
-					LockingClause *n = makeNode(LockingClause);
-					n->lockedRels = $3;
-					n->forUpdate = FALSE;
-					n->noWait = $4;
-					$$ = (Node *) n;
-				}
+		;
+
+for_locking_strength:
+			FOR UPDATE 							{ $$ = LCS_FORUPDATE; }
+			| FOR NO KEY UPDATE 				{ $$ = LCS_FORNOKEYUPDATE; }
+			| FOR SHARE 						{ $$ = LCS_FORSHARE; }
+			| FOR KEY SHARE 					{ $$ = LCS_FORKEYSHARE; }
 		;
 
 locked_rels_list:
@@ -10833,6 +11025,29 @@ c_expr:		columnref								{ $$ = $1; }
 					n->subselect = $1;
 					n->location = @1;
 					$$ = (Node *)n;
+				}
+			| select_with_parens indirection
+				{
+					/*
+					 * Because the select_with_parens nonterminal is designed
+					 * to "eat" as many levels of parens as possible, the
+					 * '(' a_expr ')' opt_indirection production above will
+					 * fail to match a sub-SELECT with indirection decoration;
+					 * the sub-SELECT won't be regarded as an a_expr as long
+					 * as there are parens around it.  To support applying
+					 * subscripting or field selection to a sub-SELECT result,
+					 * we need this redundant-looking production.
+					 */
+					SubLink *n = makeNode(SubLink);
+					A_Indirection *a = makeNode(A_Indirection);
+					n->subLinkType = EXPR_SUBLINK;
+					n->testexpr = NULL;
+					n->operName = NIL;
+					n->subselect = $1;
+					n->location = @1;
+					a->arg = (Node *)n;
+					a->indirection = check_indirection($2, yyscanner);
+					$$ = (Node *)a;
 				}
 			| EXISTS select_with_parens
 				{
@@ -12558,6 +12773,7 @@ unreserved_keyword:
 			| LOCK_P
 			| MAPPING
 			| MATCH
+			| MATERIALIZED
 			| MAXVALUE
 			| MINUTE_P
 			| MINVALUE
@@ -12595,6 +12811,7 @@ unreserved_keyword:
 			| PRIVILEGES
 			| PROCEDURAL
 			| PROCEDURE
+			| PROGRAM
 			| QUOTE
 			| RANGE
 			| READ
@@ -12602,6 +12819,7 @@ unreserved_keyword:
 			| RECHECK
 			| RECURSIVE
 			| REF
+			| REFRESH
 			| REINDEX
 			| RELATIVE_P
 			| RELEASE
@@ -13337,6 +13555,7 @@ makeXmlExpr(XmlExprOp op, char *name, List *named_args, List *args,
 	x->args = args;
 	/* xmloption, if relevant, must be filled in by caller */
 	/* type and typmod will be filled in during parse analysis */
+	x->type = InvalidOid;			/* marks the node as not analyzed */
 	x->location = location;
 	return (Node *) x;
 }
@@ -13539,6 +13758,66 @@ processCASbits(int cas_bits, int location, const char *constrType,
 							constrType),
 					 parser_errposition(location)));
 	}
+}
+
+/*----------
+ * Recursive view transformation
+ *
+ * Convert
+ *
+ *     CREATE RECURSIVE VIEW relname (aliases) AS query
+ *
+ * to
+ *
+ *     CREATE VIEW relname (aliases) AS
+ *         WITH RECURSIVE relname (aliases) AS (query)
+ *         SELECT aliases FROM relname
+ *
+ * Actually, just the WITH ... part, which is then inserted into the original
+ * view definition as the query.
+ * ----------
+ */
+static Node *
+makeRecursiveViewSelect(char *relname, List *aliases, Node *query)
+{
+	SelectStmt *s = makeNode(SelectStmt);
+	WithClause *w = makeNode(WithClause);
+	CommonTableExpr *cte = makeNode(CommonTableExpr);
+	List	   *tl = NIL;
+	ListCell   *lc;
+
+	/* create common table expression */
+	cte->ctename = relname;
+	cte->aliascolnames = aliases;
+	cte->ctequery = query;
+	cte->location = -1;
+
+	/* create WITH clause and attach CTE */
+	w->recursive = true;
+	w->ctes = list_make1(cte);
+	w->location = -1;
+
+	/* create target list for the new SELECT from the alias list of the
+	 * recursive view specification */
+	foreach (lc, aliases)
+	{
+		ResTarget *rt = makeNode(ResTarget);
+
+		rt->name = NULL;
+		rt->indirection = NIL;
+		rt->val = makeColumnRef(strVal(lfirst(lc)), NIL, -1, 0);
+		rt->location = -1;
+
+		tl = lappend(tl, rt);
+	}
+
+	/* create new SELECT combining WITH clause, target list, and fake FROM
+	 * clause */
+	s->withClause = w;
+	s->targetList = tl;
+	s->fromClause = list_make1(makeRangeVar(NULL, relname, -1));
+
+	return (Node *) s;
 }
 
 /* parser_init()

@@ -4,7 +4,7 @@
  *		Common support routines for bin/scripts/
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/scripts/common.c
@@ -19,7 +19,6 @@
 #include <unistd.h>
 
 #include "common.h"
-#include "libpq/pqsignal.h"
 
 static void SetCancelConn(PGconn *conn);
 static void ResetCancelConn(void);
@@ -275,55 +274,6 @@ executeMaintenanceCommand(PGconn *conn, const char *query, bool echo)
 		PQclear(res);
 
 	return r;
-}
-
-/*
- * "Safe" wrapper around strdup().	Pulled from psql/common.c
- */
-char *
-pg_strdup(const char *string)
-{
-	char	   *tmp;
-
-	if (!string)
-	{
-		fprintf(stderr, _("pg_strdup: cannot duplicate null pointer (internal error)\n"));
-		exit(EXIT_FAILURE);
-	}
-	tmp = strdup(string);
-	if (!tmp)
-	{
-		fprintf(stderr, _("out of memory\n"));
-		exit(EXIT_FAILURE);
-	}
-	return tmp;
-}
-
-void *
-pg_malloc(size_t size)
-{
-	void	   *tmp;
-
-	/* Avoid unportable behavior of malloc(0) */
-	if (size == 0)
-		size = 1;
-	tmp = malloc(size);
-	if (!tmp)
-	{
-		fprintf(stderr, _("out of memory\n"));
-		exit(EXIT_FAILURE);
-	}
-	return tmp;
-}
-
-void *
-pg_malloc0(size_t size)
-{
-	void	   *tmp;
-
-	tmp = pg_malloc(size);
-	MemSet(tmp, 0, size);
-	return tmp;
 }
 
 /*

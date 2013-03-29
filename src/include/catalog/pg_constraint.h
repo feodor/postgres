@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_constraint.h
@@ -232,7 +232,8 @@ extern Oid CreateConstraintEntry(const char *constraintName,
 					  const char *conSrc,
 					  bool conIsLocal,
 					  int conInhCount,
-					  bool conNoInherit);
+					  bool conNoInherit,
+					  bool is_internal);
 
 extern void RemoveConstraintById(Oid conId);
 extern void RenameConstraintById(Oid conId, const char *newname);

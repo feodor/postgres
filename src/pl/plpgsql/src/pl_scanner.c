@@ -4,7 +4,7 @@
  *	  lexical scanning for PL/pgSQL
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -443,8 +443,26 @@ plpgsql_append_source_text(StringInfo buf,
 }
 
 /*
+ * Peek one token ahead in the input stream.  Only the token code is
+ * made available, not any of the auxiliary info such as location.
+ *
+ * NB: no variable or unreserved keyword lookup is performed here, they will
+ * be returned as IDENT. Reserved keywords are resolved as usual.
+ */
+int
+plpgsql_peek(void)
+{
+	int			tok1;
+	TokenAuxData aux1;
+
+	tok1 = internal_yylex(&aux1);
+	push_back_token(tok1, &aux1);
+	return tok1;
+}
+
+/*
  * Peek two tokens ahead in the input stream. The first token and its
- * location the query are returned in *tok1_p and *tok1_loc, second token
+ * location in the query are returned in *tok1_p and *tok1_loc, second token
  * and its location in *tok2_p and *tok2_loc.
  *
  * NB: no variable or unreserved keyword lookup is performed here, they will
@@ -510,7 +528,7 @@ plpgsql_scanner_errposition(int location)
  * Beware of using yyerror for other purposes, as the cursor position might
  * be misleading!
  */
-void
+void __attribute__((noreturn))
 plpgsql_yyerror(const char *message)
 {
 	char	   *yytext = core_yy.scanbuf + plpgsql_yylloc;

@@ -3,7 +3,7 @@
  * aclchk.c
  *	  Routines to check access control permissions.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -25,6 +25,7 @@
 #include "catalog/catalog.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
+#include "catalog/objectaccess.h"
 #include "catalog/pg_authid.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_conversion.h"
@@ -755,7 +756,7 @@ objectsInSchemaToOids(GrantObjectType objtype, List *nspnames)
 		Oid			namespaceId;
 		List	   *objs;
 
-		namespaceId = LookupExplicitNamespace(nspname);
+		namespaceId = LookupExplicitNamespace(nspname, false);
 
 		switch (objtype)
 		{
@@ -764,6 +765,8 @@ objectsInSchemaToOids(GrantObjectType objtype, List *nspnames)
 				objs = getRelationsInNamespace(namespaceId, RELKIND_RELATION);
 				objects = list_concat(objects, objs);
 				objs = getRelationsInNamespace(namespaceId, RELKIND_VIEW);
+				objects = list_concat(objects, objs);
+				objs = getRelationsInNamespace(namespaceId, RELKIND_MATVIEW);
 				objects = list_concat(objects, objs);
 				objs = getRelationsInNamespace(namespaceId, RELKIND_FOREIGN_TABLE);
 				objects = list_concat(objects, objs);
@@ -1288,6 +1291,13 @@ SetDefaultACL(InternalDefaultACL *iacls)
 							  iacls->roleid,
 							  noldmembers, oldmembers,
 							  nnewmembers, newmembers);
+
+		if (isNew)
+			InvokeObjectPostCreateHook(DefaultAclRelationId,
+									   HeapTupleGetOid(newtuple), 0);
+		else
+			InvokeObjectPostAlterHook(DefaultAclRelationId,
+									  HeapTupleGetOid(newtuple), 0);
 	}
 
 	if (HeapTupleIsValid(tuple))
@@ -1346,10 +1356,13 @@ RemoveRoleFromObjectACL(Oid roleid, Oid classid, Oid objid)
 			case DEFACLOBJ_FUNCTION:
 				iacls.objtype = ACL_OBJECT_FUNCTION;
 				break;
+			case DEFACLOBJ_TYPE:
+				iacls.objtype = ACL_OBJECT_TYPE;
+				break;
 			default:
 				/* Shouldn't get here */
-				elog(ERROR, "unexpected default ACL type %d",
-					 pg_default_acl_tuple->defaclobjtype);
+				elog(ERROR, "unexpected default ACL type: %d",
+					 (int) pg_default_acl_tuple->defaclobjtype);
 				break;
 		}
 

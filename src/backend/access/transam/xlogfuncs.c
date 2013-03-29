@@ -7,7 +7,7 @@
  * This file contains WAL control and information functions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/xlogfuncs.c
@@ -18,6 +18,7 @@
 
 #include "access/htup_details.h"
 #include "access/xlog.h"
+#include "access/xlog_fn.h"
 #include "access/xlog_internal.h"
 #include "access/xlogutils.h"
 #include "catalog/catalog.h"
@@ -55,7 +56,7 @@ pg_start_backup(PG_FUNCTION_ARGS)
 
 	backupidstr = text_to_cstring(backupid);
 
-	startpoint = do_pg_start_backup(backupidstr, fast, NULL);
+	startpoint = do_pg_start_backup(backupidstr, fast, NULL, NULL);
 
 	snprintf(startxlogstr, sizeof(startxlogstr), "%X/%X",
 			 (uint32) (startpoint >> 32), (uint32) startpoint);
@@ -81,7 +82,7 @@ pg_stop_backup(PG_FUNCTION_ARGS)
 	XLogRecPtr	stoppoint;
 	char		stopxlogstr[MAXFNAMELEN];
 
-	stoppoint = do_pg_stop_backup(NULL, true);
+	stoppoint = do_pg_stop_backup(NULL, true, NULL);
 
 	snprintf(stopxlogstr, sizeof(stopxlogstr), "%X/%X",
 			 (uint32) (stoppoint >> 32), (uint32) stoppoint);
@@ -225,7 +226,7 @@ pg_last_xlog_receive_location(PG_FUNCTION_ARGS)
 	XLogRecPtr	recptr;
 	char		location[MAXFNAMELEN];
 
-	recptr = GetWalRcvWriteRecPtr(NULL);
+	recptr = GetWalRcvWriteRecPtr(NULL, NULL);
 
 	if (recptr == 0)
 		PG_RETURN_NULL();

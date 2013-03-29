@@ -3,11 +3,11 @@
  *
  *	execution functions
  *
- *	Copyright (c) 2010-2012, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2013, PostgreSQL Global Development Group
  *	contrib/pg_upgrade/exec.c
  */
 
-#include "postgres.h"
+#include "postgres_fe.h"
 
 #include "pg_upgrade.h"
 
@@ -104,8 +104,10 @@ exec_prog(const char *log_file, const char *opt_log_file,
 
 	if (result != 0)
 	{
-		report_status(PG_REPORT, "*failure*");
+		/* we might be in on a progress status line, so go to the next line */
+		report_status(PG_REPORT, "\n*failure*");
 		fflush(stdout);
+
 		pg_log(PG_VERBOSE, "There were problems executing \"%s\"\n", cmd);
 		if (opt_log_file)
 			pg_log(throw_error ? PG_FATAL : PG_REPORT,
@@ -138,13 +140,12 @@ exec_prog(const char *log_file, const char *opt_log_file,
 
 
 /*
- * is_server_running()
+ * pid_lock_file_exists()
  *
- * checks whether postmaster on the given data directory is running or not.
- * The check is performed by looking for the existence of postmaster.pid file.
+ * Checks whether the postmaster.pid file exists.
  */
 bool
-is_server_running(const char *datadir)
+pid_lock_file_exists(const char *datadir)
 {
 	char		path[MAXPGPATH];
 	int			fd;
@@ -178,8 +179,6 @@ void
 verify_directories(void)
 {
 
-	prep_status("Checking current, bin, and data directories");
-
 #ifndef WIN32
 	if (access(".", R_OK | W_OK | X_OK) != 0)
 #else
@@ -192,7 +191,6 @@ verify_directories(void)
 	check_data_dir(old_cluster.pgdata);
 	check_bin_dir(&new_cluster);
 	check_data_dir(new_cluster.pgdata);
-	check_ok();
 }
 
 

@@ -3,7 +3,7 @@
  * conversioncmds.c
  *	  conversion creation command support code
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -34,7 +34,7 @@
 /*
  * CREATE CONVERSION
  */
-void
+Oid
 CreateConversionCommand(CreateConversionStmt *stmt)
 {
 	Oid			namespaceId;
@@ -111,57 +111,6 @@ CreateConversionCommand(CreateConversionStmt *stmt)
 	 * All seem ok, go ahead (possible failure would be a duplicate conversion
 	 * name)
 	 */
-	ConversionCreate(conversion_name, namespaceId, GetUserId(),
-					 from_encoding, to_encoding, funcoid, stmt->def);
-}
-
-/*
- * Rename conversion
- */
-void
-RenameConversion(List *name, const char *newname)
-{
-	Oid			conversionOid;
-	Oid			namespaceOid;
-	HeapTuple	tup;
-	Relation	rel;
-	AclResult	aclresult;
-
-	rel = heap_open(ConversionRelationId, RowExclusiveLock);
-
-	conversionOid = get_conversion_oid(name, false);
-
-	tup = SearchSysCacheCopy1(CONVOID, ObjectIdGetDatum(conversionOid));
-	if (!HeapTupleIsValid(tup)) /* should not happen */
-		elog(ERROR, "cache lookup failed for conversion %u", conversionOid);
-
-	namespaceOid = ((Form_pg_conversion) GETSTRUCT(tup))->connamespace;
-
-	/* make sure the new name doesn't exist */
-	if (SearchSysCacheExists2(CONNAMENSP,
-							  CStringGetDatum(newname),
-							  ObjectIdGetDatum(namespaceOid)))
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("conversion \"%s\" already exists in schema \"%s\"",
-						newname, get_namespace_name(namespaceOid))));
-
-	/* must be owner */
-	if (!pg_conversion_ownercheck(conversionOid, GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_CONVERSION,
-					   NameListToString(name));
-
-	/* must have CREATE privilege on namespace */
-	aclresult = pg_namespace_aclcheck(namespaceOid, GetUserId(), ACL_CREATE);
-	if (aclresult != ACLCHECK_OK)
-		aclcheck_error(aclresult, ACL_KIND_NAMESPACE,
-					   get_namespace_name(namespaceOid));
-
-	/* rename */
-	namestrcpy(&(((Form_pg_conversion) GETSTRUCT(tup))->conname), newname);
-	simple_heap_update(rel, &tup->t_self, tup);
-	CatalogUpdateIndexes(rel, tup);
-
-	heap_close(rel, NoLock);
-	heap_freetuple(tup);
+	return ConversionCreate(conversion_name, namespaceId, GetUserId(),
+							from_encoding, to_encoding, funcoid, stmt->def);
 }

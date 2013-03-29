@@ -4,7 +4,7 @@
  *
  * PostgreSQL object comments utility code.
  *
- * Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/commands/comment.c
@@ -36,7 +36,7 @@
  * This routine is used to add the associated comment into
  * pg_description for the object specified by the given SQL command.
  */
-void
+Oid
 CommentObject(CommentStmt *stmt)
 {
 	ObjectAddress address;
@@ -60,7 +60,7 @@ CommentObject(CommentStmt *stmt)
 			ereport(WARNING,
 					(errcode(ERRCODE_UNDEFINED_DATABASE),
 					 errmsg("database \"%s\" does not exist", database)));
-			return;
+			return InvalidOid;
 		}
 	}
 
@@ -83,15 +83,17 @@ CommentObject(CommentStmt *stmt)
 		case OBJECT_COLUMN:
 
 			/*
-			 * Allow comments only on columns of tables, views, composite
-			 * types, and foreign tables (which are the only relkinds for
-			 * which pg_dump will dump per-column comments).  In particular we
-			 * wish to disallow comments on index columns, because the naming
-			 * of an index's columns may change across PG versions, so dumping
-			 * per-column comments could create reload failures.
+			 * Allow comments only on columns of tables, views, materialized
+			 * views, composite types, and foreign tables (which are the only
+			 * relkinds for which pg_dump will dump per-column comments).  In
+			 * particular we wish to disallow comments on index columns,
+			 * because the naming of an index's columns may change across PG
+			 * versions, so dumping per-column comments could create reload
+			 * failures.
 			 */
 			if (relation->rd_rel->relkind != RELKIND_RELATION &&
 				relation->rd_rel->relkind != RELKIND_VIEW &&
+				relation->rd_rel->relkind != RELKIND_MATVIEW &&
 				relation->rd_rel->relkind != RELKIND_COMPOSITE_TYPE &&
 				relation->rd_rel->relkind != RELKIND_FOREIGN_TABLE)
 				ereport(ERROR,
@@ -123,6 +125,8 @@ CommentObject(CommentStmt *stmt)
 	 */
 	if (relation != NULL)
 		relation_close(relation, NoLock);
+
+	return address.objectId;
 }
 
 /*

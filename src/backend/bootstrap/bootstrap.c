@@ -4,7 +4,7 @@
  *	  routines to support running postgres in 'bootstrap' mode
  *	bootstrap mode is used to create the initial template database
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -47,6 +47,8 @@
 
 extern int	optind;
 extern char *optarg;
+
+bool bootstrap_data_checksums = false;
 
 
 #define ALLOC(t, c)		((t *) calloc((unsigned)(c), sizeof(t)))
@@ -233,7 +235,7 @@ AuxiliaryProcessMain(int argc, char *argv[])
 	/* If no -x argument, we are a CheckerProcess */
 	MyAuxProcType = CheckerProcess;
 
-	while ((flag = getopt(argc, argv, "B:c:d:D:Fr:x:-:")) != -1)
+	while ((flag = getopt(argc, argv, "B:c:d:D:Fkr:x:-:")) != -1)
 	{
 		switch (flag)
 		{
@@ -258,6 +260,9 @@ AuxiliaryProcessMain(int argc, char *argv[])
 				break;
 			case 'F':
 				SetConfigOption("fsync", "false", PGC_POSTMASTER, PGC_S_ARGV);
+				break;
+			case 'k':
+				bootstrap_data_checksums = true;
 				break;
 			case 'r':
 				strlcpy(OutputFileName, optarg, MAXPGPATH);
@@ -358,6 +363,10 @@ AuxiliaryProcessMain(int argc, char *argv[])
 
 	SetProcessingMode(BootstrapProcessing);
 	IgnoreSystemIndexes = true;
+
+	/* Initialize MaxBackends (if under postmaster, was done already) */
+	if (!IsUnderPostmaster)
+		InitializeMaxBackends();
 
 	BaseInit();
 

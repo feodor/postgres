@@ -3,7 +3,7 @@
  * pg_aggregate.c
  *	  routines to support manipulation of the pg_aggregate relation
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -42,7 +42,7 @@ static Oid lookup_agg_function(List *fnName, int nargs, Oid *input_types,
 /*
  * AggregateCreate
  */
-void
+Oid
 AggregateCreate(const char *aggName,
 				Oid aggNamespace,
 				Oid *aggArgTypes,
@@ -316,6 +316,8 @@ AggregateCreate(const char *aggName,
 		referenced.objectSubId = 0;
 		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
 	}
+
+	return procOid;
 }
 
 /*

@@ -26,7 +26,7 @@
  * restart needs to be forced.)
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -41,6 +41,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "access/xlog.h"
 #include "access/xlog_internal.h"
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
@@ -344,12 +345,6 @@ CheckpointerMain(void)
 	 * Unblock signals (they were blocked when the postmaster forked us)
 	 */
 	PG_SETMASK(&UnBlockSig);
-
-	/*
-	 * Use the recovery target timeline ID during recovery
-	 */
-	if (RecoveryInProgress())
-		ThisTimeLineID = GetRecoveryTargetTLI();
 
 	/*
 	 * Ensure all shared memory values are set correctly for the config. Doing

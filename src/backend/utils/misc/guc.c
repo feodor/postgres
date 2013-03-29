@@ -6,7 +6,7 @@
  * See src/backend/utils/misc/README for more information.
  *
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  * Written by Peter Eisentraut <peter_e@gmx.net>.
  *
  * IDENTIFICATION
@@ -52,6 +52,7 @@
 #include "parser/scansup.h"
 #include "pgstat.h"
 #include "postmaster/autovacuum.h"
+#include "postmaster/bgworker.h"
 #include "postmaster/bgwriter.h"
 #include "postmaster/postmaster.h"
 #include "postmaster/syslogger.h"
@@ -102,16 +103,6 @@
 #define MAX_KILOBYTES	(INT_MAX / 1024)
 #endif
 
-/*
- * Note: MAX_BACKENDS is limited to 2^23-1 because inval.c stores the
- * backend ID as a 3-byte signed integer.  Even if that limitation were
- * removed, we still could not exceed INT_MAX/4 because some places compute
- * 4*MaxBackends without any overflow check.  This is rechecked in
- * check_maxconnections, since MaxBackends is computed as MaxConnections
- * plus autovacuum_max_workers plus one (for the autovacuum launcher).
- */
-#define MAX_BACKENDS	0x7fffff
-
 #define KB_PER_MB (1024)
 #define KB_PER_GB (1024*1024)
 
@@ -131,6 +122,7 @@ extern int	CommitDelay;
 extern int	CommitSiblings;
 extern char *default_tablespace;
 extern char *temp_tablespaces;
+extern bool ignore_checksum_failure;
 extern bool synchronize_seqscans;
 extern int	ssl_renegotiation_limit;
 extern char *SSLCipherSuites;
@@ -197,9 +189,7 @@ static const char *show_tcp_keepalives_idle(void);
 static const char *show_tcp_keepalives_interval(void);
 static const char *show_tcp_keepalives_count(void);
 static bool check_maxconnections(int *newval, void **extra, GucSource source);
-static void assign_maxconnections(int newval, void *extra);
 static bool check_autovacuum_max_workers(int *newval, void **extra, GucSource source);
-static void assign_autovacuum_max_workers(int newval, void *extra);
 static bool check_effective_io_concurrency(int *newval, void **extra, GucSource source);
 static void assign_effective_io_concurrency(int newval, void *extra);
 static void assign_pgstat_temp_directory(const char *newval, void *extra);
@@ -511,6 +501,7 @@ const char *const GucSource_Names[] =
 	 /* PGC_S_ENV_VAR */ "environment variable",
 	 /* PGC_S_FILE */ "configuration file",
 	 /* PGC_S_ARGV */ "command line",
+	 /* PGC_S_GLOBAL */ "global",
 	 /* PGC_S_DATABASE */ "database",
 	 /* PGC_S_USER */ "user",
 	 /* PGC_S_DATABASE_USER */ "database user",
@@ -815,6 +806,21 @@ static struct config_bool ConfigureNamesBool[] =
 		},
 		&enableFsync,
 		true,
+		NULL, NULL, NULL
+	},
+	{
+		{"ignore_checksum_failure", PGC_SUSET, DEVELOPER_OPTIONS,
+			gettext_noop("Continues processing after a checksum failure."),
+			gettext_noop("Detection of a checksum failure normally causes PostgreSQL to "
+				"report an error, aborting the current transaction. Setting "
+						 "ignore_checksum_failure to true causes the system to ignore the failure "
+						 "(but still report a warning), and continue processing. This "
+						 "behavior could cause crashes or other serious problems. Only "
+						 "has an effect if checksums are enabled."),
+			GUC_NOT_IN_SAMPLE
+		},
+		&ignore_checksum_failure,
+		false,
 		NULL, NULL, NULL
 	},
 	{
@@ -1466,7 +1472,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_S
 		},
 		&XLogArchiveTimeout,
-		0, 0, INT_MAX,
+		0, 0, INT_MAX / 2,
 		NULL, NULL, NULL
 	},
 	{
@@ -1476,7 +1482,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_NOT_IN_SAMPLE | GUC_UNIT_S
 		},
 		&PostAuthDelay,
-		0, 0, INT_MAX,
+		0, 0, INT_MAX / 1000000,
 		NULL, NULL, NULL
 	},
 	{
@@ -1613,7 +1619,7 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&MaxConnections,
 		100, 1, MAX_BACKENDS,
-		check_maxconnections, assign_maxconnections, NULL
+		check_maxconnections, NULL, NULL
 	},
 
 	{
@@ -1872,6 +1878,17 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"lock_timeout", PGC_USERSET, CLIENT_CONN_STATEMENT,
+			gettext_noop("Sets the maximum allowed duration of any wait for a lock."),
+			gettext_noop("A value of 0 turns off the timeout."),
+			GUC_UNIT_MS
+		},
+		&LockTimeout,
+		0, 0, INT_MAX,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"vacuum_freeze_min_age", PGC_USERSET, CLIENT_CONN_STATEMENT,
 			gettext_noop("Minimum age at which VACUUM should freeze a table row."),
 			NULL
@@ -2041,7 +2058,7 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"commit_delay", PGC_USERSET, WAL_SETTINGS,
+		{"commit_delay", PGC_SUSET, WAL_SETTINGS,
 			gettext_noop("Sets the delay in microseconds between transaction commit and "
 						 "flushing WAL to disk."),
 			NULL
@@ -2147,7 +2164,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_MIN
 		},
 		&Log_RotationAge,
-		HOURS_PER_DAY * MINS_PER_HOUR, 0, INT_MAX / MINS_PER_HOUR,
+		HOURS_PER_DAY * MINS_PER_HOUR, 0, INT_MAX / SECS_PER_MINUTE,
 		NULL, NULL, NULL
 	},
 
@@ -2288,7 +2305,7 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&autovacuum_max_workers,
 		3, 1, MAX_BACKENDS,
-		check_autovacuum_max_workers, assign_autovacuum_max_workers, NULL
+		check_autovacuum_max_workers, NULL, NULL
 	},
 
 	{
@@ -3067,7 +3084,7 @@ static struct config_string ConfigureNamesString[] =
 		},
 		&SSLCipherSuites,
 #ifdef USE_SSL
-		"ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH",
+		"DEFAULT:!LOW:!EXP:!MD5:@STRENGTH",
 #else
 		"none",
 #endif
@@ -5160,7 +5177,7 @@ set_config_option(const char *name, const char *value,
 			 */
 			elevel = IsUnderPostmaster ? DEBUG3 : LOG;
 		}
-		else if (source == PGC_S_DATABASE || source == PGC_S_USER ||
+		else if (source == PGC_S_GLOBAL || source == PGC_S_DATABASE || source == PGC_S_USER ||
 				 source == PGC_S_DATABASE_USER)
 			elevel = WARNING;
 		else
@@ -8628,29 +8645,19 @@ show_tcp_keepalives_count(void)
 static bool
 check_maxconnections(int *newval, void **extra, GucSource source)
 {
-	if (*newval + autovacuum_max_workers + 1 > MAX_BACKENDS)
+	if (*newval + GetNumShmemAttachedBgworkers() + autovacuum_max_workers + 1 >
+		MAX_BACKENDS)
 		return false;
 	return true;
-}
-
-static void
-assign_maxconnections(int newval, void *extra)
-{
-	MaxBackends = newval + autovacuum_max_workers + 1;
 }
 
 static bool
 check_autovacuum_max_workers(int *newval, void **extra, GucSource source)
 {
-	if (MaxConnections + *newval + 1 > MAX_BACKENDS)
+	if (MaxConnections + *newval + 1 + GetNumShmemAttachedBgworkers() >
+		MAX_BACKENDS)
 		return false;
 	return true;
-}
-
-static void
-assign_autovacuum_max_workers(int newval, void *extra)
-{
-	MaxBackends = MaxConnections + newval + 1;
 }
 
 static bool
@@ -8725,14 +8732,23 @@ static void
 assign_pgstat_temp_directory(const char *newval, void *extra)
 {
 	/* check_canonical_path already canonicalized newval for us */
+	char	   *dname;
 	char	   *tname;
 	char	   *fname;
 
-	tname = guc_malloc(ERROR, strlen(newval) + 12);		/* /pgstat.tmp */
-	sprintf(tname, "%s/pgstat.tmp", newval);
-	fname = guc_malloc(ERROR, strlen(newval) + 13);		/* /pgstat.stat */
-	sprintf(fname, "%s/pgstat.stat", newval);
+	/* directory */
+	dname = guc_malloc(ERROR, strlen(newval) + 1);		/* runtime dir */
+	sprintf(dname, "%s", newval);
 
+	/* global stats */
+	tname = guc_malloc(ERROR, strlen(newval) + 12);		/* /global.tmp */
+	sprintf(tname, "%s/global.tmp", newval);
+	fname = guc_malloc(ERROR, strlen(newval) + 13);		/* /global.stat */
+	sprintf(fname, "%s/global.stat", newval);
+
+	if (pgstat_stat_directory)
+		free(pgstat_stat_directory);
+	pgstat_stat_directory = dname;
 	if (pgstat_stat_tmpname)
 		free(pgstat_stat_tmpname);
 	pgstat_stat_tmpname = tname;

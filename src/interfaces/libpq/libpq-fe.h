@@ -4,7 +4,7 @@
  *	  This file contains definitions for structures and
  *	  externs for functions used by frontend postgres applications.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/interfaces/libpq/libpq-fe.h
@@ -109,6 +109,11 @@ typedef enum
 	PQERRORS_DEFAULT,			/* recommended style */
 	PQERRORS_VERBOSE			/* all the facts, ma'am */
 } PGVerbosity;
+
+/*
+ * PGPing - The ordering of this enum should not be altered because the
+ * values are exposed externally via pg_isready.
+ */
 
 typedef enum
 {
@@ -261,6 +266,9 @@ extern PQconninfoOption *PQconndefaults(void);
 
 /* parse connection options in same way as PQconnectdb */
 extern PQconninfoOption *PQconninfoParse(const char *conninfo, char **errmsg);
+
+/* return the connection options used by a live connection */
+extern PQconninfoOption *PQconninfo(PGconn *conn);
 
 /* free the data structure returned by PQconndefaults() or PQconninfoParse() */
 extern void PQconninfoFree(PQconninfoOption *connOptions);

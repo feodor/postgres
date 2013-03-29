@@ -3,7 +3,7 @@
  * evtcache.c
  *	  Special-purpose cache for event trigger data.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -167,6 +167,10 @@ BuildEventTriggerCache(void)
 		evtevent = NameStr(form->evtevent);
 		if (strcmp(evtevent, "ddl_command_start") == 0)
 			event = EVT_DDLCommandStart;
+		else if (strcmp(evtevent, "ddl_command_end") == 0)
+			event = EVT_DDLCommandEnd;
+		else if (strcmp(evtevent, "sql_drop") == 0)
+			event = EVT_SQLDrop;
 		else
 			continue;
 

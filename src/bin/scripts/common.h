@@ -2,7 +2,7 @@
  *	common.h
  *		Common support routines for bin/scripts/
  *
- *	Copyright (c) 2003-2012, PostgreSQL Global Development Group
+ *	Copyright (c) 2003-2013, PostgreSQL Global Development Group
  *
  *	src/bin/scripts/common.h
  */
@@ -49,9 +49,5 @@ extern bool executeMaintenanceCommand(PGconn *conn, const char *query,
 extern bool yesno_prompt(const char *question);
 
 extern void setup_cancel_handler(void);
-
-extern char *pg_strdup(const char *string);
-extern void *pg_malloc(size_t size);
-extern void *pg_malloc0(size_t size);
 
 #endif   /* COMMON_H */

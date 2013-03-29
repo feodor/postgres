@@ -3,7 +3,7 @@
  * allpaths.c
  *	  Routines to find possible search paths for processing a query
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -409,9 +409,6 @@ set_foreign_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
 	/* Mark rel with estimated output rows, width, etc */
 	set_foreign_size_estimates(root, rel);
-
-	/* Get FDW routine pointers for the rel */
-	rel->fdwroutine = GetFdwRoutineByRelId(rte->relid);
 
 	/* Let FDW adjust the size estimates, if it can */
 	rel->fdwroutine->GetForeignRelSize(root, rel, rte->relid);

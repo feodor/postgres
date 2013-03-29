@@ -6,7 +6,7 @@
  * See src/backend/optimizer/README for discussion of EquivalenceClasses.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -512,7 +512,7 @@ add_eq_member(EquivalenceClass *ec, Expr *expr, Relids relids,
  * be more than one EC that matches the expression; if so it's order-dependent
  * which one you get.  This is annoying but it only happens in corner cases,
  * so for now we live with just reporting the first match.	See also
- * generate_implied_equalities_for_indexcol and match_pathkeys_to_index.)
+ * generate_implied_equalities_for_column and match_pathkeys_to_index.)
  *
  * If create_it is TRUE, we'll build a new EquivalenceClass when there is no
  * match.  If create_it is FALSE, we just return NULL when no match.
@@ -1973,12 +1973,12 @@ add_child_rel_equivalences(PlannerInfo *root,
 /*
  * mutate_eclass_expressions
  *	  Apply an expression tree mutator to all expressions stored in
- *	  equivalence classes.
+ *	  equivalence classes (but ignore child exprs unless include_child_exprs).
  *
  * This is a bit of a hack ... it's currently needed only by planagg.c,
  * which needs to do a global search-and-replace of MIN/MAX Aggrefs
  * after eclasses are already set up.  Without changing the eclasses too,
- * subsequent matching of ORDER BY clauses would fail.
+ * subsequent matching of ORDER BY and DISTINCT clauses would fail.
  *
  * Note that we assume the mutation won't affect relation membership or any
  * other properties we keep track of (which is a bit bogus, but by the time
@@ -1988,7 +1988,8 @@ add_child_rel_equivalences(PlannerInfo *root,
 void
 mutate_eclass_expressions(PlannerInfo *root,
 						  Node *(*mutator) (),
-						  void *context)
+						  void *context,
+						  bool include_child_exprs)
 {
 	ListCell   *lc1;
 
@@ -2001,6 +2002,9 @@ mutate_eclass_expressions(PlannerInfo *root,
 		{
 			EquivalenceMember *cur_em = (EquivalenceMember *) lfirst(lc2);
 
+			if (cur_em->em_is_child && !include_child_exprs)
+				continue;		/* ignore children unless requested */
+
 			cur_em->em_expr = (Expr *)
 				mutator((Node *) cur_em->em_expr, context);
 		}
@@ -2009,15 +2013,21 @@ mutate_eclass_expressions(PlannerInfo *root,
 
 
 /*
- * generate_implied_equalities_for_indexcol
- *	  Create EC-derived joinclauses usable with a specific index column.
+ * generate_implied_equalities_for_column
+ *	  Create EC-derived joinclauses usable with a specific column.
  *
- * We assume that any given index column could appear in only one EC.
+ * This is used by indxpath.c to extract potentially indexable joinclauses
+ * from ECs, and can be used by foreign data wrappers for similar purposes.
+ * We assume that only expressions in Vars of a single table are of interest,
+ * but the caller provides a callback function to identify exactly which
+ * such expressions it would like to know about.
+ *
+ * We assume that any given table/index column could appear in only one EC.
  * (This should be true in all but the most pathological cases, and if it
  * isn't, we stop on the first match anyway.)  Therefore, what we return
- * is a redundant list of clauses equating the index column to each of
+ * is a redundant list of clauses equating the table/index column to each of
  * the other-relation values it is known to be equal to.  Any one of
- * these clauses can be used to create a parameterized indexscan, and there
+ * these clauses can be used to create a parameterized path, and there
  * is no value in using more than one.	(But it *is* worthwhile to create
  * a separate parameterized path for each one, since that leads to different
  * join orders.)
@@ -2026,13 +2036,13 @@ mutate_eclass_expressions(PlannerInfo *root,
  * to, so as to save the work of creating useless clauses.
  */
 List *
-generate_implied_equalities_for_indexcol(PlannerInfo *root,
-										 IndexOptInfo *index,
-										 int indexcol,
-										 Relids prohibited_rels)
+generate_implied_equalities_for_column(PlannerInfo *root,
+									   RelOptInfo *rel,
+									   ec_matches_callback_type callback,
+									   void *callback_arg,
+									   Relids prohibited_rels)
 {
 	List	   *result = NIL;
-	RelOptInfo *rel = index->rel;
 	bool		is_child_rel = (rel->reloptkind == RELOPT_OTHER_MEMBER_REL);
 	Index		parent_relid;
 	ListCell   *lc1;
@@ -2065,11 +2075,11 @@ generate_implied_equalities_for_indexcol(PlannerInfo *root,
 			continue;
 
 		/*
-		 * Scan members, looking for a match to the indexable column.  Note
+		 * Scan members, looking for a match to the target column.  Note
 		 * that child EC members are considered, but only when they belong to
 		 * the target relation.  (Unlike regular members, the same expression
 		 * could be a child member of more than one EC.  Therefore, it's
-		 * potentially order-dependent which EC a child relation's index
+		 * potentially order-dependent which EC a child relation's target
 		 * column gets matched to.	This is annoying but it only happens in
 		 * corner cases, so for now we live with just reporting the first
 		 * match.  See also get_eclass_for_sort_expr.)
@@ -2079,8 +2089,7 @@ generate_implied_equalities_for_indexcol(PlannerInfo *root,
 		{
 			cur_em = (EquivalenceMember *) lfirst(lc2);
 			if (bms_equal(cur_em->em_relids, rel->relids) &&
-				eclass_member_matches_indexcol(cur_ec, cur_em,
-											   index, indexcol))
+				callback(root, rel, cur_ec, cur_em, callback_arg))
 				break;
 			cur_em = NULL;
 		}

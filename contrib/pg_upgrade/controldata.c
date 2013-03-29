@@ -3,11 +3,11 @@
  *
  *	controldata functions
  *
- *	Copyright (c) 2010-2012, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2013, PostgreSQL Global Development Group
  *	contrib/pg_upgrade/controldata.c
  */
 
-#include "postgres.h"
+#include "postgres_fe.h"
 
 #include "pg_upgrade.h"
 
@@ -40,6 +40,9 @@ get_control_data(ClusterInfo *cluster, bool live_check)
 	bool		got_xid = false;
 	bool		got_oid = false;
 	bool		got_nextxlogfile = false;
+	bool		got_multi = false;
+	bool		got_mxoff = false;
+	bool		got_oldestmulti = false;
 	bool		got_log_id = false;
 	bool		got_log_seg = false;
 	bool		got_tli = false;
@@ -53,6 +56,7 @@ get_control_data(ClusterInfo *cluster, bool live_check)
 	bool		got_toast = false;
 	bool		got_date_is_int = false;
 	bool		got_float8_pass_by_value = false;
+	bool		got_data_checksums = false;
 	char	   *lc_collate = NULL;
 	char	   *lc_ctype = NULL;
 	char	   *lc_monetary = NULL;
@@ -126,6 +130,13 @@ get_control_data(ClusterInfo *cluster, bool live_check)
 	{
 		cluster->controldata.float8_pass_by_value = false;
 		got_float8_pass_by_value = true;
+	}
+
+	/* Only in <= 9.2 */
+	if (GET_MAJOR_VERSION(cluster->major_version) <= 902)
+	{
+		cluster->controldata.data_checksums = false;
+		got_data_checksums = true;
 	}
 
 	/* we have the result of cmd in "output". so parse it line by line now */
@@ -246,6 +257,39 @@ get_control_data(ClusterInfo *cluster, bool live_check)
 			cluster->controldata.chkpnt_nxtoid = str2uint(p);
 			got_oid = true;
 		}
+		else if ((p = strstr(bufin, "Latest checkpoint's NextMultiXactId:")) != NULL)
+		{
+			p = strchr(p, ':');
+
+			if (p == NULL || strlen(p) <= 1)
+				pg_log(PG_FATAL, "%d: controldata retrieval problem\n", __LINE__);
+
+			p++;				/* removing ':' char */
+			cluster->controldata.chkpnt_nxtmulti = str2uint(p);
+			got_multi = true;
+		}
+		else if ((p = strstr(bufin, "Latest checkpoint's oldestMultiXid:")) != NULL)
+		{
+			p = strchr(p, ':');
+
+			if (p == NULL || strlen(p) <= 1)
+				pg_log(PG_FATAL, "%d: controldata retrieval problem\n", __LINE__);
+
+			p++;				/* removing ':' char */
+			cluster->controldata.chkpnt_oldstMulti = str2uint(p);
+			got_oldestmulti = true;
+		}
+		else if ((p = strstr(bufin, "Latest checkpoint's NextMultiOffset:")) != NULL)
+		{
+			p = strchr(p, ':');
+
+			if (p == NULL || strlen(p) <= 1)
+				pg_log(PG_FATAL, "%d: controldata retrieval problem\n", __LINE__);
+
+			p++;				/* removing ':' char */
+			cluster->controldata.chkpnt_nxtmxoff = str2uint(p);
+			got_mxoff = true;
+		}
 		else if ((p = strstr(bufin, "Maximum data alignment:")) != NULL)
 		{
 			p = strchr(p, ':');
@@ -357,6 +401,18 @@ get_control_data(ClusterInfo *cluster, bool live_check)
 			cluster->controldata.float8_pass_by_value = strstr(p, "by value") != NULL;
 			got_float8_pass_by_value = true;
 		}
+		else if ((p = strstr(bufin, "checksums")) != NULL)
+		{
+			p = strchr(p, ':');
+
+			if (p == NULL || strlen(p) <= 1)
+				pg_log(PG_FATAL, "%d: controldata retrieval problem\n", __LINE__);
+
+			p++;				/* removing ':' char */
+			/* used later for contrib check */
+			cluster->controldata.data_checksums = strstr(p, "enabled") != NULL;
+			got_data_checksums = true;
+		}
 		/* In pre-8.4 only */
 		else if ((p = strstr(bufin, "LC_COLLATE:")) != NULL)
 		{
@@ -433,20 +489,34 @@ get_control_data(ClusterInfo *cluster, bool live_check)
 
 	/* verify that we got all the mandatory pg_control data */
 	if (!got_xid || !got_oid ||
+		!got_multi || !got_mxoff ||
+		(!got_oldestmulti &&
+		 cluster->controldata.cat_ver >= MULTIXACT_FORMATCHANGE_CAT_VER) ||
 		(!live_check && !got_nextxlogfile) ||
 		!got_tli ||
 		!got_align || !got_blocksz || !got_largesz || !got_walsz ||
 		!got_walseg || !got_ident || !got_index || !got_toast ||
-		!got_date_is_int || !got_float8_pass_by_value)
+		!got_date_is_int || !got_float8_pass_by_value || !got_data_checksums)
 	{
 		pg_log(PG_REPORT,
-			"Some required control information is missing;  cannot find:\n");
+			"The %s cluster lacks some required control information:\n",
+			CLUSTER_NAME(cluster));
 
 		if (!got_xid)
 			pg_log(PG_REPORT, "  checkpoint next XID\n");
 
 		if (!got_oid)
 			pg_log(PG_REPORT, "  latest checkpoint next OID\n");
+
+		if (!got_multi)
+			pg_log(PG_REPORT, "  latest checkpoint next MultiXactId\n");
+
+		if (!got_mxoff)
+			pg_log(PG_REPORT, "  latest checkpoint next MultiXactOffset\n");
+
+		if (!got_oldestmulti &&
+			cluster->controldata.cat_ver >= MULTIXACT_FORMATCHANGE_CAT_VER)
+			pg_log(PG_REPORT, "  latest checkpoint oldest MultiXactId\n");
 
 		if (!live_check && !got_nextxlogfile)
 			pg_log(PG_REPORT, "  first WAL segment after reset\n");
@@ -485,6 +555,10 @@ get_control_data(ClusterInfo *cluster, bool live_check)
 		if (!got_float8_pass_by_value)
 			pg_log(PG_REPORT, "  float8 argument passing method\n");
 
+		/* value added in Postgres 9.3 */
+		if (!got_data_checksums)
+			pg_log(PG_REPORT, "  data checksums\n");
+
 		pg_log(PG_FATAL,
 			   "Cannot continue without required control information, terminating\n");
 	}
@@ -502,7 +576,8 @@ check_control_data(ControlData *oldctrl,
 {
 	if (oldctrl->align == 0 || oldctrl->align != newctrl->align)
 		pg_log(PG_FATAL,
-			   "old and new pg_controldata alignments are invalid or do not match\n");
+			   "old and new pg_controldata alignments are invalid or do not match\n"
+			   "Likely one cluster is a 32-bit install, the other 64-bit\n");
 
 	if (oldctrl->blocksz == 0 || oldctrl->blocksz != newctrl->blocksz)
 		pg_log(PG_FATAL,
@@ -544,6 +619,12 @@ check_control_data(ControlData *oldctrl,
 			"You will need to rebuild the new server with configure option\n"
 			   "--disable-integer-datetimes or get server binaries built with those\n"
 			   "options.\n");
+	}
+
+	if (oldctrl->data_checksums != newctrl->data_checksums)
+	{
+		pg_log(PG_FATAL,
+			   "old and new pg_controldata checksums settings are invalid or do not match\n");
 	}
 }
 

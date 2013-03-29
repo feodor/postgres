@@ -3,7 +3,7 @@
  * trigger.c
  *	  PostgreSQL TRIGGERs support code.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -73,6 +73,7 @@ static HeapTuple GetTupleForTrigger(EState *estate,
 				   EPQState *epqstate,
 				   ResultRelInfo *relinfo,
 				   ItemPointer tid,
+				   LockTupleMode lockmode,
 				   TupleTableSlot **newSlot);
 static bool TriggerEnabled(EState *estate, ResultRelInfo *relinfo,
 			   Trigger *trigger, TriggerEvent event,
@@ -445,7 +446,8 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 											  NULL,
 											  true,		/* islocal */
 											  0,		/* inhcount */
-											  true);	/* isnoinherit */
+											  true,		/* isnoinherit */
+											  isInternal);	/* is_internal */
 	}
 
 	/*
@@ -741,8 +743,8 @@ CreateTrigger(CreateTrigStmt *stmt, const char *queryString,
 							   DEPENDENCY_NORMAL);
 
 	/* Post creation hook for new trigger */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   TriggerRelationId, trigoid, 0, NULL);
+	InvokeObjectPostCreateHookArg(TriggerRelationId, trigoid, 0,
+								  isInternal);
 
 	/* Keep lock on target rel until end of xact */
 	heap_close(rel, NoLock);
@@ -1193,9 +1195,10 @@ RangeVarCallbackForRenameTrigger(const RangeVar *rv, Oid relid, Oid oldrelid,
  *		modify tgname in trigger tuple
  *		update row in catalog
  */
-void
+Oid
 renametrig(RenameStmt *stmt)
 {
+	Oid			tgoid;
 	Relation	targetrel;
 	Relation	tgrel;
 	HeapTuple	tuple;
@@ -1261,6 +1264,7 @@ renametrig(RenameStmt *stmt)
 								SnapshotNow, 2, key);
 	if (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
 	{
+		tgoid = HeapTupleGetOid(tuple);
 		/*
 		 * Update pg_trigger tuple with new tgname.
 		 */
@@ -1273,6 +1277,9 @@ renametrig(RenameStmt *stmt)
 
 		/* keep system catalog indexes current */
 		CatalogUpdateIndexes(tgrel, tuple);
+
+		InvokeObjectPostAlterHook(TriggerRelationId,
+								  HeapTupleGetOid(tuple), 0);
 
 		/*
 		 * Invalidate relation's relcache entry so that other backends (and
@@ -1297,6 +1304,8 @@ renametrig(RenameStmt *stmt)
 	 * Close rel, but keep exclusive lock!
 	 */
 	relation_close(targetrel, NoLock);
+
+	return tgoid;
 }
 
 
@@ -1387,6 +1396,9 @@ EnableDisableTrigger(Relation rel, const char *tgname,
 
 			changed = true;
 		}
+
+		InvokeObjectPostAlterHook(TriggerRelationId,
+								  HeapTupleGetOid(tuple), 0);
 	}
 
 	systable_endscan(tgscan);
@@ -2143,7 +2155,7 @@ ExecBRDeleteTriggers(EState *estate, EPQState *epqstate,
 	int			i;
 
 	trigtuple = GetTupleForTrigger(estate, epqstate, relinfo, tupleid,
-								   &newSlot);
+								   LockTupleExclusive, &newSlot);
 	if (trigtuple == NULL)
 		return false;
 
@@ -2197,7 +2209,8 @@ ExecARDeleteTriggers(EState *estate, ResultRelInfo *relinfo,
 	if (trigdesc && trigdesc->trig_delete_after_row)
 	{
 		HeapTuple	trigtuple = GetTupleForTrigger(estate, NULL, relinfo,
-												   tupleid, NULL);
+												   tupleid, LockTupleExclusive,
+												   NULL);
 
 		AfterTriggerSaveEvent(estate, relinfo, TRIGGER_EVENT_DELETE,
 							  true, trigtuple, NULL, NIL, NULL);
@@ -2328,10 +2341,24 @@ ExecBRUpdateTriggers(EState *estate, EPQState *epqstate,
 	TupleTableSlot *newSlot;
 	int			i;
 	Bitmapset  *modifiedCols;
+	Bitmapset  *keyCols;
+	LockTupleMode lockmode;
+
+	/*
+	 * Compute lock mode to use.  If columns that are part of the key have not
+	 * been modified, then we can use a weaker lock, allowing for better
+	 * concurrency.
+	 */
+	modifiedCols = GetModifiedColumns(relinfo, estate);
+	keyCols = RelationGetIndexAttrBitmap(relinfo->ri_RelationDesc, true);
+	if (bms_overlap(keyCols, modifiedCols))
+		lockmode = LockTupleExclusive;
+	else
+		lockmode = LockTupleNoKeyExclusive;
 
 	/* get a copy of the on-disk tuple we are planning to update */
 	trigtuple = GetTupleForTrigger(estate, epqstate, relinfo, tupleid,
-								   &newSlot);
+								   lockmode, &newSlot);
 	if (trigtuple == NULL)
 		return NULL;			/* cancel the update action */
 
@@ -2353,7 +2380,6 @@ ExecBRUpdateTriggers(EState *estate, EPQState *epqstate,
 		newtuple = slottuple;
 	}
 
-	modifiedCols = GetModifiedColumns(relinfo, estate);
 
 	LocTriggerData.type = T_TriggerData;
 	LocTriggerData.tg_event = TRIGGER_EVENT_UPDATE |
@@ -2422,7 +2448,8 @@ ExecARUpdateTriggers(EState *estate, ResultRelInfo *relinfo,
 	if (trigdesc && trigdesc->trig_update_after_row)
 	{
 		HeapTuple	trigtuple = GetTupleForTrigger(estate, NULL, relinfo,
-												   tupleid, NULL);
+												   tupleid, LockTupleExclusive,
+												   NULL);
 
 		AfterTriggerSaveEvent(estate, relinfo, TRIGGER_EVENT_UPDATE,
 							  true, trigtuple, newtuple, recheckIndexes,
@@ -2561,6 +2588,7 @@ GetTupleForTrigger(EState *estate,
 				   EPQState *epqstate,
 				   ResultRelInfo *relinfo,
 				   ItemPointer tid,
+				   LockTupleMode lockmode,
 				   TupleTableSlot **newSlot)
 {
 	Relation	relation = relinfo->ri_RelationDesc;
@@ -2585,8 +2613,8 @@ ltrmark:;
 		tuple.t_self = *tid;
 		test = heap_lock_tuple(relation, &tuple,
 							   estate->es_output_cid,
-							   LockTupleExclusive, false /* wait */,
-							   &buffer, &hufd);
+							   lockmode, false /* wait */,
+							   false, &buffer, &hufd);
 		switch (test)
 		{
 			case HeapTupleSelfUpdated:
@@ -2626,6 +2654,7 @@ ltrmark:;
 										   epqstate,
 										   relation,
 										   relinfo->ri_RangeTableIndex,
+										   lockmode,
 										   &hufd.ctid,
 										   hufd.xmax);
 					if (!TupIsNull(epqslot))
@@ -2662,6 +2691,16 @@ ltrmark:;
 
 		buffer = ReadBuffer(relation, ItemPointerGetBlockNumber(tid));
 
+		/*
+		 * Although we already know this tuple is valid, we must lock the
+		 * buffer to ensure that no one has a buffer cleanup lock; otherwise
+		 * they might move the tuple while we try to copy it.  But we can
+		 * release the lock before actually doing the heap_copytuple call,
+		 * since holding pin is sufficient to prevent anyone from getting a
+		 * cleanup lock they don't already hold.
+		 */
+		LockBuffer(buffer, BUFFER_LOCK_SHARE);
+
 		page = BufferGetPage(buffer);
 		lp = PageGetItemId(page, ItemPointerGetOffsetNumber(tid));
 
@@ -2671,6 +2710,8 @@ ltrmark:;
 		tuple.t_len = ItemIdGetLength(lp);
 		tuple.t_self = *tid;
 		tuple.t_tableOid = RelationGetRelid(relation);
+
+		LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
 	}
 
 	result = heap_copytuple(&tuple);
@@ -4192,7 +4233,8 @@ AfterTriggerSetState(ConstraintsSetStmt *stmt)
 			 */
 			if (constraint->schemaname)
 			{
-				Oid			namespaceId = LookupExplicitNamespace(constraint->schemaname);
+				Oid			namespaceId = LookupExplicitNamespace(constraint->schemaname,
+																  false);
 
 				namespacelist = list_make1_oid(namespaceId);
 			}

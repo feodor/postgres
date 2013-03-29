@@ -13,7 +13,7 @@
  *	plan --- consider improving this someday.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  * src/backend/utils/adt/ri_triggers.c
  *
@@ -299,7 +299,7 @@ RI_FKey_check(TriggerData *trigdata)
 	 * Get the relation descriptors of the FK and PK tables.
 	 *
 	 * pk_rel is opened in RowShareLock mode since that's what our eventual
-	 * SELECT FOR SHARE will get on it.
+	 * SELECT FOR KEY SHARE will get on it.
 	 */
 	fk_rel = trigdata->tg_relation;
 	pk_rel = heap_open(riinfo->pk_relid, RowShareLock);
@@ -337,9 +337,11 @@ RI_FKey_check(TriggerData *trigdata)
 					ereport(ERROR,
 							(errcode(ERRCODE_FOREIGN_KEY_VIOLATION),
 							 errmsg("insert or update on table \"%s\" violates foreign key constraint \"%s\"",
-							  RelationGetRelationName(trigdata->tg_relation),
+									RelationGetRelationName(fk_rel),
 									NameStr(riinfo->conname)),
-							 errdetail("MATCH FULL does not allow mixing of null and nonnull key values.")));
+							 errdetail("MATCH FULL does not allow mixing of null and nonnull key values."),
+							 errtableconstraint(fk_rel,
+												NameStr(riinfo->conname))));
 					heap_close(pk_rel, RowShareLock);
 					return PointerGetDatum(NULL);
 
@@ -400,7 +402,8 @@ RI_FKey_check(TriggerData *trigdata)
 
 		/* ----------
 		 * The query string built is
-		 *	SELECT 1 FROM ONLY <pktable> WHERE pkatt1 = $1 [AND ...] FOR SHARE
+		 *	SELECT 1 FROM ONLY <pktable> x WHERE pkatt1 = $1 [AND ...]
+		 *	       FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * corresponding FK attributes.
 		 * ----------
@@ -424,7 +427,7 @@ RI_FKey_check(TriggerData *trigdata)
 			querysep = "AND";
 			queryoids[i] = fk_type;
 		}
-		appendStringInfo(&querybuf, " FOR SHARE OF x");
+		appendStringInfo(&querybuf, " FOR KEY SHARE OF x");
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -535,7 +538,8 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 
 		/* ----------
 		 * The query string built is
-		 *	SELECT 1 FROM ONLY <pktable> WHERE pkatt1 = $1 [AND ...] FOR SHARE
+		 *	SELECT 1 FROM ONLY <pktable> x WHERE pkatt1 = $1 [AND ...]
+		 *	       FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * PK attributes themselves.
 		 * ----------
@@ -558,7 +562,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			querysep = "AND";
 			queryoids[i] = pk_type;
 		}
-		appendStringInfo(&querybuf, " FOR SHARE OF x");
+		appendStringInfo(&querybuf, " FOR KEY SHARE OF x");
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -655,7 +659,7 @@ ri_restrict_del(TriggerData *trigdata, bool is_no_action)
 	 * Get the relation descriptors of the FK and PK tables and the old tuple.
 	 *
 	 * fk_rel is opened in RowShareLock mode since that's what our eventual
-	 * SELECT FOR SHARE will get on it.
+	 * SELECT FOR KEY SHARE will get on it.
 	 */
 	fk_rel = heap_open(riinfo->fk_relid, RowShareLock);
 	pk_rel = trigdata->tg_relation;
@@ -724,7 +728,8 @@ ri_restrict_del(TriggerData *trigdata, bool is_no_action)
 
 				/* ----------
 				 * The query string built is
-				 *	SELECT 1 FROM ONLY <fktable> WHERE $1 = fkatt1 [AND ...]
+				 *	SELECT 1 FROM ONLY <fktable> x WHERE $1 = fkatt1 [AND ...]
+				 *	       FOR KEY SHARE OF x
 				 * The type id's for the $ parameters are those of the
 				 * corresponding PK attributes.
 				 * ----------
@@ -749,7 +754,7 @@ ri_restrict_del(TriggerData *trigdata, bool is_no_action)
 					querysep = "AND";
 					queryoids[i] = pk_type;
 				}
-				appendStringInfo(&querybuf, " FOR SHARE OF x");
+				appendStringInfo(&querybuf, " FOR KEY SHARE OF x");
 
 				/* Prepare and save the plan */
 				qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -868,7 +873,7 @@ ri_restrict_upd(TriggerData *trigdata, bool is_no_action)
 	 * old tuple.
 	 *
 	 * fk_rel is opened in RowShareLock mode since that's what our eventual
-	 * SELECT FOR SHARE will get on it.
+	 * SELECT FOR KEY SHARE will get on it.
 	 */
 	fk_rel = heap_open(riinfo->fk_relid, RowShareLock);
 	pk_rel = trigdata->tg_relation;
@@ -972,7 +977,7 @@ ri_restrict_upd(TriggerData *trigdata, bool is_no_action)
 					querysep = "AND";
 					queryoids[i] = pk_type;
 				}
-				appendStringInfo(&querybuf, " FOR SHARE OF x");
+				appendStringInfo(&querybuf, " FOR KEY SHARE OF x");
 
 				/* Prepare and save the plan */
 				qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -2467,7 +2472,9 @@ RI_Initial_Check(Trigger *trigger, Relation fk_rel, Relation pk_rel)
 					 errmsg("insert or update on table \"%s\" violates foreign key constraint \"%s\"",
 							RelationGetRelationName(fk_rel),
 							NameStr(fake_riinfo.conname)),
-					 errdetail("MATCH FULL does not allow mixing of null and nonnull key values.")));
+					 errdetail("MATCH FULL does not allow mixing of null and nonnull key values."),
+					 errtableconstraint(fk_rel,
+										NameStr(fake_riinfo.conname))));
 
 		/*
 		 * We tell ri_ReportViolation we were doing the RI_PLAN_CHECK_LOOKUPPK
@@ -3219,7 +3226,8 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 						NameStr(riinfo->conname)),
 				 errdetail("Key (%s)=(%s) is not present in table \"%s\".",
 						   key_names.data, key_values.data,
-						   RelationGetRelationName(pk_rel))));
+						   RelationGetRelationName(pk_rel)),
+				 errtableconstraint(fk_rel, NameStr(riinfo->conname))));
 	else
 		ereport(ERROR,
 				(errcode(ERRCODE_FOREIGN_KEY_VIOLATION),
@@ -3229,7 +3237,8 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 						RelationGetRelationName(fk_rel)),
 			errdetail("Key (%s)=(%s) is still referenced from table \"%s\".",
 					  key_names.data, key_values.data,
-					  RelationGetRelationName(fk_rel))));
+					  RelationGetRelationName(fk_rel)),
+				 errtableconstraint(fk_rel, NameStr(riinfo->conname))));
 }
 
 

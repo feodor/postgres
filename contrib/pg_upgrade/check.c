@@ -3,11 +3,11 @@
  *
  *	server checks and output routines
  *
- *	Copyright (c) 2010-2012, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2013, PostgreSQL Global Development Group
  *	contrib/pg_upgrade/check.c
  */
 
-#include "postgres.h"
+#include "postgres_fe.h"
 
 #include "pg_upgrade.h"
 
@@ -20,6 +20,7 @@ static void check_is_super_user(ClusterInfo *cluster);
 static void check_for_prepared_transactions(ClusterInfo *cluster);
 static void check_for_isn_and_int8_passing_mismatch(ClusterInfo *cluster);
 static void check_for_reg_data_type_usage(ClusterInfo *cluster);
+static void check_for_invalid_indexes(ClusterInfo *cluster);
 static void get_bin_version(ClusterInfo *cluster);
 static char *get_canonical_locale_name(int category, const char *locale);
 
@@ -55,11 +56,10 @@ fix_path_separator(char *path)
 }
 
 void
-output_check_banner(bool *live_check)
+output_check_banner(bool live_check)
 {
-	if (user_opts.check && is_server_running(old_cluster.pgdata))
+	if (user_opts.check && live_check)
 	{
-		*live_check = true;
 		pg_log(PG_REPORT, "Performing Consistency Checks on Old Live Server\n");
 		pg_log(PG_REPORT, "------------------------------------------------\n");
 	}
@@ -72,12 +72,12 @@ output_check_banner(bool *live_check)
 
 
 void
-check_old_cluster(bool live_check, char **sequence_script_file_name)
+check_and_dump_old_cluster(bool live_check, char **sequence_script_file_name)
 {
 	/* -- OLD -- */
 
 	if (!live_check)
-		start_postmaster(&old_cluster);
+		start_postmaster(&old_cluster, true);
 
 	set_locale_and_encoding(&old_cluster);
 
@@ -97,6 +97,7 @@ check_old_cluster(bool live_check, char **sequence_script_file_name)
 	check_is_super_user(&old_cluster);
 	check_for_prepared_transactions(&old_cluster);
 	check_for_reg_data_type_usage(&old_cluster);
+	check_for_invalid_indexes(&old_cluster);
 	check_for_isn_and_int8_passing_mismatch(&old_cluster);
 
 	/* old = PG 8.3 checks? */
@@ -131,10 +132,7 @@ check_old_cluster(bool live_check, char **sequence_script_file_name)
 	 * the old server is running.
 	 */
 	if (!user_opts.check)
-	{
 		generate_old_dump();
-		split_old_dump();
-	}
 
 	if (!live_check)
 		stop_postmaster(false);
@@ -202,7 +200,7 @@ issue_warnings(char *sequence_script_file_name)
 	/* old = PG 8.3 warnings? */
 	if (GET_MAJOR_VERSION(old_cluster.major_version) <= 803)
 	{
-		start_postmaster(&new_cluster);
+		start_postmaster(&new_cluster, true);
 
 		/* restore proper sequence values using file created from old server */
 		if (sequence_script_file_name)
@@ -225,7 +223,7 @@ issue_warnings(char *sequence_script_file_name)
 	/* Create dummy large object permissions for old < PG 9.0? */
 	if (GET_MAJOR_VERSION(old_cluster.major_version) <= 804)
 	{
-		start_postmaster(&new_cluster);
+		start_postmaster(&new_cluster, true);
 		new_9_0_populate_pg_largeobject_metadata(&new_cluster, false);
 		stop_postmaster(false);
 	}
@@ -248,10 +246,17 @@ output_completion_banner(char *analyze_script_file_name,
 		"by pg_upgrade so, once you start the new server, consider running:\n"
 			   "    %s\n\n", analyze_script_file_name);
 
-	pg_log(PG_REPORT,
-		   "Running this script will delete the old cluster's data files:\n"
-		   "    %s\n",
-		   deletion_script_file_name);
+
+	if (deletion_script_file_name)
+		pg_log(PG_REPORT,
+			   "Running this script will delete the old cluster's data files:\n"
+			   "    %s\n",
+			   deletion_script_file_name);
+	else
+		pg_log(PG_REPORT,
+			   "Could not create a script to delete the old cluster's data\n"
+			   "files because user-defined tablespaces exist in the old cluster\n"
+			   "directory.  The old cluster's contents must be deleted manually.\n");
 }
 
 
@@ -586,13 +591,37 @@ create_script_for_old_cluster_deletion(char **deletion_script_file_name)
 {
 	FILE	   *script = NULL;
 	int			tblnum;
+	char		old_cluster_pgdata[MAXPGPATH];
 
 	*deletion_script_file_name = pg_malloc(MAXPGPATH);
 
-	prep_status("Creating script to delete old cluster");
-
 	snprintf(*deletion_script_file_name, MAXPGPATH, "delete_old_cluster.%s",
 			 SCRIPT_EXT);
+
+	/*
+	 *	Some users (oddly) create tablespaces inside the cluster data
+	 *	directory.  We can't create a proper old cluster delete script
+	 *	in that case.
+	 */
+	strlcpy(old_cluster_pgdata, old_cluster.pgdata, MAXPGPATH);
+	canonicalize_path(old_cluster_pgdata);
+	for (tblnum = 0; tblnum < os_info.num_old_tablespaces; tblnum++)
+	{
+		char		old_tablespace_dir[MAXPGPATH];
+		
+		strlcpy(old_tablespace_dir, os_info.old_tablespaces[tblnum], MAXPGPATH);
+		canonicalize_path(old_tablespace_dir);
+		if (path_is_prefix_of_path(old_cluster_pgdata, old_tablespace_dir))
+		{
+			/* Unlink file in case it is left over from a previous run. */
+			unlink(*deletion_script_file_name);
+			pg_free(*deletion_script_file_name);
+			*deletion_script_file_name = NULL;
+			return;
+		}
+	}
+
+	prep_status("Creating script to delete old cluster");
 
 	if ((script = fopen_priv(*deletion_script_file_name, "w")) == NULL)
 		pg_log(PG_FATAL, "Could not open file \"%s\": %s\n",
@@ -607,7 +636,7 @@ create_script_for_old_cluster_deletion(char **deletion_script_file_name)
 	fprintf(script, RMDIR_CMD " %s\n", fix_path_separator(old_cluster.pgdata));
 
 	/* delete old cluster's alternate tablespaces */
-	for (tblnum = 0; tblnum < os_info.num_tablespaces; tblnum++)
+	for (tblnum = 0; tblnum < os_info.num_old_tablespaces; tblnum++)
 	{
 		/*
 		 * Do the old cluster's per-database directories share a directory
@@ -622,14 +651,14 @@ create_script_for_old_cluster_deletion(char **deletion_script_file_name)
 			/* remove PG_VERSION? */
 			if (GET_MAJOR_VERSION(old_cluster.major_version) <= 804)
 				fprintf(script, RM_CMD " %s%s%cPG_VERSION\n",
-						fix_path_separator(os_info.tablespaces[tblnum]), 
+						fix_path_separator(os_info.old_tablespaces[tblnum]), 
 						fix_path_separator(old_cluster.tablespace_suffix),
 						PATH_SEPARATOR);
 
 			for (dbnum = 0; dbnum < old_cluster.dbarr.ndbs; dbnum++)
 			{
 				fprintf(script, RMDIR_CMD " %s%s%c%d\n",
-						fix_path_separator(os_info.tablespaces[tblnum]),
+						fix_path_separator(os_info.old_tablespaces[tblnum]),
 						fix_path_separator(old_cluster.tablespace_suffix),
 						PATH_SEPARATOR, old_cluster.dbarr.dbs[dbnum].db_oid);
 			}
@@ -641,7 +670,7 @@ create_script_for_old_cluster_deletion(char **deletion_script_file_name)
 			 * or a version-specific subdirectory.
 			 */
 			fprintf(script, RMDIR_CMD " %s%s\n",
-					fix_path_separator(os_info.tablespaces[tblnum]), 
+					fix_path_separator(os_info.old_tablespaces[tblnum]), 
 					fix_path_separator(old_cluster.tablespace_suffix));
 	}
 
@@ -927,6 +956,95 @@ check_for_reg_data_type_usage(ClusterInfo *cluster)
 }
 
 
+/*
+ * check_for_invalid_indexes()
+ *
+ *	CREATE INDEX CONCURRENTLY can create invalid indexes if the index build
+ *	fails.  These are dumped as valid indexes by pg_dump, but the
+ *	underlying files are still invalid indexes.  This checks to make sure
+ *	no invalid indexes exist, either failed index builds or concurrent
+ *	indexes in the process of being created.
+ */
+static void
+check_for_invalid_indexes(ClusterInfo *cluster)
+{
+	int			dbnum;
+	FILE	   *script = NULL;
+	bool		found = false;
+	char		output_path[MAXPGPATH];
+
+	prep_status("Checking for invalid indexes from concurrent index builds");
+
+	snprintf(output_path, sizeof(output_path), "invalid_indexes.txt");
+
+	for (dbnum = 0; dbnum < cluster->dbarr.ndbs; dbnum++)
+	{
+		PGresult   *res;
+		bool		db_used = false;
+		int			ntups;
+		int			rowno;
+		int			i_nspname,
+					i_relname;
+		DbInfo	   *active_db = &cluster->dbarr.dbs[dbnum];
+		PGconn	   *conn = connectToServer(cluster, active_db->db_name);
+
+		res = executeQueryOrDie(conn,
+								"SELECT n.nspname, c.relname "
+								"FROM	pg_catalog.pg_class c, "
+								"		pg_catalog.pg_namespace n, "
+								"		pg_catalog.pg_index i "
+								"WHERE	(i.indisvalid = false OR "
+								"		 i.indisready = false) AND "
+								"		i.indexrelid = c.oid AND "
+								"		c.relnamespace = n.oid AND "
+								/* we do not migrate these, so skip them */
+							    " 		n.nspname != 'pg_catalog' AND "
+								"		n.nspname != 'information_schema' AND "
+								/* indexes do not have toast tables */
+								"		n.nspname != 'pg_toast'");
+
+		ntups = PQntuples(res);
+		i_nspname = PQfnumber(res, "nspname");
+		i_relname = PQfnumber(res, "relname");
+		for (rowno = 0; rowno < ntups; rowno++)
+		{
+			found = true;
+			if (script == NULL && (script = fopen_priv(output_path, "w")) == NULL)
+				pg_log(PG_FATAL, "Could not open file \"%s\": %s\n",
+					   output_path, getErrorText(errno));
+			if (!db_used)
+			{
+				fprintf(script, "Database: %s\n", active_db->db_name);
+				db_used = true;
+			}
+			fprintf(script, "  %s.%s\n",
+					PQgetvalue(res, rowno, i_nspname),
+					PQgetvalue(res, rowno, i_relname));
+		}
+
+		PQclear(res);
+
+		PQfinish(conn);
+	}
+
+	if (script)
+		fclose(script);
+
+	if (found)
+	{
+		pg_log(PG_REPORT, "fatal\n");
+		pg_log(PG_FATAL,
+			   "Your installation contains invalid indexes due to failed or\n"
+		 	   "currently running CREATE INDEX CONCURRENTLY operations.  You\n"
+			   "cannot upgrade until these indexes are valid or removed.  A\n"
+			   "list of the problem indexes is in the file:\n"
+			   "    %s\n\n", output_path);
+	}
+	else
+		check_ok();
+}
+
+
 static void
 get_bin_version(ClusterInfo *cluster)
 {
@@ -987,7 +1105,7 @@ get_canonical_locale_name(int category, const char *locale)
 	if (!setlocale(category, save))
         pg_log(PG_FATAL, "failed to restore old locale \"%s\"\n", save);
 
-	free(save);
+	pg_free(save);
 
 	return res;
 }

@@ -4,7 +4,7 @@
  *	 EXEC_BACKEND case; it might be extended to do so, but it would be
  *	 considerably more complex.
  *
- * Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/postmaster/fork_process.c
@@ -17,6 +17,9 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
+#ifdef USE_SSL
+#include <openssl/rand.h>
+#endif
 
 #ifndef WIN32
 /*
@@ -124,6 +127,13 @@ fork_process(void)
 			}
 		}
 #endif   /* LINUX_OOM_ADJ */
+
+		/*
+		 * Make sure processes do not share OpenSSL randomness state.
+		 */
+#ifdef USE_SSL
+		RAND_cleanup();
+#endif
 	}
 
 	return result;

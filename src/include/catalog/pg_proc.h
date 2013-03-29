@@ -4,7 +4,7 @@
  *	  definition of the system "procedure" relation (pg_proc)
  *	  along with the relation's initial contents.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_proc.h
@@ -1976,6 +1976,13 @@ DESCR("type of the argument");
 DATA(insert OID = 3162 (  pg_collation_for		PGNSP PGUID 12 1 0 0 0 f f f f f f s 1 0   25 "2276" _null_ _null_ _null_ _null_  pg_collation_for _null_ _null_ _null_ ));
 DESCR("collation of the argument; implementation of the COLLATION FOR expression");
 
+DATA(insert OID = 3842 (  pg_view_is_insertable PGNSP PGUID 12 10 0 0 0 f f f f t f s 1 0 16 "26" _null_ _null_ _null_ _null_ pg_view_is_insertable _null_ _null_ _null_ ));
+DESCR("is a view insertable-into");
+DATA(insert OID = 3843 (  pg_view_is_updatable	PGNSP PGUID 12 10 0 0 0 f f f f t f s 1 0 16 "26" _null_ _null_ _null_ _null_ pg_view_is_updatable _null_ _null_ _null_ ));
+DESCR("is a view updatable");
+DATA(insert OID = 3846 (  pg_relation_is_scannable	PGNSP PGUID 12 10 0 0 0 f f f f t f s 1 0 16 "26" _null_ _null_ _null_ _null_ pg_relation_is_scannable _null_ _null_ _null_ ));
+DESCR("is a relation scannable");
+
 /* Deferrable unique constraint trigger */
 DATA(insert OID = 1250 (  unique_key_recheck	PGNSP PGUID 12 1 0 0 0 f f f f t f v 0 0 2279 "" _null_ _null_ _null_ _null_ unique_key_recheck _null_ _null_ _null_ ));
 DESCR("deferred UNIQUE constraint check");
@@ -2904,9 +2911,14 @@ DATA(insert OID = 1371 (  pg_lock_status   PGNSP PGUID 12 1 1000 0 0 f f f f t t
 DESCR("view system lock information");
 DATA(insert OID = 1065 (  pg_prepared_xact PGNSP PGUID 12 1 1000 0 0 f f f f t t v 0 0 2249 "" "{28,25,1184,26,26}" "{o,o,o,o,o}" "{transaction,gid,prepared,ownerid,dbid}" _null_ pg_prepared_xact _null_ _null_ _null_ ));
 DESCR("view two-phase transactions");
+DATA(insert OID = 3819 (  pg_get_multixact_members PGNSP PGUID 12 1 1000 0 0 f f f f t t v 1 0 2249 "28" "{28,28,25}" "{i,o,o}" "{multixid,xid,mode}" _null_ pg_get_multixact_members _null_ _null_ _null_ ));
+DESCR("view members of a multixactid");
 
 DATA(insert OID = 3537 (  pg_describe_object		PGNSP PGUID 12 1 0 0 0 f f f f t f s 3 0 25 "26 26 23" _null_ _null_ _null_ _null_ pg_describe_object _null_ _null_ _null_ ));
 DESCR("get identification of SQL object");
+
+DATA(insert OID = 3839 (  pg_identify_object		PGNSP PGUID 12 1 0 0 0 f f f f t f s 3 0 2249 "26 26 23" "{26,23,23,25,25,25,25}" "{i,i,i,o,o,o,o}" "{classid,objid,subobjid,type,schema,name,identity}" _null_ pg_identify_object _null_ _null_ _null_ ));
+DESCR("get machine-parseable identification of SQL object");
 
 DATA(insert OID = 2079 (  pg_table_is_visible		PGNSP PGUID 12 10 0 0 0 f f f f t f s 1 0 16 "26" _null_ _null_ _null_ _null_ pg_table_is_visible _null_ _null_ _null_ ));
 DESCR("is table visible in search path?");
@@ -4097,6 +4109,14 @@ DATA(insert OID = 3155 (  row_to_json	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 
 DESCR("map row to json");
 DATA(insert OID = 3156 (  row_to_json	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 114 "2249 16" _null_ _null_ _null_ _null_ row_to_json_pretty _null_ _null_ _null_ ));
 DESCR("map row to json with optional pretty printing");
+DATA(insert OID = 3173 (  json_agg_transfn   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2281 "2281 2283" _null_ _null_ _null_ _null_ json_agg_transfn _null_ _null_ _null_ ));
+DESCR("json aggregate transition function");
+DATA(insert OID = 3174 (  json_agg_finalfn   PGNSP PGUID 12 1 0 0 0 f f f f f f i 1 0 114 "2281" _null_ _null_ _null_ _null_ json_agg_finalfn _null_ _null_ _null_ ));
+DESCR("json aggregate final function");
+DATA(insert OID = 3175 (  json_agg		   PGNSP PGUID 12 1 0 0 0 t f f f f f i 1 0 114 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("aggregate input into json");
+DATA(insert OID = 3176 (  to_json	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 114 "2283" _null_ _null_ _null_ _null_ to_json _null_ _null_ _null_ ));
+DESCR("map input to json");
 
 /* uuid */
 DATA(insert OID = 2952 (  uuid_in		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2950 "2275" _null_ _null_ _null_ _null_ uuid_in _null_ _null_ _null_ ));
@@ -4153,7 +4173,7 @@ DATA(insert OID = 3530 (  enum_range	PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 22
 DESCR("range between the two given enum values, as an ordered array");
 DATA(insert OID = 3531 (  enum_range	PGNSP PGUID 12 1 0 0 0 f f f f f f s 1 0 2277 "3500" _null_ _null_ _null_ _null_ enum_range_all _null_ _null_ _null_ ));
 DESCR("range of the given enum type, as an ordered array");
-DATA(insert OID = 3532 (  enum_recv		PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 3500 "2275 26" _null_ _null_ _null_ _null_ enum_recv _null_ _null_ _null_ ));
+DATA(insert OID = 3532 (  enum_recv		PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 3500 "2281 26" _null_ _null_ _null_ _null_ enum_recv _null_ _null_ _null_ ));
 DESCR("I/O");
 DATA(insert OID = 3533 (  enum_send		PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 17 "3500" _null_ _null_ _null_ _null_ enum_send _null_ _null_ _null_ ));
 DESCR("I/O");
@@ -4673,6 +4693,9 @@ DATA(insert OID = 3473 (  spg_range_quad_leaf_consistent	PGNSP PGUID 12 1 0 0 0 
 DESCR("SP-GiST support for quad tree over range");
 
 
+/* event triggers */
+DATA(insert OID = 3566 (  pg_event_trigger_dropped_objects		PGNSP PGUID 12 10 100 0 0 f f f f t t s 0 0 2249 "" "{26,26,23,25,25,25,25}" "{o,o,o,o,o,o,o}" "{classid, objid, objsubid, object_type, schema_name, object_name, object_identity}" _null_ pg_event_trigger_dropped_objects _null_ _null_ _null_ ));
+DESCR("list objects dropped by the current command");
 /*
  * Symbolic values for provolatile column: these indicate whether the result
  * of a function is dependent *only* on the values of its explicit arguments,

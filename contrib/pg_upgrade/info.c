@@ -3,11 +3,11 @@
  *
  *	information support functions
  *
- *	Copyright (c) 2010-2012, PostgreSQL Global Development Group
+ *	Copyright (c) 2010-2013, PostgreSQL Global Development Group
  *	contrib/pg_upgrade/info.c
  */
 
-#include "postgres.h"
+#include "postgres_fe.h"
 
 #include "pg_upgrade.h"
 
@@ -23,7 +23,7 @@ static void get_db_infos(ClusterInfo *cluster);
 static void get_rel_infos(ClusterInfo *cluster, DbInfo *dbinfo);
 static void free_rel_infos(RelInfoArr *rel_arr);
 static void print_db_infos(DbInfoArr *dbinfo);
-static void print_rel_infos(RelInfoArr *arr);
+static void print_rel_infos(RelInfoArr *rel_arr);
 
 
 /*
@@ -61,6 +61,9 @@ gen_db_file_maps(DbInfo *old_db, DbInfo *new_db,
 		 * 9.0, TOAST relation names always use heap table oids, hence we
 		 * cannot check relation names when upgrading from pre-9.0. Clusters
 		 * upgraded to 9.0 will get matching TOAST names.
+		 * If index names don't match primary key constraint names, this will
+		 * fail because pg_dump dumps constraint names and pg_upgrade checks
+		 * index names.
 		 */
 		if (strcmp(old_rel->nspname, new_rel->nspname) != 0 ||
 			((GET_MAJOR_VERSION(old_cluster.major_version) >= 900 ||
@@ -103,19 +106,24 @@ create_rel_filename_map(const char *old_data, const char *new_data,
 		 * relation belongs to the default tablespace, hence relfiles should
 		 * exist in the data directories.
 		 */
-		snprintf(map->old_dir, sizeof(map->old_dir), "%s/base/%u", old_data,
-				 old_db->db_oid);
-		snprintf(map->new_dir, sizeof(map->new_dir), "%s/base/%u", new_data,
-				 new_db->db_oid);
+		strlcpy(map->old_tablespace, old_data, sizeof(map->old_tablespace));
+		strlcpy(map->new_tablespace, new_data, sizeof(map->new_tablespace));
+		strlcpy(map->old_tablespace_suffix, "/base", sizeof(map->old_tablespace_suffix));
+		strlcpy(map->new_tablespace_suffix, "/base", sizeof(map->new_tablespace_suffix));
 	}
 	else
 	{
 		/* relation belongs to a tablespace, so use the tablespace location */
-		snprintf(map->old_dir, sizeof(map->old_dir), "%s%s/%u", old_rel->tablespace,
-				 old_cluster.tablespace_suffix, old_db->db_oid);
-		snprintf(map->new_dir, sizeof(map->new_dir), "%s%s/%u", new_rel->tablespace,
-				 new_cluster.tablespace_suffix, new_db->db_oid);
+		strlcpy(map->old_tablespace, old_rel->tablespace, sizeof(map->old_tablespace));
+		strlcpy(map->new_tablespace, new_rel->tablespace, sizeof(map->new_tablespace));
+		strlcpy(map->old_tablespace_suffix, old_cluster.tablespace_suffix,
+				sizeof(map->old_tablespace_suffix));
+		strlcpy(map->new_tablespace_suffix, new_cluster.tablespace_suffix,
+				sizeof(map->new_tablespace_suffix));
 	}
+
+	map->old_db_oid = old_db->db_oid;
+	map->new_db_oid = new_db->db_oid;
 
 	/*
 	 * old_relfilenode might differ from pg_class.oid (and hence
@@ -127,8 +135,8 @@ create_rel_filename_map(const char *old_data, const char *new_data,
 	map->new_relfilenode = new_rel->relfilenode;
 
 	/* used only for logging and error reporing, old/new are identical */
-	snprintf(map->nspname, sizeof(map->nspname), "%s", old_rel->nspname);
-	snprintf(map->relname, sizeof(map->relname), "%s", old_rel->relname);
+	map->nspname = old_rel->nspname;
+	map->relname = old_rel->relname;
 }
 
 
@@ -220,8 +228,7 @@ get_db_infos(ClusterInfo *cluster)
 	for (tupnum = 0; tupnum < ntups; tupnum++)
 	{
 		dbinfos[tupnum].db_oid = atooid(PQgetvalue(res, tupnum, i_oid));
-		snprintf(dbinfos[tupnum].db_name, sizeof(dbinfos[tupnum].db_name), "%s",
-				 PQgetvalue(res, tupnum, i_datname));
+		dbinfos[tupnum].db_name = pg_strdup(PQgetvalue(res, tupnum, i_datname));
 		snprintf(dbinfos[tupnum].db_tblspace, sizeof(dbinfos[tupnum].db_tblspace), "%s",
 				 PQgetvalue(res, tupnum, i_spclocation));
 	}
@@ -275,7 +282,7 @@ get_rel_infos(ClusterInfo *cluster, DbInfo *dbinfo)
 			 "CREATE TEMPORARY TABLE info_rels (reloid) AS SELECT c.oid "
 			 "FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n "
 			 "	   ON c.relnamespace = n.oid "
-			 "WHERE relkind IN ('r', 'i'%s) AND "
+			 "WHERE relkind IN ('r', 'm', 'i'%s) AND "
 	/* exclude possible orphaned temp tables */
 			 "  ((n.nspname !~ '^pg_temp_' AND "
 			 "    n.nspname !~ '^pg_toast_temp_' AND "
@@ -346,10 +353,10 @@ get_rel_infos(ClusterInfo *cluster, DbInfo *dbinfo)
 		curr->reloid = atooid(PQgetvalue(res, relnum, i_oid));
 
 		nspname = PQgetvalue(res, relnum, i_nspname);
-		strlcpy(curr->nspname, nspname, sizeof(curr->nspname));
+		curr->nspname = pg_strdup(nspname);
 
 		relname = PQgetvalue(res, relnum, i_relname);
-		strlcpy(curr->relname, relname, sizeof(curr->relname));
+		curr->relname = pg_strdup(relname);
 
 		curr->relfilenode = atooid(PQgetvalue(res, relnum, i_relfilenode));
 
@@ -377,7 +384,10 @@ free_db_and_rel_infos(DbInfoArr *db_arr)
 	int			dbnum;
 
 	for (dbnum = 0; dbnum < db_arr->ndbs; dbnum++)
+	{
 		free_rel_infos(&db_arr->dbs[dbnum].rel_arr);
+		pg_free(db_arr->dbs[dbnum].db_name);
+	}
 	pg_free(db_arr->dbs);
 	db_arr->dbs = NULL;
 	db_arr->ndbs = 0;
@@ -387,6 +397,13 @@ free_db_and_rel_infos(DbInfoArr *db_arr)
 static void
 free_rel_infos(RelInfoArr *rel_arr)
 {
+	int			relnum;
+
+	for (relnum = 0; relnum < rel_arr->nrels; relnum++)
+	{
+		pg_free(rel_arr->rels[relnum].nspname);
+		pg_free(rel_arr->rels[relnum].relname);
+	}
 	pg_free(rel_arr->rels);
 	rel_arr->nrels = 0;
 }
@@ -407,12 +424,12 @@ print_db_infos(DbInfoArr *db_arr)
 
 
 static void
-print_rel_infos(RelInfoArr *arr)
+print_rel_infos(RelInfoArr *rel_arr)
 {
 	int			relnum;
 
-	for (relnum = 0; relnum < arr->nrels; relnum++)
+	for (relnum = 0; relnum < rel_arr->nrels; relnum++)
 		pg_log(PG_VERBOSE, "relname: %s.%s: reloid: %u reltblspace: %s\n",
-			   arr->rels[relnum].nspname, arr->rels[relnum].relname,
-			   arr->rels[relnum].reloid, arr->rels[relnum].tablespace);
+			   rel_arr->rels[relnum].nspname, rel_arr->rels[relnum].relname,
+			   rel_arr->rels[relnum].reloid, rel_arr->rels[relnum].tablespace);
 }

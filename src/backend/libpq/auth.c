@@ -3,7 +3,7 @@
  * auth.c
  *	  Routines to handle network authentication
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -297,9 +297,16 @@ auth_failed(Port *port, int status)
 			break;
 	}
 
-	ereport(FATAL,
-			(errcode(errcode_return),
-			 errmsg(errstr, port->user_name)));
+	if (port->hba)
+		ereport(FATAL,
+				(errcode(errcode_return),
+				 errmsg(errstr, port->user_name),
+				 errdetail_log("Connection matched pg_hba.conf line %d: \"%s\"", port->hba->linenumber, port->hba->rawline)));
+	else
+		ereport(FATAL,
+				(errcode(errcode_return),
+				 errmsg(errstr, port->user_name)));
+
 	/* doesn't return */
 }
 
@@ -2209,7 +2216,7 @@ CheckLDAPAuth(Port *port)
 
 		r = ldap_search_s(ldap,
 						  port->hba->ldapbasedn,
-						  LDAP_SCOPE_SUBTREE,
+						  port->hba->ldapscope,
 						  filter,
 						  attributes,
 						  0,

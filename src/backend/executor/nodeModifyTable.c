@@ -3,7 +3,7 @@
  * nodeModifyTable.c
  *	  routines to handle ModifyTable nodes.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -42,6 +42,7 @@
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/nodeModifyTable.h"
+#include "foreign/fdwapi.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "storage/bufmgr.h"
@@ -225,6 +226,24 @@ ExecInsert(TupleTableSlot *slot,
 
 		newId = InvalidOid;
 	}
+	else if (resultRelInfo->ri_FdwRoutine)
+	{
+		/*
+		 * insert into foreign table: let the FDW do it
+		 */
+		slot = resultRelInfo->ri_FdwRoutine->ExecForeignInsert(estate,
+															   resultRelInfo,
+															   slot,
+															   planSlot);
+
+		if (slot == NULL)		/* "do nothing" */
+			return NULL;
+
+		/* FDW might have changed tuple */
+		tuple = ExecMaterializeSlot(slot);
+
+		newId = InvalidOid;
+	}
 	else
 	{
 		/*
@@ -279,7 +298,9 @@ ExecInsert(TupleTableSlot *slot,
  *		When deleting from a table, tupleid identifies the tuple to
  *		delete and oldtuple is NULL.  When deleting from a view,
  *		oldtuple is passed to the INSTEAD OF triggers and identifies
- *		what to delete, and tupleid is invalid.
+ *		what to delete, and tupleid is invalid.  When deleting from a
+ *		foreign table, both tupleid and oldtuple are NULL; the FDW has
+ *		to figure out which row to delete using data from the planSlot.
  *
  *		Returns RETURNING result if any, otherwise NULL.
  * ----------------------------------------------------------------
@@ -296,6 +317,7 @@ ExecDelete(ItemPointer tupleid,
 	Relation	resultRelationDesc;
 	HTSU_Result result;
 	HeapUpdateFailureData hufd;
+	TupleTableSlot *slot = NULL;
 
 	/*
 	 * get information on the (current) result relation
@@ -332,6 +354,27 @@ ExecDelete(ItemPointer tupleid,
 		dodelete = ExecIRDeleteTriggers(estate, resultRelInfo, &tuple);
 
 		if (!dodelete)			/* "do nothing" */
+			return NULL;
+	}
+	else if (resultRelInfo->ri_FdwRoutine)
+	{
+		/*
+		 * delete from foreign table: let the FDW do it
+		 *
+		 * We offer the trigger tuple slot as a place to store RETURNING data,
+		 * although the FDW can return some other slot if it wants.  Set up
+		 * the slot's tupdesc so the FDW doesn't need to do that for itself.
+		 */
+		slot = estate->es_trig_tuple_slot;
+		if (slot->tts_tupleDescriptor != RelationGetDescr(resultRelationDesc))
+			ExecSetSlotDescriptor(slot, RelationGetDescr(resultRelationDesc));
+
+		slot = resultRelInfo->ri_FdwRoutine->ExecForeignDelete(estate,
+															   resultRelInfo,
+															   slot,
+															   planSlot);
+
+		if (slot == NULL)		/* "do nothing" */
 			return NULL;
 	}
 	else
@@ -403,6 +446,7 @@ ldelete:;
 										   epqstate,
 										   resultRelationDesc,
 										   resultRelInfo->ri_RangeTableIndex,
+										   LockTupleExclusive,
 										   &hufd.ctid,
 										   hufd.xmax);
 					if (!TupIsNull(epqslot))
@@ -442,33 +486,48 @@ ldelete:;
 		 * We have to put the target tuple into a slot, which means first we
 		 * gotta fetch it.	We can use the trigger tuple slot.
 		 */
-		TupleTableSlot *slot = estate->es_trig_tuple_slot;
 		TupleTableSlot *rslot;
 		HeapTupleData deltuple;
 		Buffer		delbuffer;
 
-		if (oldtuple != NULL)
+		if (resultRelInfo->ri_FdwRoutine)
 		{
-			deltuple.t_data = oldtuple;
-			deltuple.t_len = HeapTupleHeaderGetDatumLength(oldtuple);
-			ItemPointerSetInvalid(&(deltuple.t_self));
-			deltuple.t_tableOid = InvalidOid;
+			/* FDW must have provided a slot containing the deleted row */
+			Assert(!TupIsNull(slot));
 			delbuffer = InvalidBuffer;
 		}
 		else
 		{
-			deltuple.t_self = *tupleid;
-			if (!heap_fetch(resultRelationDesc, SnapshotAny,
-							&deltuple, &delbuffer, false, NULL))
-				elog(ERROR, "failed to fetch deleted tuple for DELETE RETURNING");
-		}
+			slot = estate->es_trig_tuple_slot;
+			if (oldtuple != NULL)
+			{
+				deltuple.t_data = oldtuple;
+				deltuple.t_len = HeapTupleHeaderGetDatumLength(oldtuple);
+				ItemPointerSetInvalid(&(deltuple.t_self));
+				deltuple.t_tableOid = InvalidOid;
+				delbuffer = InvalidBuffer;
+			}
+			else
+			{
+				deltuple.t_self = *tupleid;
+				if (!heap_fetch(resultRelationDesc, SnapshotAny,
+								&deltuple, &delbuffer, false, NULL))
+					elog(ERROR, "failed to fetch deleted tuple for DELETE RETURNING");
+			}
 
-		if (slot->tts_tupleDescriptor != RelationGetDescr(resultRelationDesc))
-			ExecSetSlotDescriptor(slot, RelationGetDescr(resultRelationDesc));
-		ExecStoreTuple(&deltuple, slot, InvalidBuffer, false);
+			if (slot->tts_tupleDescriptor != RelationGetDescr(resultRelationDesc))
+				ExecSetSlotDescriptor(slot, RelationGetDescr(resultRelationDesc));
+			ExecStoreTuple(&deltuple, slot, InvalidBuffer, false);
+		}
 
 		rslot = ExecProcessReturning(resultRelInfo->ri_projectReturning,
 									 slot, planSlot);
+
+		/*
+		 * Before releasing the target tuple again, make sure rslot has a
+		 * local copy of any pass-by-reference values.
+		 */
+		ExecMaterializeSlot(rslot);
 
 		ExecClearTuple(slot);
 		if (BufferIsValid(delbuffer))
@@ -493,7 +552,9 @@ ldelete:;
  *		When updating a table, tupleid identifies the tuple to
  *		update and oldtuple is NULL.  When updating a view, oldtuple
  *		is passed to the INSTEAD OF triggers and identifies what to
- *		update, and tupleid is invalid.
+ *		update, and tupleid is invalid.  When updating a foreign table,
+ *		both tupleid and oldtuple are NULL; the FDW has to figure out
+ *		which row to update using data from the planSlot.
  *
  *		Returns RETURNING result if any, otherwise NULL.
  * ----------------------------------------------------------------
@@ -567,8 +628,26 @@ ExecUpdate(ItemPointer tupleid,
 		/* trigger might have changed tuple */
 		tuple = ExecMaterializeSlot(slot);
 	}
+	else if (resultRelInfo->ri_FdwRoutine)
+	{
+		/*
+		 * update in foreign table: let the FDW do it
+		 */
+		slot = resultRelInfo->ri_FdwRoutine->ExecForeignUpdate(estate,
+															   resultRelInfo,
+															   slot,
+															   planSlot);
+
+		if (slot == NULL)		/* "do nothing" */
+			return NULL;
+
+		/* FDW might have changed tuple */
+		tuple = ExecMaterializeSlot(slot);
+	}
 	else
 	{
+		LockTupleMode	lockmode;
+
 		/*
 		 * Check the constraints of the tuple
 		 *
@@ -595,7 +674,7 @@ lreplace:;
 							 estate->es_output_cid,
 							 estate->es_crosscheck_snapshot,
 							 true /* wait for commit */,
-							 &hufd);
+							 &hufd, &lockmode);
 		switch (result)
 		{
 			case HeapTupleSelfUpdated:
@@ -647,6 +726,7 @@ lreplace:;
 										   epqstate,
 										   resultRelationDesc,
 										   resultRelInfo->ri_RangeTableIndex,
+										   lockmode,
 										   &hufd.ctid,
 										   hufd.xmax);
 					if (!TupIsNull(epqslot))
@@ -863,10 +943,12 @@ ExecModifyTable(ModifyTableState *node)
 			 */
 			if (operation == CMD_UPDATE || operation == CMD_DELETE)
 			{
+				char		relkind;
 				Datum		datum;
 				bool		isNull;
 
-				if (resultRelInfo->ri_RelationDesc->rd_rel->relkind == RELKIND_RELATION)
+				relkind = resultRelInfo->ri_RelationDesc->rd_rel->relkind;
+				if (relkind == RELKIND_RELATION)
 				{
 					datum = ExecGetJunkAttribute(slot,
 												 junkfilter->jf_junkAttNo,
@@ -879,6 +961,10 @@ ExecModifyTable(ModifyTableState *node)
 					tuple_ctid = *tupleid;		/* be sure we don't free
 												 * ctid!! */
 					tupleid = &tuple_ctid;
+				}
+				else if (relkind == RELKIND_FOREIGN_TABLE)
+				{
+					/* do nothing; FDW must fetch any junk attrs it wants */
 				}
 				else
 				{
@@ -1021,6 +1107,19 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		/* Now init the plan for this result rel */
 		estate->es_result_relation_info = resultRelInfo;
 		mtstate->mt_plans[i] = ExecInitNode(subplan, estate, eflags);
+
+		/* Also let FDWs init themselves for foreign-table result rels */
+		if (resultRelInfo->ri_FdwRoutine != NULL &&
+			resultRelInfo->ri_FdwRoutine->BeginForeignModify != NULL)
+		{
+			List	   *fdw_private = (List *) list_nth(node->fdwPrivLists, i);
+
+			resultRelInfo->ri_FdwRoutine->BeginForeignModify(mtstate,
+															 resultRelInfo,
+															 fdw_private,
+															 i,
+															 eflags);
+		}
 
 		resultRelInfo++;
 		i++;
@@ -1176,11 +1275,18 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 				if (operation == CMD_UPDATE || operation == CMD_DELETE)
 				{
 					/* For UPDATE/DELETE, find the appropriate junk attr now */
-					if (resultRelInfo->ri_RelationDesc->rd_rel->relkind == RELKIND_RELATION)
+					char		relkind;
+
+					relkind = resultRelInfo->ri_RelationDesc->rd_rel->relkind;
+					if (relkind == RELKIND_RELATION)
 					{
 						j->jf_junkAttNo = ExecFindJunkAttribute(j, "ctid");
 						if (!AttributeNumberIsValid(j->jf_junkAttNo))
 							elog(ERROR, "could not find junk ctid column");
+					}
+					else if (relkind == RELKIND_FOREIGN_TABLE)
+					{
+						/* FDW must fetch any junk attrs it wants */
 					}
 					else
 					{
@@ -1238,6 +1344,19 @@ void
 ExecEndModifyTable(ModifyTableState *node)
 {
 	int			i;
+
+	/*
+	 * Allow any FDWs to shut down
+	 */
+	for (i = 0; i < node->mt_nplans; i++)
+	{
+		ResultRelInfo *resultRelInfo = node->resultRelInfo + i;
+
+		if (resultRelInfo->ri_FdwRoutine != NULL &&
+			resultRelInfo->ri_FdwRoutine->EndForeignModify != NULL)
+			resultRelInfo->ri_FdwRoutine->EndForeignModify(node->ps.state,
+														   resultRelInfo);
+	}
 
 	/*
 	 * Free the exprcontext

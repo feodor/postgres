@@ -67,6 +67,7 @@ test: create_table_like
 test: typed_table
 test: vacuum
 test: drop_if_exists
+test: updatable_views
 test: sanity_check
 test: errors
 test: select
@@ -94,8 +95,10 @@ test: prepared_xacts
 test: privileges
 test: security_label
 test: collate
-test: misc
+test: matview
 test: alter_generic
+test: misc
+test: psql
 test: rules
 test: event_trigger
 test: select_views

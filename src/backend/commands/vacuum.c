@@ -9,7 +9,7 @@
  * in cluster.c.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -26,6 +26,7 @@
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
+#include "access/multixact.h"
 #include "access/transam.h"
 #include "access/xact.h"
 #include "catalog/namespace.h"
@@ -63,7 +64,7 @@ static BufferAccessStrategy vac_strategy;
 
 /* non-export function prototypes */
 static List *get_rel_oids(Oid relid, const RangeVar *vacrel);
-static void vac_truncate_clog(TransactionId frozenXID);
+static void vac_truncate_clog(TransactionId frozenXID, MultiXactId frozenMulti);
 static bool vacuum_rel(Oid relid, VacuumStmt *vacstmt, bool do_toast,
 		   bool for_wraparound);
 
@@ -340,23 +341,26 @@ get_rel_oids(Oid relid, const RangeVar *vacrel)
 	}
 	else
 	{
-		/* Process all plain relations listed in pg_class */
+		/*
+		 * Process all plain relations and materialized views listed in
+		 * pg_class
+		 */
 		Relation	pgclass;
 		HeapScanDesc scan;
 		HeapTuple	tuple;
-		ScanKeyData key;
-
-		ScanKeyInit(&key,
-					Anum_pg_class_relkind,
-					BTEqualStrategyNumber, F_CHAREQ,
-					CharGetDatum(RELKIND_RELATION));
 
 		pgclass = heap_open(RelationRelationId, AccessShareLock);
 
-		scan = heap_beginscan(pgclass, SnapshotNow, 1, &key);
+		scan = heap_beginscan(pgclass, SnapshotNow, 0, NULL);
 
 		while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 		{
+			Form_pg_class classForm = (Form_pg_class) GETSTRUCT(tuple);
+
+			if (classForm->relkind != RELKIND_RELATION &&
+				classForm->relkind != RELKIND_MATVIEW)
+				continue;
+
 			/* Make a relation list entry for this guy */
 			oldcontext = MemoryContextSwitchTo(vac_context);
 			oid_list = lappend_oid(oid_list, HeapTupleGetOid(tuple));
@@ -379,7 +383,8 @@ vacuum_set_xid_limits(int freeze_min_age,
 					  bool sharedRel,
 					  TransactionId *oldestXmin,
 					  TransactionId *freezeLimit,
-					  TransactionId *freezeTableLimit)
+					  TransactionId *freezeTableLimit,
+					  MultiXactId *multiXactFrzLimit)
 {
 	int			freezemin;
 	TransactionId limit;
@@ -447,7 +452,7 @@ vacuum_set_xid_limits(int freeze_min_age,
 		 * VACUUM schedule, the nightly VACUUM gets a chance to freeze tuples
 		 * before anti-wraparound autovacuum is launched.
 		 */
-		freezetable = freeze_min_age;
+		freezetable = freeze_table_age;
 		if (freezetable < 0)
 			freezetable = vacuum_freeze_table_age;
 		freezetable = Min(freezetable, autovacuum_freeze_max_age * 0.95);
@@ -463,8 +468,22 @@ vacuum_set_xid_limits(int freeze_min_age,
 
 		*freezeTableLimit = limit;
 	}
-}
 
+	if (multiXactFrzLimit != NULL)
+	{
+		MultiXactId	mxLimit;
+
+		/*
+		 * simplistic multixactid freezing: use the same freezing policy as
+		 * for Xids
+		 */
+		mxLimit = GetOldestMultiXactId() - freezemin;
+		if (mxLimit < FirstMultiXactId)
+			mxLimit = FirstMultiXactId;
+
+		*multiXactFrzLimit = mxLimit;
+	}
+}
 
 /*
  * vac_estimate_reltuples() -- estimate the new value for pg_class.reltuples
@@ -574,7 +593,8 @@ void
 vac_update_relstats(Relation relation,
 					BlockNumber num_pages, double num_tuples,
 					BlockNumber num_all_visible_pages,
-					bool hasindex, TransactionId frozenxid)
+					bool hasindex, TransactionId frozenxid,
+					MultiXactId minmulti)
 {
 	Oid			relid = RelationGetRelid(relation);
 	Relation	rd;
@@ -648,6 +668,14 @@ vac_update_relstats(Relation relation,
 		dirty = true;
 	}
 
+	/* relminmxid must never go backward, either */
+	if (MultiXactIdIsValid(minmulti) &&
+		MultiXactIdPrecedes(pgcform->relminmxid, minmulti))
+	{
+		pgcform->relminmxid = minmulti;
+		dirty = true;
+	}
+
 	/* If anything changed, write out the tuple. */
 	if (dirty)
 		heap_inplace_update(rd, ctup);
@@ -660,8 +688,13 @@ vac_update_relstats(Relation relation,
  *	vac_update_datfrozenxid() -- update pg_database.datfrozenxid for our DB
  *
  *		Update pg_database's datfrozenxid entry for our database to be the
- *		minimum of the pg_class.relfrozenxid values.  If we are able to
- *		advance pg_database.datfrozenxid, also try to truncate pg_clog.
+ *		minimum of the pg_class.relfrozenxid values.
+ *
+ *		Similarly, update our datfrozenmulti to be the minimum of the
+ *		pg_class.relfrozenmulti values.
+ *
+ *		If we are able to advance either pg_database value, also try to
+ *		truncate pg_clog and pg_multixact.
  *
  *		We violate transaction semantics here by overwriting the database's
  *		existing pg_database tuple with the new value.	This is reasonably
@@ -678,15 +711,22 @@ vac_update_datfrozenxid(void)
 	SysScanDesc scan;
 	HeapTuple	classTup;
 	TransactionId newFrozenXid;
+	MultiXactId	newFrozenMulti;
 	bool		dirty = false;
 
 	/*
 	 * Initialize the "min" calculation with GetOldestXmin, which is a
 	 * reasonable approximation to the minimum relfrozenxid for not-yet-
 	 * committed pg_class entries for new tables; see AddNewRelationTuple().
-	 * Se we cannot produce a wrong minimum by starting with this.
+	 * So we cannot produce a wrong minimum by starting with this.
 	 */
 	newFrozenXid = GetOldestXmin(true, true);
+
+	/*
+	 * Similarly, initialize the MultiXact "min" with the value that would
+	 * be used on pg_class for new tables.  See AddNewRelationTuple().
+	 */
+	newFrozenMulti = GetOldestMultiXactId();
 
 	/*
 	 * We must seqscan pg_class to find the minimum Xid, because there is no
@@ -706,13 +746,18 @@ vac_update_datfrozenxid(void)
 		 * InvalidTransactionId in relfrozenxid anyway.)
 		 */
 		if (classForm->relkind != RELKIND_RELATION &&
+			classForm->relkind != RELKIND_MATVIEW &&
 			classForm->relkind != RELKIND_TOASTVALUE)
 			continue;
 
 		Assert(TransactionIdIsNormal(classForm->relfrozenxid));
+		Assert(MultiXactIdIsValid(classForm->relminmxid));
 
 		if (TransactionIdPrecedes(classForm->relfrozenxid, newFrozenXid))
 			newFrozenXid = classForm->relfrozenxid;
+
+		if (MultiXactIdPrecedes(classForm->relminmxid, newFrozenMulti))
+			newFrozenMulti = classForm->relminmxid;
 	}
 
 	/* we're done with pg_class */
@@ -720,6 +765,7 @@ vac_update_datfrozenxid(void)
 	heap_close(relation, AccessShareLock);
 
 	Assert(TransactionIdIsNormal(newFrozenXid));
+	Assert(MultiXactIdIsValid(newFrozenMulti));
 
 	/* Now fetch the pg_database tuple we need to update. */
 	relation = heap_open(DatabaseRelationId, RowExclusiveLock);
@@ -740,6 +786,13 @@ vac_update_datfrozenxid(void)
 		dirty = true;
 	}
 
+	/* ditto */
+	if (MultiXactIdPrecedes(dbform->datminmxid, newFrozenMulti))
+	{
+		dbform->datminmxid = newFrozenMulti;
+		dirty = true;
+	}
+
 	if (dirty)
 		heap_inplace_update(relation, tuple);
 
@@ -752,7 +805,7 @@ vac_update_datfrozenxid(void)
 	 * this action will update that too.
 	 */
 	if (dirty || ForceTransactionIdLimitUpdate())
-		vac_truncate_clog(newFrozenXid);
+		vac_truncate_clog(newFrozenXid, newFrozenMulti);
 }
 
 
@@ -771,17 +824,19 @@ vac_update_datfrozenxid(void)
  *		info is stale.
  */
 static void
-vac_truncate_clog(TransactionId frozenXID)
+vac_truncate_clog(TransactionId frozenXID, MultiXactId frozenMulti)
 {
 	TransactionId myXID = GetCurrentTransactionId();
 	Relation	relation;
 	HeapScanDesc scan;
 	HeapTuple	tuple;
-	Oid			oldest_datoid;
+	Oid			oldestxid_datoid;
+	Oid			oldestmulti_datoid;
 	bool		frozenAlreadyWrapped = false;
 
-	/* init oldest_datoid to sync with my frozenXID */
-	oldest_datoid = MyDatabaseId;
+	/* init oldest datoids to sync with my frozen values */
+	oldestxid_datoid = MyDatabaseId;
+	oldestmulti_datoid = MyDatabaseId;
 
 	/*
 	 * Scan pg_database to compute the minimum datfrozenxid
@@ -804,13 +859,20 @@ vac_truncate_clog(TransactionId frozenXID)
 		Form_pg_database dbform = (Form_pg_database) GETSTRUCT(tuple);
 
 		Assert(TransactionIdIsNormal(dbform->datfrozenxid));
+		Assert(MultiXactIdIsValid(dbform->datminmxid));
 
 		if (TransactionIdPrecedes(myXID, dbform->datfrozenxid))
 			frozenAlreadyWrapped = true;
 		else if (TransactionIdPrecedes(dbform->datfrozenxid, frozenXID))
 		{
 			frozenXID = dbform->datfrozenxid;
-			oldest_datoid = HeapTupleGetOid(tuple);
+			oldestxid_datoid = HeapTupleGetOid(tuple);
+		}
+
+		if (MultiXactIdPrecedes(dbform->datminmxid, frozenMulti))
+		{
+			frozenMulti = dbform->datminmxid;
+			oldestmulti_datoid = HeapTupleGetOid(tuple);
 		}
 	}
 
@@ -832,14 +894,18 @@ vac_truncate_clog(TransactionId frozenXID)
 		return;
 	}
 
-	/* Truncate CLOG to the oldest frozenxid */
+	/* Truncate CLOG and Multi to the oldest computed value */
 	TruncateCLOG(frozenXID);
+	TruncateMultiXact(frozenMulti);
 
 	/*
-	 * Update the wrap limit for GetNewTransactionId.  Note: this function
-	 * will also signal the postmaster for an(other) autovac cycle if needed.
+	 * Update the wrap limit for GetNewTransactionId and creation of new
+	 * MultiXactIds.  Note: these functions will also signal the postmaster for
+	 * an(other) autovac cycle if needed.   XXX should we avoid possibly
+	 * signalling twice?
 	 */
-	SetTransactionIdLimit(frozenXID, oldest_datoid);
+	SetTransactionIdLimit(frozenXID, oldestxid_datoid);
+	MultiXactAdvanceOldest(frozenMulti, oldestmulti_datoid);
 }
 
 
@@ -983,6 +1049,7 @@ vacuum_rel(Oid relid, VacuumStmt *vacstmt, bool do_toast, bool for_wraparound)
 	 * relation.
 	 */
 	if (onerel->rd_rel->relkind != RELKIND_RELATION &&
+		onerel->rd_rel->relkind != RELKIND_MATVIEW &&
 		onerel->rd_rel->relkind != RELKIND_TOASTVALUE)
 	{
 		ereport(WARNING,
@@ -1097,9 +1164,16 @@ vacuum_rel(Oid relid, VacuumStmt *vacstmt, bool do_toast, bool for_wraparound)
 
 
 /*
- * Open all the indexes of the given relation, obtaining the specified kind
- * of lock on each.  Return an array of Relation pointers for the indexes
- * into *Irel, and the number of indexes into *nindexes.
+ * Open all the vacuumable indexes of the given relation, obtaining the
+ * specified kind of lock on each.	Return an array of Relation pointers for
+ * the indexes into *Irel, and the number of indexes into *nindexes.
+ *
+ * We consider an index vacuumable if it is marked insertable (IndexIsReady).
+ * If it isn't, probably a CREATE INDEX CONCURRENTLY command failed early in
+ * execution, and what we have is too corrupt to be processable.  We will
+ * vacuum even if the index isn't indisvalid; this is important because in a
+ * unique index, uniqueness checks will be performed anyway and had better not
+ * hit dangling index pointers.
  */
 void
 vac_open_indexes(Relation relation, LOCKMODE lockmode,
@@ -1113,20 +1187,29 @@ vac_open_indexes(Relation relation, LOCKMODE lockmode,
 
 	indexoidlist = RelationGetIndexList(relation);
 
-	*nindexes = list_length(indexoidlist);
+	/* allocate enough memory for all indexes */
+	i = list_length(indexoidlist);
 
-	if (*nindexes > 0)
-		*Irel = (Relation *) palloc(*nindexes * sizeof(Relation));
+	if (i > 0)
+		*Irel = (Relation *) palloc(i * sizeof(Relation));
 	else
 		*Irel = NULL;
 
+	/* collect just the ready indexes */
 	i = 0;
 	foreach(indexoidscan, indexoidlist)
 	{
 		Oid			indexoid = lfirst_oid(indexoidscan);
+		Relation	indrel;
 
-		(*Irel)[i++] = index_open(indexoid, lockmode);
+		indrel = index_open(indexoid, lockmode);
+		if (IndexIsReady(indrel->rd_index))
+			(*Irel)[i++] = indrel;
+		else
+			index_close(indrel, lockmode);
 	}
+
+	*nindexes = i;
 
 	list_free(indexoidlist);
 }

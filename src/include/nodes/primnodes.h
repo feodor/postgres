@@ -7,7 +7,7 @@
  *	  and join trees.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/primnodes.h
@@ -80,7 +80,8 @@ typedef struct RangeVar
 } RangeVar;
 
 /*
- * IntoClause - target information for SELECT INTO and CREATE TABLE AS
+ * IntoClause - target information for SELECT INTO, CREATE TABLE AS, and
+ * CREATE MATERIALIZED VIEW
  */
 typedef struct IntoClause
 {
@@ -92,6 +93,7 @@ typedef struct IntoClause
 	OnCommitAction onCommit;	/* what do we do at COMMIT? */
 	char	   *tableSpaceName; /* table space to use, or NULL */
 	bool		skipData;		/* true for WITH NO DATA */
+	char		relkind;		/* RELKIND_RELATION or RELKIND_MATVIEW */
 } IntoClause;
 
 
@@ -340,6 +342,7 @@ typedef struct FuncExpr
 	Oid			funcid;			/* PG_PROC OID of the function */
 	Oid			funcresulttype; /* PG_TYPE OID of result value */
 	bool		funcretset;		/* true if function returns set */
+	bool		funcvariadic;	/* true if VARIADIC was used in call */
 	CoercionForm funcformat;	/* how to display this function call */
 	Oid			funccollid;		/* OID of collation of result */
 	Oid			inputcollid;	/* OID of collation that function should use */
@@ -958,7 +961,8 @@ typedef struct MinMaxExpr
  *
  * Note: result type/typmod/collation are not stored, but can be deduced
  * from the XmlExprOp.	The type/typmod fields are just used for display
- * purposes, and are NOT the true result type of the node.
+ * purposes, and are NOT necessarily the true result type of the node.
+ * (We also use type == InvalidOid to mark a not-yet-parse-analyzed XmlExpr.)
  */
 typedef enum XmlExprOp
 {

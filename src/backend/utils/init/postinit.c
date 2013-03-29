@@ -3,7 +3,7 @@
  * postinit.c
  *	  postgres initialization utilities
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -67,6 +67,7 @@ static void CheckMyDatabase(const char *name, bool am_superuser);
 static void InitCommunication(void);
 static void ShutdownPostgres(int code, Datum arg);
 static void StatementTimeoutHandler(void);
+static void LockTimeoutHandler(void);
 static bool ThereIsAtLeastOneRole(void);
 static void process_startup_options(Port *port, bool am_superuser);
 static void process_settings(Oid databaseid, Oid roleid);
@@ -421,6 +422,31 @@ pg_split_opts(char **argv, int *argcp, char *optstr)
 	}
 }
 
+/*
+ * Initialize MaxBackends value from config options.
+ *
+ * This must be called after modules have had the chance to register background
+ * workers in shared_preload_libraries, and before shared memory size is
+ * determined.
+ *
+ * Note that in EXEC_BACKEND environment, the value is passed down from
+ * postmaster to subprocesses via BackendParameters in SubPostmasterMain; only
+ * postmaster itself and processes not under postmaster control should call
+ * this.
+ */
+void
+InitializeMaxBackends(void)
+{
+	Assert(MaxBackends == 0);
+
+	/* the extra unit accounts for the autovacuum launcher */
+	MaxBackends = MaxConnections + autovacuum_max_workers + 1 +
+		GetNumShmemAttachedBgworkers();
+
+	/* internal error because the values were all checked previously */
+	if (MaxBackends > MAX_BACKENDS)
+		elog(ERROR, "too many backends configured");
+}
 
 /*
  * Early initialization of a backend (either standalone or under postmaster).
@@ -510,6 +536,7 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 	{
 		RegisterTimeout(DEADLOCK_TIMEOUT, CheckDeadLock);
 		RegisterTimeout(STATEMENT_TIMEOUT, StatementTimeoutHandler);
+		RegisterTimeout(LOCK_TIMEOUT, LockTimeoutHandler);
 	}
 
 	/*
@@ -626,6 +653,19 @@ InitPostgres(const char *in_dbname, Oid dboid, const char *username,
 					 errmsg("no roles are defined in this database system"),
 					 errhint("You should immediately run CREATE USER \"%s\" SUPERUSER;.",
 							 username)));
+	}
+	else if (IsBackgroundWorker)
+	{
+		if (username == NULL)
+		{
+			InitializeSessionUserIdStandalone();
+			am_superuser = true;
+		}
+		else
+		{
+			InitializeSessionUserId(username);
+			am_superuser = superuser();
+		}
 	}
 	else
 	{
@@ -972,6 +1012,7 @@ process_settings(Oid databaseid, Oid roleid)
 	ApplySetting(databaseid, roleid, relsetting, PGC_S_DATABASE_USER);
 	ApplySetting(InvalidOid, roleid, relsetting, PGC_S_USER);
 	ApplySetting(databaseid, InvalidOid, relsetting, PGC_S_DATABASE);
+	ApplySetting(InvalidOid, InvalidOid, relsetting, PGC_S_GLOBAL);
 
 	heap_close(relsetting, AccessShareLock);
 }
@@ -1005,6 +1046,22 @@ ShutdownPostgres(int code, Datum arg)
  */
 static void
 StatementTimeoutHandler(void)
+{
+#ifdef HAVE_SETSID
+	/* try to signal whole process group */
+	kill(-MyProcPid, SIGINT);
+#endif
+	kill(MyProcPid, SIGINT);
+}
+
+/*
+ * LOCK_TIMEOUT handler: trigger a query-cancel interrupt.
+ *
+ * This is identical to StatementTimeoutHandler, but since it's so short,
+ * we might as well keep the two functions separate for clarity.
+ */
+static void
+LockTimeoutHandler(void)
 {
 #ifdef HAVE_SETSID
 	/* try to signal whole process group */

@@ -182,6 +182,20 @@ PostgreSQL documentation
       </listitem>
      </varlistentry>
 
+     <varlistentry id="app-initdb-data-checksums" xreflabel="data checksums">
+      <term><option>-k</option></term>
+      <term><option>--data-checksums</option></term>
+      <listitem>
+       <para>
+        Use checksums on data pages to help detect corruption by the
+        I/O system that would otherwise be silent. Enabling checksums
+        may incur a noticeable performance penalty. This option can only
+        be set during initialization, and cannot be changed later. If
+        set, checksums are calculated for all objects, in all databases.
+       </para>
+      </listitem>
+     </varlistentry>
+
      <varlistentry>
       <term><option>--locale=<replaceable>locale</replaceable></option></term>
       <listitem>
@@ -240,6 +254,17 @@ PostgreSQL documentation
        <para>
         Makes <command>initdb</command> read the database superuser's password
         from a file.  The first line of the file is taken as the password.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-S</option></term>
+      <term><option>--sync-only</option></term>
+      <listitem>
+       <para>
+        Safely write all database files to disk and exit.  This does not
+        perform any of the normal <application>initdb</> operations.
        </para>
       </listitem>
      </varlistentry>

@@ -5,7 +5,7 @@
  *
  * See src/backend/access/transam/README for more information.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -570,6 +570,27 @@ GetCurrentSubTransactionId(void)
 	return s->subTransactionId;
 }
 
+/*
+ *	SubTransactionIsActive
+ *
+ * Test if the specified subxact ID is still active.  Note caller is
+ * responsible for checking whether this ID is relevant to the current xact.
+ */
+bool
+SubTransactionIsActive(SubTransactionId subxid)
+{
+	TransactionState s;
+
+	for (s = CurrentTransactionState; s != NULL; s = s->parent)
+	{
+		if (s->state == TRANS_ABORT)
+			continue;
+		if (s->subTransactionId == subxid)
+			return true;
+	}
+	return false;
+}
+
 
 /*
  *	GetCurrentCommandId
@@ -1001,13 +1022,13 @@ RecordTransactionCommit(void)
 		 * RecordTransactionAbort.	That's because loss of a transaction abort
 		 * is noncritical; the presumption would be that it aborted, anyway.
 		 *
-		 * It's safe to change the inCommit flag of our own backend without
+		 * It's safe to change the delayChkpt flag of our own backend without
 		 * holding the ProcArrayLock, since we're the only one modifying it.
-		 * This makes checkpoint's determination of which xacts are inCommit a
+		 * This makes checkpoint's determination of which xacts are delayChkpt a
 		 * bit fuzzy, but it doesn't matter.
 		 */
 		START_CRIT_SECTION();
-		MyPgXact->inCommit = true;
+		MyPgXact->delayChkpt = true;
 
 		SetCurrentTransactionStopTimestamp();
 
@@ -1160,7 +1181,7 @@ RecordTransactionCommit(void)
 	 */
 	if (markXidCommitted)
 	{
-		MyPgXact->inCommit = false;
+		MyPgXact->delayChkpt = false;
 		END_CRIT_SECTION();
 	}
 
@@ -1825,6 +1846,8 @@ CommitTransaction(void)
 			break;
 	}
 
+	CallXactCallbacks(XACT_EVENT_PRE_COMMIT);
+
 	/*
 	 * The remaining actions cannot call any user-defined code, so it's safe
 	 * to start shutting down within-transaction services.	But note that most
@@ -2027,6 +2050,8 @@ PrepareTransaction(void)
 		if (!PreCommit_Portals(true))
 			break;
 	}
+
+	CallXactCallbacks(XACT_EVENT_PRE_PREPARE);
 
 	/*
 	 * The remaining actions cannot call any user-defined code, so it's safe
@@ -4058,8 +4083,12 @@ CommitSubTransaction(void)
 		elog(WARNING, "CommitSubTransaction while in %s state",
 			 TransStateAsString(s->state));
 
-	/* Pre-commit processing goes here -- nothing to do at the moment */
+	/* Pre-commit processing goes here */
 
+	CallSubXactCallbacks(SUBXACT_EVENT_PRE_COMMIT_SUB, s->subTransactionId,
+						 s->parent->subTransactionId);
+
+	/* Do the actual "commit", such as it is */
 	s->state = TRANS_COMMIT;
 
 	/* Must CCI to ensure commands of subtransaction are seen as done */
@@ -4617,23 +4646,44 @@ xact_redo_commit_internal(TransactionId xid, XLogRecPtr lsn,
 	}
 
 	/* Make sure files supposed to be dropped are dropped */
-	for (i = 0; i < nrels; i++)
+	if (nrels > 0)
 	{
-		SMgrRelation srel = smgropen(xnodes[i], InvalidBackendId);
-		ForkNumber	fork;
+		/*
+		 * First update minimum recovery point to cover this WAL record. Once
+		 * a relation is deleted, there's no going back. The buffer manager
+		 * enforces the WAL-first rule for normal updates to relation files,
+		 * so that the minimum recovery point is always updated before the
+		 * corresponding change in the data file is flushed to disk, but we
+		 * have to do the same here since we're bypassing the buffer manager.
+		 *
+		 * Doing this before deleting the files means that if a deletion fails
+		 * for some reason, you cannot start up the system even after restart,
+		 * until you fix the underlying situation so that the deletion will
+		 * succeed. Alternatively, we could update the minimum recovery point
+		 * after deletion, but that would leave a small window where the
+		 * WAL-first rule would be violated.
+		 */
+		XLogFlush(lsn);
 
-		for (fork = 0; fork <= MAX_FORKNUM; fork++)
-			XLogDropRelation(xnodes[i], fork);
-		smgrdounlink(srel, true);
-		smgrclose(srel);
+		for (i = 0; i < nrels; i++)
+		{
+			SMgrRelation srel = smgropen(xnodes[i], InvalidBackendId);
+			ForkNumber	fork;
+
+			for (fork = 0; fork <= MAX_FORKNUM; fork++)
+				XLogDropRelation(xnodes[i], fork);
+			smgrdounlink(srel, true);
+			smgrclose(srel);
+		}
 	}
 
 	/*
 	 * We issue an XLogFlush() for the same reason we emit ForceSyncCommit()
-	 * in normal operation. For example, in DROP DATABASE, we delete all the
-	 * files belonging to the database, and then commit the transaction. If we
-	 * crash after all the files have been deleted but before the commit, you
-	 * have an entry in pg_database without any files. To minimize the window
+	 * in normal operation. For example, in CREATE DATABASE, we copy all files
+	 * from the template database, and then commit the transaction. If we
+	 * crash after all the files have been copied but before the commit, you
+	 * have files in the data directory without an entry in pg_database. To
+	 * minimize the window
 	 * for that, we use ForceSyncCommit() to rush the commit record to disk as
 	 * quick as possible. We have the same window during recovery, and forcing
 	 * an XLogFlush() (which updates minRecoveryPoint during recovery) helps
@@ -4824,177 +4874,4 @@ xact_redo(XLogRecPtr lsn, XLogRecord *record)
 	}
 	else
 		elog(PANIC, "xact_redo: unknown op code %u", info);
-}
-
-static void
-xact_desc_commit(StringInfo buf, xl_xact_commit *xlrec)
-{
-	int			i;
-	TransactionId *subxacts;
-
-	subxacts = (TransactionId *) &xlrec->xnodes[xlrec->nrels];
-
-	appendStringInfoString(buf, timestamptz_to_str(xlrec->xact_time));
-
-	if (xlrec->nrels > 0)
-	{
-		appendStringInfo(buf, "; rels:");
-		for (i = 0; i < xlrec->nrels; i++)
-		{
-			char	   *path = relpathperm(xlrec->xnodes[i], MAIN_FORKNUM);
-
-			appendStringInfo(buf, " %s", path);
-			pfree(path);
-		}
-	}
-	if (xlrec->nsubxacts > 0)
-	{
-		appendStringInfo(buf, "; subxacts:");
-		for (i = 0; i < xlrec->nsubxacts; i++)
-			appendStringInfo(buf, " %u", subxacts[i]);
-	}
-	if (xlrec->nmsgs > 0)
-	{
-		SharedInvalidationMessage *msgs;
-
-		msgs = (SharedInvalidationMessage *) &subxacts[xlrec->nsubxacts];
-
-		if (XactCompletionRelcacheInitFileInval(xlrec->xinfo))
-			appendStringInfo(buf, "; relcache init file inval dbid %u tsid %u",
-							 xlrec->dbId, xlrec->tsId);
-
-		appendStringInfo(buf, "; inval msgs:");
-		for (i = 0; i < xlrec->nmsgs; i++)
-		{
-			SharedInvalidationMessage *msg = &msgs[i];
-
-			if (msg->id >= 0)
-				appendStringInfo(buf, " catcache %d", msg->id);
-			else if (msg->id == SHAREDINVALCATALOG_ID)
-				appendStringInfo(buf, " catalog %u", msg->cat.catId);
-			else if (msg->id == SHAREDINVALRELCACHE_ID)
-				appendStringInfo(buf, " relcache %u", msg->rc.relId);
-			/* remaining cases not expected, but print something anyway */
-			else if (msg->id == SHAREDINVALSMGR_ID)
-				appendStringInfo(buf, " smgr");
-			else if (msg->id == SHAREDINVALRELMAP_ID)
-				appendStringInfo(buf, " relmap");
-			else
-				appendStringInfo(buf, " unknown id %d", msg->id);
-		}
-	}
-}
-
-static void
-xact_desc_commit_compact(StringInfo buf, xl_xact_commit_compact *xlrec)
-{
-	int			i;
-
-	appendStringInfoString(buf, timestamptz_to_str(xlrec->xact_time));
-
-	if (xlrec->nsubxacts > 0)
-	{
-		appendStringInfo(buf, "; subxacts:");
-		for (i = 0; i < xlrec->nsubxacts; i++)
-			appendStringInfo(buf, " %u", xlrec->subxacts[i]);
-	}
-}
-
-static void
-xact_desc_abort(StringInfo buf, xl_xact_abort *xlrec)
-{
-	int			i;
-
-	appendStringInfoString(buf, timestamptz_to_str(xlrec->xact_time));
-	if (xlrec->nrels > 0)
-	{
-		appendStringInfo(buf, "; rels:");
-		for (i = 0; i < xlrec->nrels; i++)
-		{
-			char	   *path = relpathperm(xlrec->xnodes[i], MAIN_FORKNUM);
-
-			appendStringInfo(buf, " %s", path);
-			pfree(path);
-		}
-	}
-	if (xlrec->nsubxacts > 0)
-	{
-		TransactionId *xacts = (TransactionId *)
-		&xlrec->xnodes[xlrec->nrels];
-
-		appendStringInfo(buf, "; subxacts:");
-		for (i = 0; i < xlrec->nsubxacts; i++)
-			appendStringInfo(buf, " %u", xacts[i]);
-	}
-}
-
-static void
-xact_desc_assignment(StringInfo buf, xl_xact_assignment *xlrec)
-{
-	int			i;
-
-	appendStringInfo(buf, "subxacts:");
-
-	for (i = 0; i < xlrec->nsubxacts; i++)
-		appendStringInfo(buf, " %u", xlrec->xsub[i]);
-}
-
-void
-xact_desc(StringInfo buf, uint8 xl_info, char *rec)
-{
-	uint8		info = xl_info & ~XLR_INFO_MASK;
-
-	if (info == XLOG_XACT_COMMIT_COMPACT)
-	{
-		xl_xact_commit_compact *xlrec = (xl_xact_commit_compact *) rec;
-
-		appendStringInfo(buf, "commit: ");
-		xact_desc_commit_compact(buf, xlrec);
-	}
-	else if (info == XLOG_XACT_COMMIT)
-	{
-		xl_xact_commit *xlrec = (xl_xact_commit *) rec;
-
-		appendStringInfo(buf, "commit: ");
-		xact_desc_commit(buf, xlrec);
-	}
-	else if (info == XLOG_XACT_ABORT)
-	{
-		xl_xact_abort *xlrec = (xl_xact_abort *) rec;
-
-		appendStringInfo(buf, "abort: ");
-		xact_desc_abort(buf, xlrec);
-	}
-	else if (info == XLOG_XACT_PREPARE)
-	{
-		appendStringInfo(buf, "prepare");
-	}
-	else if (info == XLOG_XACT_COMMIT_PREPARED)
-	{
-		xl_xact_commit_prepared *xlrec = (xl_xact_commit_prepared *) rec;
-
-		appendStringInfo(buf, "commit prepared %u: ", xlrec->xid);
-		xact_desc_commit(buf, &xlrec->crec);
-	}
-	else if (info == XLOG_XACT_ABORT_PREPARED)
-	{
-		xl_xact_abort_prepared *xlrec = (xl_xact_abort_prepared *) rec;
-
-		appendStringInfo(buf, "abort prepared %u: ", xlrec->xid);
-		xact_desc_abort(buf, &xlrec->arec);
-	}
-	else if (info == XLOG_XACT_ASSIGNMENT)
-	{
-		xl_xact_assignment *xlrec = (xl_xact_assignment *) rec;
-
-		/*
-		 * Note that we ignore the WAL record's xid, since we're more
-		 * interested in the top-level xid that issued the record and which
-		 * xids are being reported here.
-		 */
-		appendStringInfo(buf, "xid assignment xtop %u: ", xlrec->xtop);
-		xact_desc_assignment(buf, xlrec);
-	}
-	else
-		appendStringInfo(buf, "UNKNOWN");
 }

@@ -4,7 +4,7 @@
  *	  POSTGRES relation descriptor (a/k/a relcache entry) definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/rel.h
@@ -81,7 +81,9 @@ typedef struct RelationData
 	struct SMgrRelationData *rd_smgr;	/* cached file handle, or NULL */
 	int			rd_refcnt;		/* reference count */
 	BackendId	rd_backend;		/* owning backend id, if temporary relation */
+	bool		rd_islocaltemp; /* rel is a temp rel of this session */
 	bool		rd_isnailed;	/* rel is nailed in cache */
+	bool		rd_isscannable; /* rel can be scanned */
 	bool		rd_isvalid;		/* relcache entry is valid */
 	char		rd_indexvalid;	/* state of rd_indexlist: 0 = not valid, 1 =
 								 * valid, 2 = temporarily forced */
@@ -89,11 +91,20 @@ typedef struct RelationData
 	/*
 	 * rd_createSubid is the ID of the highest subtransaction the rel has
 	 * survived into; or zero if the rel was not created in the current top
-	 * transaction.  This should be relied on only for optimization purposes;
-	 * it is possible for new-ness to be "forgotten" (eg, after CLUSTER).
+	 * transaction.  This can be now be relied on, whereas previously it
+	 * could be "forgotten" in earlier releases.
 	 * Likewise, rd_newRelfilenodeSubid is the ID of the highest
 	 * subtransaction the relfilenode change has survived into, or zero if not
 	 * changed in the current transaction (or we have forgotten changing it).
+	 * rd_newRelfilenodeSubid can be forgotten when a relation has multiple
+	 * new relfilenodes within a single transaction, with one of them occuring
+	 * in a subsequently aborted subtransaction, e.g.
+	 * 		BEGIN;
+	 * 		TRUNCATE t;
+	 * 		SAVEPOINT save;
+	 * 		TRUNCATE t;
+	 * 		ROLLBACK TO save;
+	 * 		-- rd_newRelfilenode is now forgotten
 	 */
 	SubTransactionId rd_createSubid;	/* rel was created in current xact */
 	SubTransactionId rd_newRelfilenodeSubid;	/* new relfilenode assigned in
@@ -104,6 +115,7 @@ typedef struct RelationData
 	Oid			rd_id;			/* relation's object id */
 	List	   *rd_indexlist;	/* list of OIDs of indexes on relation */
 	Bitmapset  *rd_indexattr;	/* identifies columns used in indexes */
+	Bitmapset  *rd_keyattr;		/* cols that can be ref'd by foreign keys */
 	Oid			rd_oidindex;	/* OID of unique index on OID, if any */
 	LockInfoData rd_lockInfo;	/* lock mgr's info for locking relation */
 	RuleLock   *rd_rules;		/* rewrite rules */
@@ -152,6 +164,17 @@ typedef struct RelationData
 	uint16	   *rd_exclstrats;	/* exclusion ops' strategy numbers, if any */
 	void	   *rd_amcache;		/* available for use by index AM */
 	Oid		   *rd_indcollation;	/* OIDs of index collations */
+
+	/*
+	 * foreign-table support
+	 *
+	 * rd_fdwroutine must point to a single memory chunk palloc'd in
+	 * CacheMemoryContext.  It will be freed and reset to NULL on a relcache
+	 * reset.
+	 */
+
+	/* use "struct" here to avoid needing to include fdwapi.h: */
+	struct FdwRoutine *rd_fdwroutine;	/* cached function pointers, or NULL */
 
 	/*
 	 * Hack for CLUSTER, rewriting ALTER TABLE, etc: when writing a new
@@ -363,21 +386,15 @@ typedef struct StdRdOptions
 	((relation)->rd_rel->relpersistence == RELPERSISTENCE_TEMP)
 
 /*
- * RelationUsesTempNamespace
- *		True if relation's catalog entries live in a private namespace.
- */
-#define RelationUsesTempNamespace(relation) \
-	((relation)->rd_rel->relpersistence == RELPERSISTENCE_TEMP)
-
-/*
  * RELATION_IS_LOCAL
  *		If a rel is either temp or newly created in the current transaction,
- *		it can be assumed to be visible only to the current backend.
+ *		it can be assumed to be accessible only to the current backend.
+ *		This is typically used to decide that we can skip acquiring locks.
  *
  * Beware of multiple eval of argument
  */
 #define RELATION_IS_LOCAL(relation) \
-	((relation)->rd_backend == MyBackendId || \
+	((relation)->rd_islocaltemp || \
 	 (relation)->rd_createSubid != InvalidSubTransactionId)
 
 /*
@@ -387,8 +404,8 @@ typedef struct StdRdOptions
  * Beware of multiple eval of argument
  */
 #define RELATION_IS_OTHER_TEMP(relation) \
-	((relation)->rd_rel->relpersistence == RELPERSISTENCE_TEMP \
-	&& (relation)->rd_backend != MyBackendId)
+	((relation)->rd_rel->relpersistence == RELPERSISTENCE_TEMP && \
+	 !(relation)->rd_islocaltemp)
 
 /* routines in utils/cache/relcache.c */
 extern void RelationIncrementReferenceCount(Relation rel);

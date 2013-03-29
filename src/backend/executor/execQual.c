@@ -3,7 +3,7 @@
  * execQual.c
  *	  Routines to evaluate qualification and targetlist expressions
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -3881,7 +3881,8 @@ ExecEvalCoerceToDomain(CoerceToDomainState *cstate, ExprContext *econtext,
 					ereport(ERROR,
 							(errcode(ERRCODE_NOT_NULL_VIOLATION),
 							 errmsg("domain %s does not allow null values",
-									format_type_be(ctest->resulttype))));
+									format_type_be(ctest->resulttype)),
+							 errdatatype(ctest->resulttype)));
 				break;
 			case DOM_CONSTRAINT_CHECK:
 				{
@@ -3911,7 +3912,9 @@ ExecEvalCoerceToDomain(CoerceToDomainState *cstate, ExprContext *econtext,
 								(errcode(ERRCODE_CHECK_VIOLATION),
 								 errmsg("value for domain %s violates check constraint \"%s\"",
 										format_type_be(ctest->resulttype),
-										con->name)));
+										con->name),
+								 errdomainconstraint(ctest->resulttype,
+													 con->name)));
 					econtext->domainValue_datum = save_datum;
 					econtext->domainValue_isNull = save_isNull;
 

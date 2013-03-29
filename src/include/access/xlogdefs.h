@@ -4,7 +4,7 @@
  * Postgres transaction log manager record pointer and
  * timeline number definitions
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/xlogdefs.h
@@ -27,20 +27,6 @@ typedef uint64 XLogRecPtr;
  */
 #define InvalidXLogRecPtr	0
 #define XLogRecPtrIsInvalid(r)	((r) == InvalidXLogRecPtr)
-
-/*
- * Macros for comparing XLogRecPtrs
- */
-#define XLByteLT(a, b)		((a) < (b))
-#define XLByteLE(a, b)		((a) <= (b))
-#define XLByteEQ(a, b)		((a) == (b))
-
-
-/*
- * Macro for advancing a record pointer by the specified number of bytes.
- */
-#define XLByteAdvance(recptr, nbytes)						\
-		(recptr) += nbytes									\
 
 /*
  * XLogSegNo - physical log file sequence number.

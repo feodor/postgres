@@ -3,7 +3,7 @@
  * fe-protocol3.c
  *	  functions that are specific to frontend/backend protocol version 3
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -920,6 +920,29 @@ pqGetErrorNotice3(PGconn *conn, bool isError)
 	}
 	if (conn->verbosity == PQERRORS_VERBOSE)
 	{
+		val = PQresultErrorField(res, PG_DIAG_SCHEMA_NAME);
+		if (val)
+			appendPQExpBuffer(&workBuf,
+							  libpq_gettext("SCHEMA NAME:  %s\n"), val);
+		val = PQresultErrorField(res, PG_DIAG_TABLE_NAME);
+		if (val)
+			appendPQExpBuffer(&workBuf,
+							  libpq_gettext("TABLE NAME:  %s\n"), val);
+		val = PQresultErrorField(res, PG_DIAG_COLUMN_NAME);
+		if (val)
+			appendPQExpBuffer(&workBuf,
+							  libpq_gettext("COLUMN NAME:  %s\n"), val);
+		val = PQresultErrorField(res, PG_DIAG_DATATYPE_NAME);
+		if (val)
+			appendPQExpBuffer(&workBuf,
+							  libpq_gettext("DATATYPE NAME:  %s\n"), val);
+		val = PQresultErrorField(res, PG_DIAG_CONSTRAINT_NAME);
+		if (val)
+			appendPQExpBuffer(&workBuf,
+							  libpq_gettext("CONSTRAINT NAME:  %s\n"), val);
+	}
+	if (conn->verbosity == PQERRORS_VERBOSE)
+	{
 		const char *valf;
 		const char *vall;
 
@@ -1484,7 +1507,12 @@ pqGetCopyData3(PGconn *conn, char **buffer, int async)
 			 * expect the state was already changed.
 			 */
 			if (msgLength == -1)
-				conn->asyncStatus = PGASYNC_BUSY;
+			{
+				if (conn->asyncStatus == PGASYNC_COPY_BOTH)
+					conn->asyncStatus = PGASYNC_COPY_IN;
+				else
+					conn->asyncStatus = PGASYNC_BUSY;
+			}
 			return msgLength;	/* end-of-copy or error */
 		}
 		if (msgLength == 0)

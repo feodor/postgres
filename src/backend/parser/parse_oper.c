@@ -3,7 +3,7 @@
  * parse_oper.c
  *		handle operator things for parser
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -1027,7 +1027,7 @@ make_oper_cache_key(OprCacheKey *key, List *opname, Oid ltypeId, Oid rtypeId)
 	if (schemaname)
 	{
 		/* search only in exact schema given */
-		key->search_path[0] = LookupExplicitNamespace(schemaname);
+		key->search_path[0] = LookupExplicitNamespace(schemaname, false);
 	}
 	else
 	{

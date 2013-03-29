@@ -3,7 +3,7 @@
  * proclang.c
  *	  PostgreSQL PROCEDURAL LANGUAGE support code.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -51,16 +51,16 @@ typedef struct
 	char	   *tmpllibrary;	/* path of shared library */
 } PLTemplate;
 
-static void create_proc_lang(const char *languageName, bool replace,
-				 Oid languageOwner, Oid handlerOid, Oid inlineOid,
-				 Oid valOid, bool trusted);
+static Oid create_proc_lang(const char *languageName, bool replace,
+							Oid languageOwner, Oid handlerOid, Oid inlineOid,
+							Oid valOid, bool trusted);
 static PLTemplate *find_language_template(const char *languageName);
 
 /* ---------------------------------------------------------------------
  * CREATE PROCEDURAL LANGUAGE
  * ---------------------------------------------------------------------
  */
-void
+Oid
 CreateProceduralLanguage(CreatePLangStmt *stmt)
 {
 	PLTemplate *pltemplate;
@@ -225,9 +225,9 @@ CreateProceduralLanguage(CreatePLangStmt *stmt)
 			valOid = InvalidOid;
 
 		/* ok, create it */
-		create_proc_lang(stmt->plname, stmt->replace, GetUserId(),
-						 handlerOid, inlineOid,
-						 valOid, pltemplate->tmpltrusted);
+		return create_proc_lang(stmt->plname, stmt->replace, GetUserId(),
+								handlerOid, inlineOid,
+								valOid, pltemplate->tmpltrusted);
 	}
 	else
 	{
@@ -300,16 +300,16 @@ CreateProceduralLanguage(CreatePLangStmt *stmt)
 			valOid = InvalidOid;
 
 		/* ok, create it */
-		create_proc_lang(stmt->plname, stmt->replace, GetUserId(),
-						 handlerOid, inlineOid,
-						 valOid, stmt->pltrusted);
+		return create_proc_lang(stmt->plname, stmt->replace, GetUserId(),
+								handlerOid, inlineOid,
+								valOid, stmt->pltrusted);
 	}
 }
 
 /*
  * Guts of language creation.
  */
-static void
+static Oid
 create_proc_lang(const char *languageName, bool replace,
 				 Oid languageOwner, Oid handlerOid, Oid inlineOid,
 				 Oid valOid, bool trusted)
@@ -429,10 +429,11 @@ create_proc_lang(const char *languageName, bool replace,
 	}
 
 	/* Post creation hook for new procedural language */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   LanguageRelationId, myself.objectId, 0, NULL);
+	InvokeObjectPostCreateHook(LanguageRelationId, myself.objectId, 0);
 
 	heap_close(rel, RowExclusiveLock);
+
+	return myself.objectId;
 }
 
 /*
@@ -532,43 +533,6 @@ DropProceduralLanguageById(Oid langOid)
 	ReleaseSysCache(langTup);
 
 	heap_close(rel, RowExclusiveLock);
-}
-
-/*
- * Rename language
- */
-void
-RenameLanguage(const char *oldname, const char *newname)
-{
-	HeapTuple	tup;
-	Relation	rel;
-
-	rel = heap_open(LanguageRelationId, RowExclusiveLock);
-
-	tup = SearchSysCacheCopy1(LANGNAME, CStringGetDatum(oldname));
-	if (!HeapTupleIsValid(tup))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("language \"%s\" does not exist", oldname)));
-
-	/* make sure the new name doesn't exist */
-	if (SearchSysCacheExists1(LANGNAME, CStringGetDatum(newname)))
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("language \"%s\" already exists", newname)));
-
-	/* must be owner of PL */
-	if (!pg_language_ownercheck(HeapTupleGetOid(tup), GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER, ACL_KIND_LANGUAGE,
-					   oldname);
-
-	/* rename */
-	namestrcpy(&(((Form_pg_language) GETSTRUCT(tup))->lanname), newname);
-	simple_heap_update(rel, &tup->t_self, tup);
-	CatalogUpdateIndexes(rel, tup);
-
-	heap_close(rel, NoLock);
-	heap_freetuple(tup);
 }
 
 /*

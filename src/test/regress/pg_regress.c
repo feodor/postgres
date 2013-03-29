@@ -8,7 +8,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/test/regress/pg_regress.c
@@ -781,6 +781,19 @@ initialize_environment(void)
 			sprintf(s, "%d", port);
 			doputenv("PGPORT", s);
 		}
+
+		/*
+		 * GNU make stores some flags in the MAKEFLAGS environment variable to
+		 * pass arguments to its own children.	If we are invoked by make,
+		 * that causes the make invoked by us to think its part of the make
+		 * task invoking us, and so it tries to communicate with the toplevel
+		 * make.  Which fails.
+		 *
+		 * Unset the variable to protect against such problems.  We also reset
+		 * MAKELEVEL to be certain the child doesn't notice the make above us.
+		 */
+		unsetenv("MAKEFLAGS");
+		unsetenv("MAKELEVEL");
 
 		/*
 		 * Adjust path variables to point into the temp-install tree
@@ -1906,13 +1919,6 @@ help(void)
 int
 regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc)
 {
-	_stringlist *sl;
-	int			c;
-	int			i;
-	int			option_index;
-	char		buf[MAXPGPATH * 4];
-	char		buf2[MAXPGPATH * 4];
-
 	static struct option long_options[] = {
 		{"help", no_argument, NULL, 'h'},
 		{"version", no_argument, NULL, 'V'},
@@ -1941,6 +1947,13 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		{NULL, 0, NULL, 0}
 	};
 
+	_stringlist *sl;
+	int			c;
+	int			i;
+	int			option_index;
+	char		buf[MAXPGPATH * 4];
+	char		buf2[MAXPGPATH * 4];
+
 	progname = get_progname(argv[0]);
 	set_pglocale_pgservice(argv[0], PG_TEXTDOMAIN("pg_regress"));
 
@@ -1956,6 +1969,9 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 	 * default parameters and let them be overwritten by the commandline.
 	 */
 	ifunc();
+
+	if (getenv("PG_REGRESS_DIFF_OPTS"))
+		pretty_diff_opts = getenv("PG_REGRESS_DIFF_OPTS");
 
 	while ((c = getopt_long(argc, argv, "hV", long_options, &option_index)) != -1)
 	{

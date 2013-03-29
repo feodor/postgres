@@ -5,33 +5,28 @@
  *
  * Author: Magnus Hagander <magnus@hagander.net>
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/bin/pg_basebackup/pg_receivexlog.c
  *-------------------------------------------------------------------------
  */
 
-/*
- * We have to use postgres.h not postgres_fe.h here, because there's so much
- * backend-only stuff in the XLOG include files we need.  But we need a
- * frontend-ish environment otherwise.	Hence this ugly hack.
- */
-#define FRONTEND 1
-#include "postgres.h"
-#include "libpq-fe.h"
-#include "libpq/pqsignal.h"
-#include "access/xlog_internal.h"
-
-#include "receivelog.h"
-#include "streamutil.h"
+#include "postgres_fe.h"
 
 #include <dirent.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "libpq-fe.h"
+#include "access/xlog_internal.h"
 #include "getopt_long.h"
+
+#include "receivelog.h"
+#include "streamutil.h"
+
 
 /* Time to sleep between reconnection attempts */
 #define RECONNECT_SLEEP_TIME 5
@@ -45,8 +40,7 @@ volatile bool time_to_abort = false;
 
 
 static void usage(void);
-static XLogRecPtr FindStreamingStart(XLogRecPtr currentpos,
-				   uint32 currenttimeline);
+static XLogRecPtr FindStreamingStart(uint32 *tli);
 static void StreamLog();
 static bool stop_streaming(XLogRecPtr segendpos, uint32 timeline,
 			   bool segment_finished);
@@ -65,6 +59,7 @@ usage(void)
 	printf(_("  -V, --version          output version information, then exit\n"));
 	printf(_("  -?, --help             show this help, then exit\n"));
 	printf(_("\nConnection options:\n"));
+	printf(_("  -d, --dbname=CONNSTR   connection string\n"));
 	printf(_("  -h, --host=HOSTNAME    database server host or socket directory\n"));
 	printf(_("  -p, --port=PORT        database server port number\n"));
 	printf(_("  -s, --status-interval=INTERVAL\n"
@@ -76,17 +71,34 @@ usage(void)
 }
 
 static bool
-stop_streaming(XLogRecPtr segendpos, uint32 timeline, bool segment_finished)
+stop_streaming(XLogRecPtr xlogpos, uint32 timeline, bool segment_finished)
 {
+	static uint32 prevtimeline = 0;
+	static XLogRecPtr prevpos = InvalidXLogRecPtr;
+
+	/* we assume that we get called once at the end of each segment */
 	if (verbose && segment_finished)
 		fprintf(stderr, _("%s: finished segment at %X/%X (timeline %u)\n"),
-				progname,
-				(uint32) (segendpos >> 32), (uint32) segendpos,
+				progname, (uint32) (xlogpos >> 32), (uint32) xlogpos,
 				timeline);
+
+	/*
+	 * Note that we report the previous, not current, position here. That's
+	 * the exact location where the timeline switch happend. After the switch,
+	 * we restart streaming from the beginning of the segment, so xlogpos can
+	 * smaller than prevpos if we just switched to new timeline.
+	 */
+	if (prevtimeline != 0 && prevtimeline != timeline)
+		fprintf(stderr, _("%s: switched to timeline %u at %X/%X\n"),
+				progname, timeline,
+				(uint32) (prevpos >> 32), (uint32) prevpos);
+
+	prevtimeline = timeline;
+	prevpos = xlogpos;
 
 	if (time_to_abort)
 	{
-		fprintf(stderr, _("%s: received interrupt signal, exiting.\n"),
+		fprintf(stderr, _("%s: received interrupt signal, exiting\n"),
 				progname);
 		return true;
 	}
@@ -94,20 +106,19 @@ stop_streaming(XLogRecPtr segendpos, uint32 timeline, bool segment_finished)
 }
 
 /*
- * Determine starting location for streaming, based on:
- * 1. If there are existing xlog segments, start at the end of the last one
- *	  that is complete (size matches XLogSegSize)
- * 2. If no valid xlog exists, start from the beginning of the current
- *	  WAL segment.
+ * Determine starting location for streaming, based on any existing xlog
+ * segments in the directory. We start at the end of the last one that is
+ * complete (size matches XLogSegSize), on the timeline with highest ID.
+ *
+ * If there are no WAL files in the directory, returns InvalidXLogRecPtr.
  */
 static XLogRecPtr
-FindStreamingStart(XLogRecPtr currentpos, uint32 currenttimeline)
+FindStreamingStart(uint32 *tli)
 {
 	DIR		   *dir;
 	struct dirent *dirent;
-	int			i;
-	bool		b;
 	XLogSegNo	high_segno = 0;
+	uint32		high_tli = 0;
 
 	dir = opendir(basedir);
 	if (dir == NULL)
@@ -126,26 +137,13 @@ FindStreamingStart(XLogRecPtr currentpos, uint32 currenttimeline)
 					seg;
 		XLogSegNo	segno;
 
-		if (strcmp(dirent->d_name, ".") == 0 ||
-			strcmp(dirent->d_name, "..") == 0)
-			continue;
-
-		/* xlog files are always 24 characters */
-		if (strlen(dirent->d_name) != 24)
-			continue;
-
-		/* Filenames are always made out of 0-9 and A-F */
-		b = false;
-		for (i = 0; i < 24; i++)
-		{
-			if (!(dirent->d_name[i] >= '0' && dirent->d_name[i] <= '9') &&
-				!(dirent->d_name[i] >= 'A' && dirent->d_name[i] <= 'F'))
-			{
-				b = true;
-				break;
-			}
-		}
-		if (b)
+		/*
+		 * Check if the filename looks like an xlog file, or a .partial file.
+		 * Xlog files are always 24 characters, and .partial files are 32
+		 * characters.
+		 */
+		if (strlen(dirent->d_name) != 24 ||
+			!strspn(dirent->d_name, "0123456789ABCDEF") == 24)
 			continue;
 
 		/*
@@ -160,10 +158,6 @@ FindStreamingStart(XLogRecPtr currentpos, uint32 currenttimeline)
 		}
 		segno = ((uint64) log) << 32 | seg;
 
-		/* Ignore any files that are for another timeline */
-		if (tli != currenttimeline)
-			continue;
-
 		/* Check if this is a completed segment or not */
 		snprintf(fullpath, sizeof(fullpath), "%s/%s", basedir, dirent->d_name);
 		if (stat(fullpath, &statbuf) != 0)
@@ -176,9 +170,10 @@ FindStreamingStart(XLogRecPtr currentpos, uint32 currenttimeline)
 		if (statbuf.st_size == XLOG_SEG_SIZE)
 		{
 			/* Completed segment */
-			if (segno > high_segno)
+			if (segno > high_segno || (segno == high_segno && tli > high_tli))
 			{
 				high_segno = segno;
+				high_tli = tli;
 				continue;
 			}
 		}
@@ -205,10 +200,11 @@ FindStreamingStart(XLogRecPtr currentpos, uint32 currenttimeline)
 
 		XLogSegNoOffsetToRecPtr(high_segno, 0, high_ptr);
 
+		*tli = high_tli;
 		return high_ptr;
 	}
 	else
-		return currentpos;
+		return InvalidXLogRecPtr;
 }
 
 /*
@@ -218,8 +214,10 @@ static void
 StreamLog(void)
 {
 	PGresult   *res;
-	uint32		timeline;
 	XLogRecPtr	startpos;
+	uint32		starttli;
+	XLogRecPtr	serverpos;
+	uint32		servertli;
 	uint32		hi,
 				lo;
 
@@ -230,6 +228,16 @@ StreamLog(void)
 	if (!conn)
 		/* Error message already written in GetConnection() */
 		return;
+
+	if (!CheckServerVersionForStreaming(conn))
+	{
+		/*
+		 * Error message already written in CheckServerVersionForStreaming().
+		 * There's no hope of recovering from a version mismatch, so don't
+		 * retry.
+		 */
+		disconnect_and_exit(1);
+	}
 
 	/*
 	 * Run IDENTIFY_SYSTEM so we can get the timeline and current xlog
@@ -249,7 +257,7 @@ StreamLog(void)
 				progname, PQntuples(res), PQnfields(res), 1, 3);
 		disconnect_and_exit(1);
 	}
-	timeline = atoi(PQgetvalue(res, 0, 1));
+	servertli = atoi(PQgetvalue(res, 0, 1));
 	if (sscanf(PQgetvalue(res, 0, 2), "%X/%X", &hi, &lo) != 2)
 	{
 		fprintf(stderr,
@@ -257,13 +265,18 @@ StreamLog(void)
 				progname, PQgetvalue(res, 0, 2));
 		disconnect_and_exit(1);
 	}
-	startpos = ((uint64) hi) << 32 | lo;
+	serverpos = ((uint64) hi) << 32 | lo;
 	PQclear(res);
 
 	/*
 	 * Figure out where to start streaming.
 	 */
-	startpos = FindStreamingStart(startpos, timeline);
+	startpos = FindStreamingStart(&starttli);
+	if (startpos == InvalidXLogRecPtr)
+	{
+		startpos = serverpos;
+		starttli = servertli;
+	}
 
 	/*
 	 * Always start streaming at the beginning of a segment
@@ -277,10 +290,10 @@ StreamLog(void)
 		fprintf(stderr,
 				_("%s: starting log streaming at %X/%X (timeline %u)\n"),
 				progname, (uint32) (startpos >> 32), (uint32) startpos,
-				timeline);
+				starttli);
 
-	ReceiveXlogStream(conn, startpos, timeline, NULL, basedir,
-					  stop_streaming, standby_message_timeout, false);
+	ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
+					  stop_streaming, standby_message_timeout, ".partial");
 
 	PQfinish(conn);
 }
@@ -305,6 +318,7 @@ main(int argc, char **argv)
 		{"help", no_argument, NULL, '?'},
 		{"version", no_argument, NULL, 'V'},
 		{"directory", required_argument, NULL, 'D'},
+		{"dbname", required_argument, NULL, 'd'},
 		{"host", required_argument, NULL, 'h'},
 		{"port", required_argument, NULL, 'p'},
 		{"username", required_argument, NULL, 'U'},
@@ -315,6 +329,7 @@ main(int argc, char **argv)
 		{"verbose", no_argument, NULL, 'v'},
 		{NULL, 0, NULL, 0}
 	};
+
 	int			c;
 	int			option_index;
 
@@ -336,13 +351,16 @@ main(int argc, char **argv)
 		}
 	}
 
-	while ((c = getopt_long(argc, argv, "D:h:p:U:s:nwWv",
+	while ((c = getopt_long(argc, argv, "D:d:h:p:U:s:nwWv",
 							long_options, &option_index)) != -1)
 	{
 		switch (c)
 		{
 			case 'D':
 				basedir = pg_strdup(optarg);
+				break;
+			case 'd':
+				connection_string = pg_strdup(optarg);
 				break;
 			case 'h':
 				dbhost = pg_strdup(optarg);
@@ -432,14 +450,14 @@ main(int argc, char **argv)
 		}
 		else if (noloop)
 		{
-			fprintf(stderr, _("%s: disconnected.\n"), progname);
+			fprintf(stderr, _("%s: disconnected\n"), progname);
 			exit(1);
 		}
 		else
 		{
 			fprintf(stderr,
 					/* translator: check source for value for %d */
-					_("%s: disconnected. Waiting %d seconds to try again.\n"),
+					_("%s: disconnected; waiting %d seconds to try again\n"),
 					progname, RECONNECT_SLEEP_TIME);
 			pg_usleep(RECONNECT_SLEEP_TIME * 1000000);
 		}

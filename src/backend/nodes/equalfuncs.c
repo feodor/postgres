@@ -18,7 +18,7 @@
  * "x" to be considered equal() to another reference to "x" in the query.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -124,6 +124,7 @@ _equalIntoClause(const IntoClause *a, const IntoClause *b)
 	COMPARE_SCALAR_FIELD(onCommit);
 	COMPARE_STRING_FIELD(tableSpaceName);
 	COMPARE_SCALAR_FIELD(skipData);
+	COMPARE_SCALAR_FIELD(relkind);
 
 	return true;
 }
@@ -239,6 +240,7 @@ _equalFuncExpr(const FuncExpr *a, const FuncExpr *b)
 	COMPARE_SCALAR_FIELD(funcid);
 	COMPARE_SCALAR_FIELD(funcresulttype);
 	COMPARE_SCALAR_FIELD(funcretset);
+	COMPARE_SCALAR_FIELD(funcvariadic);
 	COMPARE_COERCIONFORM_FIELD(funcformat);
 	COMPARE_SCALAR_FIELD(funccollid);
 	COMPARE_SCALAR_FIELD(inputcollid);
@@ -1089,6 +1091,7 @@ _equalCopyStmt(const CopyStmt *a, const CopyStmt *b)
 	COMPARE_NODE_FIELD(query);
 	COMPARE_NODE_FIELD(attlist);
 	COMPARE_SCALAR_FIELD(is_from);
+	COMPARE_SCALAR_FIELD(is_program);
 	COMPARE_STRING_FIELD(filename);
 	COMPARE_NODE_FIELD(options);
 
@@ -1523,7 +1526,17 @@ _equalCreateTableAsStmt(const CreateTableAsStmt *a, const CreateTableAsStmt *b)
 {
 	COMPARE_NODE_FIELD(query);
 	COMPARE_NODE_FIELD(into);
+	COMPARE_SCALAR_FIELD(relkind);
 	COMPARE_SCALAR_FIELD(is_select_into);
+
+	return true;
+}
+
+static bool
+_equalRefreshMatViewStmt(const RefreshMatViewStmt *a, const RefreshMatViewStmt *b)
+{
+	COMPARE_SCALAR_FIELD(skipData);
+	COMPARE_NODE_FIELD(relation);
 
 	return true;
 }
@@ -2209,7 +2222,7 @@ static bool
 _equalLockingClause(const LockingClause *a, const LockingClause *b)
 {
 	COMPARE_NODE_FIELD(lockedRels);
-	COMPARE_SCALAR_FIELD(forUpdate);
+	COMPARE_SCALAR_FIELD(strength);
 	COMPARE_SCALAR_FIELD(noWait);
 
 	return true;
@@ -2221,6 +2234,7 @@ _equalRangeTblEntry(const RangeTblEntry *a, const RangeTblEntry *b)
 	COMPARE_SCALAR_FIELD(rtekind);
 	COMPARE_SCALAR_FIELD(relid);
 	COMPARE_SCALAR_FIELD(relkind);
+	COMPARE_SCALAR_FIELD(isResultRel);
 	COMPARE_NODE_FIELD(subquery);
 	COMPARE_SCALAR_FIELD(security_barrier);
 	COMPARE_SCALAR_FIELD(jointype);
@@ -2282,7 +2296,7 @@ static bool
 _equalRowMarkClause(const RowMarkClause *a, const RowMarkClause *b)
 {
 	COMPARE_SCALAR_FIELD(rti);
-	COMPARE_SCALAR_FIELD(forUpdate);
+	COMPARE_SCALAR_FIELD(strength);
 	COMPARE_SCALAR_FIELD(noWait);
 	COMPARE_SCALAR_FIELD(pushedDown);
 
@@ -2787,6 +2801,9 @@ equal(const void *a, const void *b)
 			break;
 		case T_CreateTableAsStmt:
 			retval = _equalCreateTableAsStmt(a, b);
+			break;
+		case T_RefreshMatViewStmt:
+			retval = _equalRefreshMatViewStmt(a, b);
 			break;
 		case T_CreateSeqStmt:
 			retval = _equalCreateSeqStmt(a, b);

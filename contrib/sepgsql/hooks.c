@@ -4,7 +4,7 @@
  *
  * Entrypoints of the hooks in PostgreSQL, and dispatches the callbacks.
  *
- * Copyright (c) 2010-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2010-2013, PostgreSQL Global Development Group
  *
  * -------------------------------------------------------------------------
  */
@@ -179,6 +179,54 @@ sepgsql_object_access(ObjectAccessType access,
 
 					case ProcedureRelationId:
 						sepgsql_proc_drop(objectId);
+						break;
+
+					default:
+						/* Ignore unsupported object classes */
+						break;
+				}
+			}
+			break;
+
+		case OAT_POST_ALTER:
+			{
+				ObjectAccessPostAlter  *pa_arg = arg;
+				bool	is_internal = pa_arg->is_internal;
+
+				switch (classId)
+				{
+					case DatabaseRelationId:
+						Assert(!is_internal);
+						sepgsql_database_setattr(objectId);
+						break;
+
+					case NamespaceRelationId:
+						Assert(!is_internal);
+						sepgsql_schema_setattr(objectId);
+						break;
+
+					case RelationRelationId:
+						if (subId == 0)
+                        {
+							/*
+							 * A case when we don't want to apply permission
+							 * check is that relation is internally altered
+							 * without user's intention. E.g, no need to
+							 * check on toast table/index to be renamed at
+							 * end of the table rewrites.
+							 */
+							if (is_internal)
+                                break;
+
+							sepgsql_relation_setattr(objectId);
+                        }
+                        else
+                            sepgsql_attribute_setattr(objectId, subId);
+						break;
+
+					case ProcedureRelationId:
+						Assert(!is_internal);
+						sepgsql_proc_setattr(objectId);
 						break;
 
 					default:

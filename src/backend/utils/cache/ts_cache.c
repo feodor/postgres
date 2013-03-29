@@ -17,7 +17,7 @@
  * any database access.
  *
  *
- * Copyright (c) 2006-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2006-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/cache/ts_cache.c
@@ -642,7 +642,7 @@ check_TSCurrentConfig(char **newval, void **extra, GucSource source)
 		free(*newval);
 		*newval = strdup(buf);
 		pfree(buf);
-		if (!newval)
+		if (!*newval)
 			return false;
 	}
 

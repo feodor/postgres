@@ -4,7 +4,7 @@
  *	  prototypes for functions in backend/catalog/heap.c
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/heap.h
@@ -70,6 +70,7 @@ extern Oid heap_create_with_catalog(const char *relname,
 						 bool is_internal);
 
 extern void heap_create_init_fork(Relation rel);
+extern bool heap_is_matview_init_state(Relation rel);
 
 extern void heap_drop_with_catalog(Oid relid);
 
@@ -95,9 +96,11 @@ extern List *AddRelationNewConstraints(Relation rel,
 						  List *newColDefaults,
 						  List *newConstraints,
 						  bool allow_merge,
-						  bool is_local);
+						  bool is_local,
+						  bool is_internal);
 
-extern void StoreAttrDefault(Relation rel, AttrNumber attnum, Node *expr);
+extern void StoreAttrDefault(Relation rel, AttrNumber attnum,
+							 Node *expr, bool is_internal);
 
 extern Node *cookDefault(ParseState *pstate,
 			Node *raw_default,

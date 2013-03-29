@@ -9,7 +9,7 @@
  * proper FooMain() routine for the incarnation.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -41,9 +41,6 @@
 #include "utils/help_config.h"
 #include "utils/pg_locale.h"
 #include "utils/ps_status.h"
-#ifdef WIN32
-#include "libpq/pqsignal.h"
-#endif
 
 
 const char *progname;

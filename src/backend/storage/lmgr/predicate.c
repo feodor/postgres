@@ -125,7 +125,7 @@
  *		- Protects both PredXact and SerializableXidHash.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -460,13 +460,14 @@ static void OnConflict_CheckForSerializationFailure(const SERIALIZABLEXACT *read
 
 /*
  * Does this relation participate in predicate locking? Temporary and system
- * relations are exempt.
+ * relations are exempt, as are materialized views.
  */
 static inline bool
 PredicateLockingNeededForRelation(Relation relation)
 {
 	return !(relation->rd_id < FirstBootstrapObjectId ||
-			 RelationUsesLocalBuffers(relation));
+			 RelationUsesLocalBuffers(relation) ||
+			 relation->rd_rel->relkind == RELKIND_MATVIEW);
 }
 
 /*
@@ -3905,10 +3906,10 @@ CheckForSerializableConflictOut(bool visible, Relation relation,
 		case HEAPTUPLE_RECENTLY_DEAD:
 			if (!visible)
 				return;
-			xid = HeapTupleHeaderGetXmax(tuple->t_data);
+			xid = HeapTupleHeaderGetUpdateXid(tuple->t_data);
 			break;
 		case HEAPTUPLE_DELETE_IN_PROGRESS:
-			xid = HeapTupleHeaderGetXmax(tuple->t_data);
+			xid = HeapTupleHeaderGetUpdateXid(tuple->t_data);
 			break;
 		case HEAPTUPLE_INSERT_IN_PROGRESS:
 			xid = HeapTupleHeaderGetXmin(tuple->t_data);

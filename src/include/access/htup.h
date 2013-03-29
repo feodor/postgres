@@ -4,7 +4,7 @@
  *	  POSTGRES heap tuple definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/htup.h
@@ -80,7 +80,9 @@ typedef HeapTupleData *HeapTuple;
 extern CommandId HeapTupleHeaderGetCmin(HeapTupleHeader tup);
 extern CommandId HeapTupleHeaderGetCmax(HeapTupleHeader tup);
 extern void HeapTupleHeaderAdjustCmax(HeapTupleHeader tup,
-						  CommandId *cmax,
-						  bool *iscombo);
+						  CommandId *cmax, bool *iscombo);
+
+/* Prototype for HeapTupleHeader accessors in heapam.c */
+extern TransactionId HeapTupleGetUpdateXid(HeapTupleHeader tuple);
 
 #endif   /* HTUP_H */

@@ -4,7 +4,7 @@
  *	  prototypes for various files in optimizer/plan
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/optimizer/planmain.h
@@ -79,7 +79,8 @@ extern SetOp *make_setop(SetOpCmd cmd, SetOpStrategy strategy, Plan *lefttree,
 		   long numGroups, double outputRows);
 extern Result *make_result(PlannerInfo *root, List *tlist,
 			Node *resconstantqual, Plan *subplan);
-extern ModifyTable *make_modifytable(CmdType operation, bool canSetTag,
+extern ModifyTable *make_modifytable(PlannerInfo *root,
+				 CmdType operation, bool canSetTag,
 				 List *resultRelations, List *subplans, List *returningLists,
 				 List *rowMarks, int epqParam);
 extern bool is_projection_capable_plan(Plan *plan);

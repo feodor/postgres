@@ -6,7 +6,7 @@
  * access control decisions recently used, and reduce number of kernel
  * invocations to avoid unnecessary performance hit.
  *
- * Copyright (c) 2011-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2011-2013, PostgreSQL Global Development Group
  *
  * -------------------------------------------------------------------------
  */
@@ -250,10 +250,10 @@ sepgsql_avc_compute(const char *scontext, const char *tcontext, uint16 tclass)
 	{
 		if (!ucontext)
 			ncontext = sepgsql_compute_create(scontext, tcontext,
-											  SEPG_CLASS_PROCESS);
+											  SEPG_CLASS_PROCESS, NULL);
 		else
 			ncontext = sepgsql_compute_create(scontext, ucontext,
-											  SEPG_CLASS_PROCESS);
+											  SEPG_CLASS_PROCESS, NULL);
 		if (strcmp(scontext, ncontext) == 0)
 		{
 			pfree(ncontext);

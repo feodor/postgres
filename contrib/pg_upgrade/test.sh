@@ -6,7 +6,7 @@
 # runs the regression tests (to put in some data), runs pg_dumpall,
 # runs pg_upgrade, runs pg_dumpall again, compares the dumps.
 #
-# Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 
 set -e
@@ -16,6 +16,13 @@ set -e
 export PGPORT
 
 testhost=`uname -s`
+
+case $testhost in
+	MINGW*)	LISTEN_ADDRESSES="localhost" ;;
+	*)		LISTEN_ADDRESSES="" ;;
+esac
+
+POSTMASTER_OPTS="-F -c listen_addresses=$LISTEN_ADDRESSES"
 
 temp_root=$PWD/tmp_check
 
@@ -40,8 +47,9 @@ if [ "$1" = '--install' ]; then
 	# We need to make it use psql from our temporary installation,
 	# because otherwise the installcheck run below would try to
 	# use psql from the proper installation directory, which might
-	# be outdated or missing.
-	EXTRA_REGRESS_OPTS=--psqldir=$bindir
+	# be outdated or missing. But don't override anything else that's
+	# already in EXTRA_REGRESS_OPTS.
+	EXTRA_REGRESS_OPTS="$EXTRA_REGRESS_OPTS --psqldir=$bindir"
 	export EXTRA_REGRESS_OPTS
 fi
 
@@ -58,14 +66,24 @@ PGDATA=$temp_root/data
 export PGDATA
 rm -rf "$PGDATA" "$PGDATA".old
 
+unset PGDATABASE
+unset PGUSER
+unset PGSERVICE
+unset PGSSLMODE
+unset PGREQUIRESSL
+unset PGCONNECT_TIMEOUT
+unset PGHOST
+unset PGHOSTADDR
+
 logdir=$PWD/log
 rm -rf "$logdir"
 mkdir "$logdir"
 
+# enable echo so the user can see what is being executed
 set -x
 
 $oldbindir/initdb -N
-$oldbindir/pg_ctl start -l "$logdir/postmaster1.log" -o '-F' -w
+$oldbindir/pg_ctl start -l "$logdir/postmaster1.log" -o "$POSTMASTER_OPTS" -w
 if "$MAKE" -C "$oldsrc" installcheck; then
 	pg_dumpall -f "$temp_root"/dump1.sql || pg_dumpall1_status=$?
 	if [ "$newsrc" != "$oldsrc" ]; then
@@ -108,7 +126,7 @@ initdb -N
 
 pg_upgrade -d "${PGDATA}.old" -D "${PGDATA}" -b "$oldbindir" -B "$bindir"
 
-pg_ctl start -l "$logdir/postmaster2.log" -o '-F' -w
+pg_ctl start -l "$logdir/postmaster2.log" -o "$POSTMASTER_OPTS" -w
 
 case $testhost in
 	MINGW*)	cmd /c analyze_new_cluster.bat ;;
@@ -117,6 +135,11 @@ esac
 
 pg_dumpall -f "$temp_root"/dump2.sql || pg_dumpall2_status=$?
 pg_ctl -m fast stop
+
+# no need to echo commands anymore
+set +x
+echo
+
 if [ -n "$pg_dumpall2_status" ]; then
 	echo "pg_dumpall of post-upgrade database cluster failed"
 	exit 1

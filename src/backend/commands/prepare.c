@@ -7,7 +7,7 @@
  * accessed via the extended FE/BE query protocol.
  *
  *
- * Copyright (c) 2002-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2002-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/commands/prepare.c
@@ -289,7 +289,7 @@ ExecuteQuery(ExecuteStmt *stmt, IntoClause *intoClause,
 	/*
 	 * Run the portal as appropriate.
 	 */
-	PortalStart(portal, paramLI, eflags, true);
+	PortalStart(portal, paramLI, eflags, GetActiveSnapshot());
 
 	(void) PortalRun(portal, count, false, dest, dest, completionTag);
 
@@ -665,7 +665,7 @@ ExplainExecuteQuery(ExecuteStmt *execstmt, IntoClause *into, ExplainState *es,
 		PlannedStmt *pstmt = (PlannedStmt *) lfirst(p);
 
 		if (IsA(pstmt, PlannedStmt))
-			ExplainOnePlan(pstmt, into, es, query_string, paramLI);
+			ExplainOnePlan(pstmt, into, es, query_string, None_Receiver, paramLI);
 		else
 			ExplainOneUtility((Node *) pstmt, into, es, query_string, paramLI);
 

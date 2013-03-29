@@ -4,7 +4,7 @@
  *	  Routines to support inter-object dependencies.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/dependency.h
@@ -175,9 +175,6 @@ extern void recordDependencyOnSingleRelExpr(const ObjectAddress *depender,
 								DependencyType self_behavior);
 
 extern ObjectClass getObjectClass(const ObjectAddress *object);
-
-extern char *getObjectDescription(const ObjectAddress *object);
-extern char *getObjectDescriptionOids(Oid classid, Oid objid);
 
 extern ObjectAddresses *new_object_addresses(void);
 

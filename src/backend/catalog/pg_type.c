@@ -3,7 +3,7 @@
  * pg_type.c
  *	  routines to support manipulation of the pg_type relation
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -163,8 +163,7 @@ TypeShellMake(const char *typeName, Oid typeNamespace, Oid ownerId)
 								 false);
 
 	/* Post creation hook for new shell type */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   TypeRelationId, typoid, 0, NULL);
+	InvokeObjectPostCreateHook(TypeRelationId, typoid, 0);
 
 	/*
 	 * clean up and return the type-oid
@@ -476,8 +475,7 @@ TypeCreate(Oid newTypeOid,
 								 rebuildDeps);
 
 	/* Post creation hook for new type */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   TypeRelationId, typeObjectId, 0, NULL);
+	InvokeObjectPostCreateHook(TypeRelationId, typeObjectId, 0);
 
 	/*
 	 * finish up
@@ -713,6 +711,8 @@ RenameTypeInternal(Oid typeOid, const char *newTypeName, Oid typeNamespace)
 
 	/* update the system catalog indexes */
 	CatalogUpdateIndexes(pg_type_desc, tuple);
+
+	InvokeObjectPostAlterHook(TypeRelationId, typeOid, 0);
 
 	heap_freetuple(tuple);
 	heap_close(pg_type_desc, RowExclusiveLock);

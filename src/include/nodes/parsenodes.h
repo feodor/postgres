@@ -10,7 +10,7 @@
  * the location.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/parsenodes.h
@@ -74,7 +74,7 @@ typedef uint32 AclMode;			/* a bitmask of privilege bits */
 #define ACL_CONNECT		(1<<11) /* for databases */
 #define N_ACL_RIGHTS	12		/* 1 plus the last 1<<x */
 #define ACL_NO_RIGHTS	0
-/* Currently, SELECT ... FOR UPDATE/FOR SHARE requires UPDATE privileges */
+/* Currently, SELECT ... FOR [KEY] UPDATE/SHARE requires UPDATE privileges */
 #define ACL_SELECT_FOR_UPDATE	ACL_UPDATE
 
 
@@ -119,7 +119,7 @@ typedef struct Query
 	bool		hasDistinctOn;	/* distinctClause is from DISTINCT ON */
 	bool		hasRecursive;	/* WITH RECURSIVE was specified */
 	bool		hasModifyingCTE;	/* has INSERT/UPDATE/DELETE in WITH */
-	bool		hasForUpdate;	/* FOR UPDATE or FOR SHARE was specified */
+	bool		hasForUpdate;	/* FOR [KEY] UPDATE/SHARE was specified */
 
 	List	   *cteList;		/* WITH list (of CommonTableExpr's) */
 
@@ -572,18 +572,28 @@ typedef struct DefElem
 } DefElem;
 
 /*
- * LockingClause - raw representation of FOR UPDATE/SHARE options
+ * LockingClause - raw representation of FOR [NO KEY] UPDATE/[KEY] SHARE
+ * 		options
  *
  * Note: lockedRels == NIL means "all relations in query".	Otherwise it
  * is a list of RangeVar nodes.  (We use RangeVar mainly because it carries
  * a location field --- currently, parse analysis insists on unqualified
  * names in LockingClause.)
  */
+typedef enum LockClauseStrength
+{
+	/* order is important -- see applyLockingClause */
+	LCS_FORKEYSHARE,
+	LCS_FORSHARE,
+	LCS_FORNOKEYUPDATE,
+	LCS_FORUPDATE
+} LockClauseStrength;
+
 typedef struct LockingClause
 {
 	NodeTag		type;
-	List	   *lockedRels;		/* FOR UPDATE or FOR SHARE relations */
-	bool		forUpdate;		/* true = FOR UPDATE, false = FOR SHARE */
+	List	   *lockedRels;		/* FOR [KEY] UPDATE/SHARE relations */
+	LockClauseStrength strength;
 	bool		noWait;			/* NOWAIT option */
 } LockingClause;
 
@@ -703,6 +713,7 @@ typedef struct RangeTblEntry
 	 */
 	Oid			relid;			/* OID of the relation */
 	char		relkind;		/* relation kind (see pg_class.relkind) */
+	bool		isResultRel;	/* used in target of SELECT INTO or similar */
 
 	/*
 	 * Fields valid for a subquery RTE (else NULL):
@@ -865,21 +876,21 @@ typedef struct WindowClause
 
 /*
  * RowMarkClause -
- *	   parser output representation of FOR UPDATE/SHARE clauses
+ *	   parser output representation of FOR [KEY] UPDATE/SHARE clauses
  *
  * Query.rowMarks contains a separate RowMarkClause node for each relation
- * identified as a FOR UPDATE/SHARE target.  If FOR UPDATE/SHARE is applied
- * to a subquery, we generate RowMarkClauses for all normal and subquery rels
- * in the subquery, but they are marked pushedDown = true to distinguish them
- * from clauses that were explicitly written at this query level.  Also,
- * Query.hasForUpdate tells whether there were explicit FOR UPDATE/SHARE
- * clauses in the current query level.
+ * identified as a FOR [KEY] UPDATE/SHARE target.  If one of these clauses
+ * is applied to a subquery, we generate RowMarkClauses for all normal and
+ * subquery rels in the subquery, but they are marked pushedDown = true to
+ * distinguish them from clauses that were explicitly written at this query
+ * level.  Also, Query.hasForUpdate tells whether there were explicit FOR
+ * UPDATE/SHARE/KEY SHARE clauses in the current query level.
  */
 typedef struct RowMarkClause
 {
 	NodeTag		type;
 	Index		rti;			/* range table index of target relation */
-	bool		forUpdate;		/* true = FOR UPDATE, false = FOR SHARE */
+	LockClauseStrength strength;
 	bool		noWait;			/* NOWAIT option */
 	bool		pushedDown;		/* pushed down from higher query level? */
 } RowMarkClause;
@@ -1125,6 +1136,7 @@ typedef enum ObjectType
 	OBJECT_INDEX,
 	OBJECT_LANGUAGE,
 	OBJECT_LARGEOBJECT,
+	OBJECT_MATVIEW,
 	OBJECT_OPCLASS,
 	OBJECT_OPERATOR,
 	OBJECT_OPFAMILY,
@@ -1397,6 +1409,7 @@ typedef struct CopyStmt
 	List	   *attlist;		/* List of column names (as Strings), or NIL
 								 * for all columns */
 	bool		is_from;		/* TO or FROM */
+	bool		is_program;		/* is 'filename' a program to popen? */
 	char	   *filename;		/* filename, or NULL for STDIN/STDOUT */
 	List	   *options;		/* List of DefElem nodes */
 } CopyStmt;
@@ -2436,6 +2449,8 @@ typedef struct ExplainStmt
  * A query written as CREATE TABLE AS will produce this node type natively.
  * A query written as SELECT ... INTO will be transformed to this form during
  * parse analysis.
+ * A query written as CREATE MATERIALIZED view will produce this node type,
+ * during parse analysis, since it needs all the same data.
  *
  * The "query" field is handled similarly to EXPLAIN, though note that it
  * can be a SELECT or an EXECUTE, but not other DML statements.
@@ -2446,8 +2461,20 @@ typedef struct CreateTableAsStmt
 	NodeTag		type;
 	Node	   *query;			/* the query (see comments above) */
 	IntoClause *into;			/* destination table */
+	ObjectType	relkind;		/* type of object */
 	bool		is_select_into; /* it was written as SELECT INTO */
 } CreateTableAsStmt;
+
+/* ----------------------
+ *		REFRESH MATERIALIZED VIEW Statement
+ * ----------------------
+ */
+typedef struct RefreshMatViewStmt
+{
+	NodeTag		type;
+	bool		skipData;		/* true for WITH NO DATA */
+	RangeVar   *relation;		/* relation to insert into */
+} RefreshMatViewStmt;
 
 /* ----------------------
  * Checkpoint Statement
@@ -2506,7 +2533,7 @@ typedef struct ConstraintsSetStmt
 typedef struct ReindexStmt
 {
 	NodeTag		type;
-	ObjectType	kind;			/* OBJECT_INDEX, OBJECT_TABLE, OBJECT_DATABASE */
+	ObjectType	kind;			/* OBJECT_INDEX, OBJECT_TABLE, etc. */
 	RangeVar   *relation;		/* Table or index to reindex */
 	const char *name;			/* name of database to reindex */
 	bool		do_system;		/* include system tables in database case */

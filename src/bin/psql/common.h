@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/bin/psql/common.h
  */
@@ -12,23 +12,7 @@
 #include <setjmp.h>
 #include "libpq-fe.h"
 
-#ifdef USE_ASSERT_CHECKING
-#include <assert.h>
-#define psql_assert(p) assert(p)
-#else
-#define psql_assert(p)
-#endif
-
 #define atooid(x)  ((Oid) strtoul((x), NULL, 10))
-
-/*
- * Safer versions of some standard C library functions. If an
- * out-of-memory condition occurs, these functions will bail out
- * safely; therefore, their return value is guaranteed to be non-NULL.
- */
-extern char *pg_strdup(const char *string);
-extern void *pg_malloc(size_t size);
-extern void *pg_malloc0(size_t size);
 
 extern bool setQFout(const char *fname);
 

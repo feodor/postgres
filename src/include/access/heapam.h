@@ -4,7 +4,7 @@
  *	  POSTGRES heap access method definitions.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/heapam.h
@@ -26,14 +26,26 @@
 /* "options" flag bits for heap_insert */
 #define HEAP_INSERT_SKIP_WAL	0x0001
 #define HEAP_INSERT_SKIP_FSM	0x0002
+#define HEAP_INSERT_FROZEN		0x0004
 
 typedef struct BulkInsertStateData *BulkInsertState;
 
-typedef enum
+/*
+ * Possible lock modes for a tuple.
+ */
+typedef enum LockTupleMode
 {
-	LockTupleShared,
+	/* SELECT FOR KEY SHARE */
+	LockTupleKeyShare,
+	/* SELECT FOR SHARE */
+	LockTupleShare,
+	/* SELECT FOR NO KEY UPDATE, and UPDATEs that don't modify key columns */
+	LockTupleNoKeyExclusive,
+	/* SELECT FOR UPDATE, UPDATEs that modify key columns, and DELETE */
 	LockTupleExclusive
 } LockTupleMode;
+
+#define MaxLockTupleMode	LockTupleExclusive
 
 /*
  * When heap_update, heap_delete, or heap_lock_tuple fail because the target
@@ -128,14 +140,16 @@ extern HTSU_Result heap_delete(Relation relation, ItemPointer tid,
 extern HTSU_Result heap_update(Relation relation, ItemPointer otid,
 			HeapTuple newtup,
 			CommandId cid, Snapshot crosscheck, bool wait,
-			HeapUpdateFailureData *hufd);
+			HeapUpdateFailureData *hufd, LockTupleMode *lockmode);
 extern HTSU_Result heap_lock_tuple(Relation relation, HeapTuple tuple,
 				CommandId cid, LockTupleMode mode, bool nowait,
+				bool follow_update,
 				Buffer *buffer, HeapUpdateFailureData *hufd);
 extern void heap_inplace_update(Relation relation, HeapTuple tuple);
-extern bool heap_freeze_tuple(HeapTupleHeader tuple, TransactionId cutoff_xid);
+extern bool heap_freeze_tuple(HeapTupleHeader tuple, TransactionId cutoff_xid,
+				  TransactionId cutoff_multi);
 extern bool heap_tuple_needs_freeze(HeapTupleHeader tuple, TransactionId cutoff_xid,
-						Buffer buf);
+						MultiXactId cutoff_multi, Buffer buf);
 
 extern Oid	simple_heap_insert(Relation relation, HeapTuple tup);
 extern void simple_heap_delete(Relation relation, ItemPointer tid);

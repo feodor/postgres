@@ -3,7 +3,7 @@
  * varsup.c
  *	  postgres OID & XID variables support routines
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/access/transam/varsup.c
@@ -75,6 +75,8 @@ GetNewTransactionId(bool isSubXact)
 	 * If we're past xidStopLimit, refuse to execute transactions, unless
 	 * we are running in a standalone backend (which gives an escape hatch
 	 * to the DBA who somehow got past the earlier defenses).
+	 *
+	 * Note that this coding also appears in GetNewMultiXactId.
 	 *----------
 	 */
 	if (TransactionIdFollowsOrEquals(xid, ShmemVariableCache->xidVacLimit))

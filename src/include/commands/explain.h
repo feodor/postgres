@@ -3,7 +3,7 @@
  * explain.h
  *	  prototypes for explain.c
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994-5, Regents of the University of California
  *
  * src/include/commands/explain.h
@@ -67,8 +67,8 @@ extern void ExplainOneUtility(Node *utilityStmt, IntoClause *into,
 				  const char *queryString, ParamListInfo params);
 
 extern void ExplainOnePlan(PlannedStmt *plannedstmt, IntoClause *into,
-			   ExplainState *es,
-			   const char *queryString, ParamListInfo params);
+			   ExplainState *es, const char *queryString,
+			   DestReceiver *dest, ParamListInfo params);
 
 extern void ExplainPrintPlan(ExplainState *es, QueryDesc *queryDesc);
 

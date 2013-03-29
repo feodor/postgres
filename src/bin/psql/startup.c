@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/bin/psql/startup.c
  */
@@ -260,7 +260,7 @@ main(int argc, char *argv[])
 		if (!options.no_psqlrc)
 			process_psqlrc(argv[0]);
 
-		success = listAllDbs(false);
+		success = listAllDbs(NULL, false);
 		PQfinish(pset.db);
 		exit(success ? EXIT_SUCCESS : EXIT_FAILURE);
 	}

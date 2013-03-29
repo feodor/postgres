@@ -19,7 +19,7 @@
  * memory context given to inv_open (for LargeObjectDesc structs).
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -218,8 +218,7 @@ inv_create(Oid lobjId)
 							lobjId_new, GetUserId());
 
 	/* Post creation hook for new large object */
-	InvokeObjectAccessHook(OAT_POST_CREATE,
-						   LargeObjectRelationId, lobjId_new, 0, NULL);
+	InvokeObjectPostCreateHook(LargeObjectRelationId, lobjId_new, 0);
 
 	/*
 	 * Advance command counter to make new tuple visible to later operations.

@@ -3,7 +3,7 @@
  * heap.c
  *	  code to create and destroy POSTGRES heap relations
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -30,6 +30,7 @@
 #include "postgres.h"
 
 #include "access/htup_details.h"
+#include "access/multixact.h"
 #include "access/sysattr.h"
 #include "access/transam.h"
 #include "access/xact.h"
@@ -49,6 +50,7 @@
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_fn.h"
 #include "catalog/storage.h"
+#include "catalog/storage_xlog.h"
 #include "commands/tablecmds.h"
 #include "commands/typecmds.h"
 #include "miscadmin.h"
@@ -94,8 +96,9 @@ static Oid AddNewRelationType(const char *typeName,
 static void RelationRemoveInheritance(Oid relid);
 static void StoreRelCheck(Relation rel, char *ccname, Node *expr,
 			  bool is_validated, bool is_local, int inhcount,
-			  bool is_no_inherit);
-static void StoreConstraints(Relation rel, List *cooked_constraints);
+			  bool is_no_inherit, bool is_internal);
+static void StoreConstraints(Relation rel, List *cooked_constraints,
+							 bool is_internal);
 static bool MergeWithExistingConstraint(Relation rel, char *ccname, Node *expr,
 							bool allow_merge, bool is_local,
 							bool is_no_inherit);
@@ -778,6 +781,7 @@ InsertPgClassTuple(Relation pg_class_desc,
 	values[Anum_pg_class_relhastriggers - 1] = BoolGetDatum(rd_rel->relhastriggers);
 	values[Anum_pg_class_relhassubclass - 1] = BoolGetDatum(rd_rel->relhassubclass);
 	values[Anum_pg_class_relfrozenxid - 1] = TransactionIdGetDatum(rd_rel->relfrozenxid);
+	values[Anum_pg_class_relminmxid - 1] = MultiXactIdGetDatum(rd_rel->relminmxid);
 	if (relacl != (Datum) 0)
 		values[Anum_pg_class_relacl - 1] = relacl;
 	else
@@ -832,6 +836,7 @@ AddNewRelationTuple(Relation pg_class_desc,
 	switch (relkind)
 	{
 		case RELKIND_RELATION:
+		case RELKIND_MATVIEW:
 		case RELKIND_INDEX:
 		case RELKIND_TOASTVALUE:
 			/* The relation is real, but as yet empty */
@@ -853,8 +858,9 @@ AddNewRelationTuple(Relation pg_class_desc,
 			break;
 	}
 
-	/* Initialize relfrozenxid */
+	/* Initialize relfrozenxid and relminmxid */
 	if (relkind == RELKIND_RELATION ||
+		relkind == RELKIND_MATVIEW ||
 		relkind == RELKIND_TOASTVALUE)
 	{
 		/*
@@ -863,6 +869,15 @@ AddNewRelationTuple(Relation pg_class_desc,
 		 * that will do.
 		 */
 		new_rel_reltup->relfrozenxid = RecentXmin;
+		/*
+		 * Similarly, initialize the minimum Multixact to the first value that
+		 * could possibly be stored in tuples in the table.  Running
+		 * transactions could reuse values from their local cache, so we are
+		 * careful to consider all currently running multis.
+		 *
+		 * XXX this could be refined further, but is it worth the hassle?
+		 */
+		new_rel_reltup->relminmxid = GetOldestMultiXactId();
 	}
 	else
 	{
@@ -873,6 +888,7 @@ AddNewRelationTuple(Relation pg_class_desc,
 		 * commands/sequence.c.)
 		 */
 		new_rel_reltup->relfrozenxid = InvalidTransactionId;
+		new_rel_reltup->relfrozenxid = InvalidMultiXactId;
 	}
 
 	new_rel_reltup->relowner = relowner;
@@ -1056,8 +1072,8 @@ heap_create_with_catalog(const char *relname,
 		if (IsBinaryUpgrade &&
 			OidIsValid(binary_upgrade_next_heap_pg_class_oid) &&
 			(relkind == RELKIND_RELATION || relkind == RELKIND_SEQUENCE ||
-			 relkind == RELKIND_VIEW || relkind == RELKIND_COMPOSITE_TYPE ||
-			 relkind == RELKIND_FOREIGN_TABLE))
+			 relkind == RELKIND_VIEW || relkind == RELKIND_MATVIEW ||
+			 relkind == RELKIND_COMPOSITE_TYPE || relkind == RELKIND_FOREIGN_TABLE))
 		{
 			relid = binary_upgrade_next_heap_pg_class_oid;
 			binary_upgrade_next_heap_pg_class_oid = InvalidOid;
@@ -1083,6 +1099,7 @@ heap_create_with_catalog(const char *relname,
 		{
 			case RELKIND_RELATION:
 			case RELKIND_VIEW:
+			case RELKIND_MATVIEW:
 			case RELKIND_FOREIGN_TABLE:
 				relacl = get_user_default_acl(ACL_OBJECT_RELATION, ownerid,
 											  relnamespace);
@@ -1126,6 +1143,7 @@ heap_create_with_catalog(const char *relname,
 	 */
 	if (IsUnderPostmaster && (relkind == RELKIND_RELATION ||
 							  relkind == RELKIND_VIEW ||
+							  relkind == RELKIND_MATVIEW ||
 							  relkind == RELKIND_FOREIGN_TABLE ||
 							  relkind == RELKIND_COMPOSITE_TYPE))
 		new_array_oid = AssignTypeArrayOid();
@@ -1276,15 +1294,7 @@ heap_create_with_catalog(const char *relname,
 	}
 
 	/* Post creation hook for new relation */
-	if (object_access_hook)
-	{
-		ObjectAccessPostCreate	post_create_args;
-
-		memset(&post_create_args, 0, sizeof(ObjectAccessPostCreate));
-		post_create_args.is_internal = is_internal;
-		(*object_access_hook)(OAT_POST_CREATE, RelationRelationId,
-							  relid, 0, &post_create_args);
-    }
+	InvokeObjectPostCreateHookArg(RelationRelationId, relid, 0, is_internal);
 
 	/*
 	 * Store any supplied constraints and defaults.
@@ -1293,7 +1303,7 @@ heap_create_with_catalog(const char *relname,
 	 * entry, so the relation must be valid and self-consistent at this point.
 	 * In particular, there are not yet constraints and defaults anywhere.
 	 */
-	StoreConstraints(new_rel_desc, cooked_constraints);
+	StoreConstraints(new_rel_desc, cooked_constraints, is_internal);
 
 	/*
 	 * If there's a special on-commit action, remember it
@@ -1303,7 +1313,8 @@ heap_create_with_catalog(const char *relname,
 
 	if (relpersistence == RELPERSISTENCE_UNLOGGED)
 	{
-		Assert(relkind == RELKIND_RELATION || relkind == RELKIND_TOASTVALUE);
+		Assert(relkind == RELKIND_RELATION || relkind == RELKIND_MATVIEW ||
+			   relkind == RELKIND_TOASTVALUE);
 		heap_create_init_fork(new_rel_desc);
 	}
 
@@ -1332,6 +1343,26 @@ heap_create_init_fork(Relation rel)
 	if (XLogIsNeeded())
 		log_smgrcreate(&rel->rd_smgr->smgr_rnode.node, INIT_FORKNUM);
 	smgrimmedsync(rel->rd_smgr, INIT_FORKNUM);
+}
+
+/*
+ * Check whether a materialized view is in an initial, unloaded state.
+ *
+ * The check here must match what is set up in heap_create_init_fork().
+ * Currently the init fork is an empty file.  A missing heap is also
+ * considered to be unloaded.
+ */
+bool
+heap_is_matview_init_state(Relation rel)
+{
+	Assert(rel->rd_rel->relkind == RELKIND_MATVIEW);
+
+	RelationOpenSmgr(rel);
+
+	if (!smgrexists(rel->rd_smgr, MAIN_FORKNUM))
+		return true;
+
+	return (smgrnblocks(rel->rd_smgr, MAIN_FORKNUM) < 1);
 }
 
 /*
@@ -1806,7 +1837,8 @@ heap_drop_with_catalog(Oid relid)
  * Store a default expression for column attnum of relation rel.
  */
 void
-StoreAttrDefault(Relation rel, AttrNumber attnum, Node *expr)
+StoreAttrDefault(Relation rel, AttrNumber attnum,
+				 Node *expr, bool is_internal)
 {
 	char	   *adbin;
 	char	   *adsrc;
@@ -1898,6 +1930,17 @@ StoreAttrDefault(Relation rel, AttrNumber attnum, Node *expr)
 	 * Record dependencies on objects used in the expression, too.
 	 */
 	recordDependencyOnExpr(&defobject, expr, NIL, DEPENDENCY_NORMAL);
+
+	/*
+	 * Post creation hook for attribute defaults.
+	 *
+	 * XXX. ALTER TABLE ALTER COLUMN SET/DROP DEFAULT is implemented
+	 * with a couple of deletion/creation of the attribute's default entry,
+	 * so the callee should check existence of an older version of this
+	 * entry if it needs to distinguish.
+	 */
+	InvokeObjectPostCreateHookArg(AttrDefaultRelationId,
+								  RelationGetRelid(rel), attnum, is_internal);
 }
 
 /*
@@ -1909,7 +1952,7 @@ StoreAttrDefault(Relation rel, AttrNumber attnum, Node *expr)
 static void
 StoreRelCheck(Relation rel, char *ccname, Node *expr,
 			  bool is_validated, bool is_local, int inhcount,
-			  bool is_no_inherit)
+			  bool is_no_inherit, bool is_internal)
 {
 	char	   *ccbin;
 	char	   *ccsrc;
@@ -1993,7 +2036,8 @@ StoreRelCheck(Relation rel, char *ccname, Node *expr,
 						  ccsrc,	/* Source form of check constraint */
 						  is_local,		/* conislocal */
 						  inhcount,		/* coninhcount */
-						  is_no_inherit);		/* connoinherit */
+						  is_no_inherit,		/* connoinherit */
+						  is_internal);	/* internally constructed? */
 
 	pfree(ccbin);
 	pfree(ccsrc);
@@ -2008,7 +2052,7 @@ StoreRelCheck(Relation rel, char *ccname, Node *expr,
  * and StoreRelCheck (see AddRelationNewConstraints()).
  */
 static void
-StoreConstraints(Relation rel, List *cooked_constraints)
+StoreConstraints(Relation rel, List *cooked_constraints, bool is_internal)
 {
 	int			numchecks = 0;
 	ListCell   *lc;
@@ -2030,11 +2074,12 @@ StoreConstraints(Relation rel, List *cooked_constraints)
 		switch (con->contype)
 		{
 			case CONSTR_DEFAULT:
-				StoreAttrDefault(rel, con->attnum, con->expr);
+				StoreAttrDefault(rel, con->attnum, con->expr, is_internal);
 				break;
 			case CONSTR_CHECK:
 				StoreRelCheck(rel, con->name, con->expr, !con->skip_validation,
-						   con->is_local, con->inhcount, con->is_no_inherit);
+							  con->is_local, con->inhcount,
+							  con->is_no_inherit, is_internal);
 				numchecks++;
 				break;
 			default:
@@ -2060,6 +2105,7 @@ StoreConstraints(Relation rel, List *cooked_constraints)
  * newConstraints: list of Constraint nodes
  * allow_merge: TRUE if check constraints may be merged with existing ones
  * is_local: TRUE if definition is local, FALSE if it's inherited
+ * is_internal: TRUE if result of some internal process, not a user request
  *
  * All entries in newColDefaults will be processed.  Entries in newConstraints
  * will be processed only if they are CONSTR_CHECK type.
@@ -2077,7 +2123,8 @@ AddRelationNewConstraints(Relation rel,
 						  List *newColDefaults,
 						  List *newConstraints,
 						  bool allow_merge,
-						  bool is_local)
+						  bool is_local,
+						  bool is_internal)
 {
 	List	   *cookedConstraints = NIL;
 	TupleDesc	tupleDesc;
@@ -2140,7 +2187,7 @@ AddRelationNewConstraints(Relation rel,
 			(IsA(expr, Const) &&((Const *) expr)->constisnull))
 			continue;
 
-		StoreAttrDefault(rel, colDef->attnum, expr);
+		StoreAttrDefault(rel, colDef->attnum, expr, is_internal);
 
 		cooked = (CookedConstraint *) palloc(sizeof(CookedConstraint));
 		cooked->contype = CONSTR_DEFAULT;
@@ -2266,7 +2313,7 @@ AddRelationNewConstraints(Relation rel,
 		 * OK, store it.
 		 */
 		StoreRelCheck(rel, ccname, expr, !cdef->skip_validation, is_local,
-					  is_local ? 0 : 1, cdef->is_no_inherit);
+					  is_local ? 0 : 1, cdef->is_no_inherit, is_internal);
 
 		numchecks++;
 

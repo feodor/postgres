@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2013, PostgreSQL Global Development Group
  *
  * src/bin/psql/command.c
  */
@@ -99,7 +99,7 @@ HandleSlashCmds(PsqlScanState scan_state,
 	char	   *cmd;
 	char	   *arg;
 
-	psql_assert(scan_state);
+	Assert(scan_state != NULL);
 
 	/* Parse off the command name */
 	cmd = psql_scan_slash_command(scan_state);
@@ -355,7 +355,7 @@ exec_command(const char *cmd,
 					success = describeTableDetails(pattern, show_verbose, show_system);
 				else
 					/* standard listing of interesting things */
-					success = listTables("tvsE", NULL, show_verbose, show_system);
+					success = listTables("tvmsE", NULL, show_verbose, show_system);
 				break;
 			case 'a':
 				success = describeAggregates(pattern, show_verbose, show_system);
@@ -422,6 +422,7 @@ exec_command(const char *cmd,
 				break;
 			case 't':
 			case 'v':
+			case 'm':
 			case 'i':
 			case 's':
 			case 'E':
@@ -731,7 +732,7 @@ exec_command(const char *cmd,
 		free(fname);
 	}
 
-	/* \g means send query */
+	/* \g [filename] -- send query, optionally with output to file/pipe */
 	else if (strcmp(cmd, "g") == 0)
 	{
 		char	   *fname = psql_scan_slash_option(scan_state,
@@ -745,6 +746,22 @@ exec_command(const char *cmd,
 			pset.gfname = pg_strdup(fname);
 		}
 		free(fname);
+		status = PSQL_CMD_SEND;
+	}
+
+	/* \gset [prefix] -- send query and store result into variables */
+	else if (strcmp(cmd, "gset") == 0)
+	{
+		char	   *prefix = psql_scan_slash_option(scan_state,
+													OT_NORMAL, NULL, false);
+
+		if (prefix)
+			pset.gset_prefix = prefix;
+		else
+		{
+			/* we must set a non-NULL prefix to trigger storing */
+			pset.gset_prefix = pg_strdup("");
+		}
 		status = PSQL_CMD_SEND;
 	}
 
@@ -804,10 +821,22 @@ exec_command(const char *cmd,
 	}
 
 	/* \l is list databases */
-	else if (strcmp(cmd, "l") == 0 || strcmp(cmd, "list") == 0)
-		success = listAllDbs(false);
-	else if (strcmp(cmd, "l+") == 0 || strcmp(cmd, "list+") == 0)
-		success = listAllDbs(true);
+	else if (strcmp(cmd, "l") == 0 || strcmp(cmd, "list") == 0 ||
+			 strcmp(cmd, "l+") == 0 || strcmp(cmd, "list+") == 0)
+	{
+		char	   *pattern;
+		bool		show_verbose;
+
+		pattern = psql_scan_slash_option(scan_state,
+										 OT_NORMAL, NULL, true);
+
+		show_verbose = strchr(cmd, '+') ? true : false;
+
+		success = listAllDbs(pattern, show_verbose);
+
+		if (pattern)
+			free(pattern);
+	}
 
 	/*
 	 * large object things
@@ -1042,6 +1071,17 @@ exec_command(const char *cmd,
 	{
 		char	   *fname = psql_scan_slash_option(scan_state,
 												   OT_NORMAL, NULL, true);
+
+#if defined(WIN32) && !defined(__CYGWIN__)
+
+		/*
+		 * XXX This does not work for all terminal environments or for output
+		 * containing non-ASCII characters; see comments in simple_prompt().
+		 */
+#define DEVTTY	"con"
+#else
+#define DEVTTY	"/dev/tty"
+#endif
 
 		expand_tilde(&fname);
 		/* This scrolls off the screen when using /dev/tty */
@@ -1668,7 +1708,7 @@ connection_warnings(bool in_startup)
 {
 	if (!pset.quiet && !pset.notty)
 	{
-		int			client_ver = parse_version(PG_VERSION);
+		int			client_ver = PG_VERSION_NUM;
 
 		if (pset.sversion != client_ver)
 		{
@@ -1819,7 +1859,7 @@ editFile(const char *fname, int lineno)
 	char	   *sys;
 	int			result;
 
-	psql_assert(fname);
+	Assert(fname != NULL);
 
 	/* Find an editor to use */
 	editorName = getenv("PSQL_EDITOR");
@@ -2164,6 +2204,9 @@ _align2string(enum printFormat in)
 		case PRINT_LATEX:
 			return "latex";
 			break;
+		case PRINT_LATEX_LONGTABLE:
+			return "latex-longtable";
+			break;
 		case PRINT_TROFF_MS:
 			return "troff-ms";
 			break;
@@ -2177,7 +2220,7 @@ do_pset(const char *param, const char *value, printQueryOpt *popt, bool quiet)
 {
 	size_t		vallen = 0;
 
-	psql_assert(param);
+	Assert(param != NULL);
 
 	if (value)
 		vallen = strlen(value);
@@ -2197,6 +2240,8 @@ do_pset(const char *param, const char *value, printQueryOpt *popt, bool quiet)
 			popt->topt.format = PRINT_HTML;
 		else if (pg_strncasecmp("latex", value, vallen) == 0)
 			popt->topt.format = PRINT_LATEX;
+		else if (pg_strncasecmp("latex-longtable", value, vallen) == 0)
+			popt->topt.format = PRINT_LATEX_LONGTABLE;
 		else if (pg_strncasecmp("troff-ms", value, vallen) == 0)
 			popt->topt.format = PRINT_TROFF_MS;
 		else

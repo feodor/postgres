@@ -8,7 +8,10 @@
  * needed by rmgr routines (redo support for individual record types).
  * So the XLogRecord typedef and associated stuff appear in xlog.h.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Note: This file must be includable in both frontend and backend contexts,
+ * to allow stand-alone tools like pg_receivexlog to deal with WAL files.
+ *
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/xlog_internal.h
@@ -16,8 +19,9 @@
 #ifndef XLOG_INTERNAL_H
 #define XLOG_INTERNAL_H
 
-#include "access/xlog.h"
-#include "fmgr.h"
+#include "access/xlogdefs.h"
+#include "datatype/timestamp.h"
+#include "lib/stringinfo.h"
 #include "pgtime.h"
 #include "storage/block.h"
 #include "storage/relfilenode.h"
@@ -116,17 +120,6 @@ typedef XLogLongPageHeaderData *XLogLongPageHeader;
 		(dest) = (segno) * XLOG_SEG_SIZE + (offset)
 
 /*
- * Macros for manipulating XLOG pointers
- */
-
-/* Align a record pointer to next page */
-#define NextLogPage(recptr) \
-	do {	\
-		if ((recptr) % XLOG_BLCKSZ != 0)	\
-			XLByteAdvance(recptr, (XLOG_BLCKSZ - (recptr) % XLOG_BLCKSZ)); \
-	} while (0)
-
-/*
  * Compute ID and segment from an XLogRecPtr.
  *
  * For XLByteToSeg, do the computation at face value.  For XLByteToPrevSeg,
@@ -205,16 +198,51 @@ typedef XLogLongPageHeaderData *XLogLongPageHeader;
 			 (uint32) ((logSegNo) / XLogSegmentsPerXLogId), \
 			 (uint32) ((logSegNo) % XLogSegmentsPerXLogId), offset)
 
+/*
+ * Information logged when we detect a change in one of the parameters
+ * important for Hot Standby.
+ */
+typedef struct xl_parameter_change
+{
+	int			MaxConnections;
+	int			max_prepared_xacts;
+	int			max_locks_per_xact;
+	int			wal_level;
+} xl_parameter_change;
+
+/* logs restore point */
+typedef struct xl_restore_point
+{
+	TimestampTz rp_time;
+	char		rp_name[MAXFNAMELEN];
+} xl_restore_point;
+
+/* End of recovery mark, when we don't do an END_OF_RECOVERY checkpoint */
+typedef struct xl_end_of_recovery
+{
+	TimestampTz end_time;
+	TimeLineID	ThisTimeLineID; /* new TLI */
+	TimeLineID	PrevTimeLineID; /* previous TLI we forked off from */
+} xl_end_of_recovery;
+
+/*
+ * XLogRecord is defined in xlog.h, but we avoid #including that to keep
+ * this file includable in stand-alone programs.
+ */
+struct XLogRecord;
 
 /*
  * Method table for resource managers.
  *
- * RmgrTable[] is indexed by RmgrId values (see rmgr.h).
+ * This struct must be kept in sync with the PG_RMGR definition in
+ * rmgr.c.
+ *
+ * RmgrTable[] is indexed by RmgrId values (see rmgrlist.h).
  */
 typedef struct RmgrData
 {
 	const char *rm_name;
-	void		(*rm_redo) (XLogRecPtr lsn, XLogRecord *rptr);
+	void		(*rm_redo) (XLogRecPtr lsn, struct XLogRecord *rptr);
 	void		(*rm_desc) (StringInfo buf, uint8 xl_info, char *rec);
 	void		(*rm_startup) (void);
 	void		(*rm_cleanup) (void);
@@ -235,6 +263,7 @@ extern void GetOldestRestartPoint(XLogRecPtr *oldrecptr, TimeLineID *oldtli);
  * Exported for the functions in timeline.c and xlogarchive.c.  Only valid
  * in the startup process.
  */
+extern bool ArchiveRecoveryRequested;
 extern bool InArchiveRecovery;
 extern bool StandbyMode;
 extern char *recoveryRestoreCommand;
@@ -243,35 +272,16 @@ extern char *recoveryRestoreCommand;
  * Prototypes for functions in xlogarchive.c
  */
 extern bool RestoreArchivedFile(char *path, const char *xlogfname,
-					const char *recovername, off_t expectedSize);
+					const char *recovername, off_t expectedSize,
+					bool cleanupEnabled);
 extern void ExecuteRecoveryCommand(char *command, char *commandName,
 					   bool failOnerror);
+extern void KeepFileRestoredFromArchive(char  *path, char *xlogfname);
 extern void XLogArchiveNotify(const char *xlog);
 extern void XLogArchiveNotifySeg(XLogSegNo segno);
+extern void XLogArchiveForceDone(const char *xlog);
 extern bool XLogArchiveCheckDone(const char *xlog);
 extern bool XLogArchiveIsBusy(const char *xlog);
 extern void XLogArchiveCleanup(const char *xlog);
-
-/*
- * These aren't in xlog.h because I'd rather not include fmgr.h there.
- */
-extern Datum pg_start_backup(PG_FUNCTION_ARGS);
-extern Datum pg_stop_backup(PG_FUNCTION_ARGS);
-extern Datum pg_switch_xlog(PG_FUNCTION_ARGS);
-extern Datum pg_create_restore_point(PG_FUNCTION_ARGS);
-extern Datum pg_current_xlog_location(PG_FUNCTION_ARGS);
-extern Datum pg_current_xlog_insert_location(PG_FUNCTION_ARGS);
-extern Datum pg_last_xlog_receive_location(PG_FUNCTION_ARGS);
-extern Datum pg_last_xlog_replay_location(PG_FUNCTION_ARGS);
-extern Datum pg_last_xact_replay_timestamp(PG_FUNCTION_ARGS);
-extern Datum pg_xlogfile_name_offset(PG_FUNCTION_ARGS);
-extern Datum pg_xlogfile_name(PG_FUNCTION_ARGS);
-extern Datum pg_is_in_recovery(PG_FUNCTION_ARGS);
-extern Datum pg_xlog_replay_pause(PG_FUNCTION_ARGS);
-extern Datum pg_xlog_replay_resume(PG_FUNCTION_ARGS);
-extern Datum pg_is_xlog_replay_paused(PG_FUNCTION_ARGS);
-extern Datum pg_xlog_location_diff(PG_FUNCTION_ARGS);
-extern Datum pg_is_in_backup(PG_FUNCTION_ARGS);
-extern Datum pg_backup_start_time(PG_FUNCTION_ARGS);
 
 #endif   /* XLOG_INTERNAL_H */

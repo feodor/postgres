@@ -4,7 +4,7 @@
  *	  Declarations for operations on built-in types.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/builtins.h
@@ -143,7 +143,10 @@ extern Datum char_text(PG_FUNCTION_ARGS);
 /* domains.c */
 extern Datum domain_in(PG_FUNCTION_ARGS);
 extern Datum domain_recv(PG_FUNCTION_ARGS);
-extern void domain_check(Datum value, bool isnull, Oid domainType, void **extra, MemoryContext mcxt);
+extern void domain_check(Datum value, bool isnull, Oid domainType,
+			 void **extra, MemoryContext mcxt);
+extern int	errdatatype(Oid datatypeOid);
+extern int	errdomainconstraint(Oid datatypeOid, const char *conname);
 
 /* encode.c */
 extern Datum binary_encode(PG_FUNCTION_ARGS);
@@ -458,6 +461,7 @@ extern Datum pg_table_size(PG_FUNCTION_ARGS);
 extern Datum pg_indexes_size(PG_FUNCTION_ARGS);
 extern Datum pg_relation_filenode(PG_FUNCTION_ARGS);
 extern Datum pg_relation_filepath(PG_FUNCTION_ARGS);
+extern Datum pg_relation_is_scannable(PG_FUNCTION_ARGS);
 
 /* genfile.c */
 extern bytea *read_binary_file(const char *filename,
@@ -482,6 +486,8 @@ extern Datum pg_sleep(PG_FUNCTION_ARGS);
 extern Datum pg_get_keywords(PG_FUNCTION_ARGS);
 extern Datum pg_typeof(PG_FUNCTION_ARGS);
 extern Datum pg_collation_for(PG_FUNCTION_ARGS);
+extern Datum pg_view_is_insertable(PG_FUNCTION_ARGS);
+extern Datum pg_view_is_updatable(PG_FUNCTION_ARGS);
 
 /* oid.c */
 extern Datum oidin(PG_FUNCTION_ARGS);
@@ -609,7 +615,9 @@ extern Datum regdictionarysend(PG_FUNCTION_ARGS);
 extern Datum text_regclass(PG_FUNCTION_ARGS);
 extern List *stringToQualifiedNameList(const char *string);
 extern char *format_procedure(Oid procedure_oid);
+extern char *format_procedure_qualified(Oid procedure_oid);
 extern char *format_operator(Oid operator_oid);
+extern char *format_operator_qualified(Oid operator_oid);
 
 /* rowtypes.c */
 extern Datum record_in(PG_FUNCTION_ARGS);
@@ -1021,6 +1029,7 @@ extern Datum pg_encoding_max_length_sql(PG_FUNCTION_ARGS);
 /* format_type.c */
 extern Datum format_type(PG_FUNCTION_ARGS);
 extern char *format_type_be(Oid type_oid);
+extern char *format_type_be_qualified(Oid type_oid);
 extern char *format_type_with_typemod(Oid type_oid, int32 typemod);
 extern Datum oidvectortypes(PG_FUNCTION_ARGS);
 extern int32 type_maximum_size(Oid type_oid, int32 typemod);
@@ -1132,11 +1141,18 @@ extern Datum ginarrayconsistent(PG_FUNCTION_ARGS);
 /* access/transam/twophase.c */
 extern Datum pg_prepared_xact(PG_FUNCTION_ARGS);
 
+/* access/transam/multixact.c */
+extern Datum pg_get_multixact_members(PG_FUNCTION_ARGS);
+
 /* catalogs/dependency.c */
 extern Datum pg_describe_object(PG_FUNCTION_ARGS);
+extern Datum pg_identify_object(PG_FUNCTION_ARGS);
 
 /* commands/constraint.c */
 extern Datum unique_key_recheck(PG_FUNCTION_ARGS);
+
+/* commands/event_trigger.c */
+extern Datum pg_event_trigger_dropped_objects(PG_FUNCTION_ARGS);
 
 /* commands/extension.c */
 extern Datum pg_available_extensions(PG_FUNCTION_ARGS);

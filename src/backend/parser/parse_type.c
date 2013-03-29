@@ -3,7 +3,7 @@
  * parse_type.c
  *		handle type operations for parser
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -149,7 +149,7 @@ LookupTypeName(ParseState *pstate, const TypeName *typeName,
 			/* Look in specific schema only */
 			Oid			namespaceId;
 
-			namespaceId = LookupExplicitNamespace(schemaname);
+			namespaceId = LookupExplicitNamespace(schemaname, false);
 			typoid = GetSysCacheOid2(TYPENAMENSP,
 									 PointerGetDatum(typname),
 									 ObjectIdGetDatum(namespaceId));

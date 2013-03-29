@@ -30,7 +30,7 @@
  * destroyed at the end of each transaction.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -118,9 +118,8 @@ HeapTupleHeaderGetCmax(HeapTupleHeader tup)
 {
 	CommandId	cid = HeapTupleHeaderGetRawCommandId(tup);
 
-	/* We do not store cmax when locking a tuple */
-	Assert(!(tup->t_infomask & (HEAP_MOVED | HEAP_IS_LOCKED)));
-	Assert(TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmax(tup)));
+	Assert(!(tup->t_infomask & HEAP_MOVED));
+	Assert(TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetUpdateXid(tup)));
 
 	if (tup->t_infomask & HEAP_COMBOCID)
 		return GetRealCmax(cid);

@@ -3,7 +3,7 @@
  * planner.c
  *	  The query optimizer external interface.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -68,6 +68,7 @@ static void preprocess_rowmarks(PlannerInfo *root);
 static double preprocess_limit(PlannerInfo *root,
 				 double tuple_fraction,
 				 int64 *offset_est, int64 *count_est);
+static bool limit_needed(Query *parse);
 static void preprocess_groupclause(PlannerInfo *root);
 static bool choose_hashed_grouping(PlannerInfo *root,
 					   double tuple_fraction, double limit_tuples,
@@ -562,7 +563,7 @@ subquery_planner(PlannerGlobal *glob, Query *parse,
 				returningLists = NIL;
 
 			/*
-			 * If there was a FOR UPDATE/SHARE clause, the LockRows node will
+			 * If there was a FOR [KEY] UPDATE/SHARE clause, the LockRows node will
 			 * have dealt with fetching non-locked marked rows, else we need
 			 * to have ModifyTable do that.
 			 */
@@ -571,7 +572,8 @@ subquery_planner(PlannerGlobal *glob, Query *parse,
 			else
 				rowMarks = root->rowMarks;
 
-			plan = (Plan *) make_modifytable(parse->commandType,
+			plan = (Plan *) make_modifytable(root,
+											 parse->commandType,
 											 parse->canSetTag,
 									   list_make1_int(parse->resultRelation),
 											 list_make1(plan),
@@ -954,7 +956,7 @@ inheritance_planner(PlannerInfo *root)
 	root->simple_rel_array = save_rel_array;
 
 	/*
-	 * If there was a FOR UPDATE/SHARE clause, the LockRows node will have
+	 * If there was a FOR [KEY] UPDATE/SHARE clause, the LockRows node will have
 	 * dealt with fetching non-locked marked rows, else we need to have
 	 * ModifyTable do that.
 	 */
@@ -964,7 +966,8 @@ inheritance_planner(PlannerInfo *root)
 		rowMarks = root->rowMarks;
 
 	/* And last, tack on a ModifyTable node to do the UPDATE/DELETE work */
-	return (Plan *) make_modifytable(parse->commandType,
+	return (Plan *) make_modifytable(root,
+									 parse->commandType,
 									 parse->canSetTag,
 									 resultRelations,
 									 subplans,
@@ -1065,13 +1068,13 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 										tlist);
 
 		/*
-		 * Can't handle FOR UPDATE/SHARE here (parser should have checked
+		 * Can't handle FOR [KEY] UPDATE/SHARE here (parser should have checked
 		 * already, but let's make sure).
 		 */
 		if (parse->rowMarks)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("SELECT FOR UPDATE/SHARE is not allowed with UNION/INTERSECT/EXCEPT")));
+					 errmsg("row-level locks are not allowed with UNION/INTERSECT/EXCEPT")));
 
 		/*
 		 * Calculate pathkeys that represent result ordering requirements
@@ -1377,10 +1380,12 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 			{
 				/*
 				 * If the top-level plan node is one that cannot do expression
-				 * evaluation, we must insert a Result node to project the
+				 * evaluation and its existing target list isn't already what
+				 * we need, we must insert a Result node to project the
 				 * desired tlist.
 				 */
-				if (!is_projection_capable_plan(result_plan))
+				if (!is_projection_capable_plan(result_plan) &&
+					!tlist_same_exprs(sub_tlist, result_plan->targetlist))
 				{
 					result_plan = (Plan *) make_result(root,
 													   sub_tlist,
@@ -1540,10 +1545,13 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 			 * If the top-level plan node is one that cannot do expression
 			 * evaluation, we must insert a Result node to project the desired
 			 * tlist.  (In some cases this might not really be required, but
-			 * it's not worth trying to avoid it.)  Note that on second and
-			 * subsequent passes through the following loop, the top-level
-			 * node will be a WindowAgg which we know can project; so we only
-			 * need to check once.
+			 * it's not worth trying to avoid it.  In particular, think not to
+			 * skip adding the Result if the initial window_tlist matches the
+			 * top-level plan node's output, because we might change the tlist
+			 * inside the following loop.)  Note that on second and subsequent
+			 * passes through the following loop, the top-level node will be a
+			 * WindowAgg which we know can project; so we only need to check
+			 * once.
 			 */
 			if (!is_projection_capable_plan(result_plan))
 			{
@@ -1797,7 +1805,7 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 	}
 
 	/*
-	 * If there is a FOR UPDATE/SHARE clause, add the LockRows node. (Note: we
+	 * If there is a FOR [KEY] UPDATE/SHARE clause, add the LockRows node. (Note: we
 	 * intentionally test parse->rowMarks not root->rowMarks here. If there
 	 * are only non-locking rowmarks, they should be handled by the
 	 * ModifyTable node instead.)
@@ -1818,7 +1826,7 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 	/*
 	 * Finally, if there is a LIMIT/OFFSET clause, add the LIMIT node.
 	 */
-	if (parse->limitCount || parse->limitOffset)
+	if (limit_needed(parse))
 	{
 		result_plan = (Plan *) make_limit(result_plan,
 										  parse->limitOffset,
@@ -1983,7 +1991,7 @@ preprocess_rowmarks(PlannerInfo *root)
 	if (parse->rowMarks)
 	{
 		/*
-		 * We've got trouble if FOR UPDATE/SHARE appears inside grouping,
+		 * We've got trouble if FOR [KEY] UPDATE/SHARE appears inside grouping,
 		 * since grouping renders a reference to individual tuple CTIDs
 		 * invalid.  This is also checked at parse time, but that's
 		 * insufficient because of rule substitution, query pullup, etc.
@@ -1993,7 +2001,7 @@ preprocess_rowmarks(PlannerInfo *root)
 	else
 	{
 		/*
-		 * We only need rowmarks for UPDATE, DELETE, or FOR UPDATE/SHARE.
+		 * We only need rowmarks for UPDATE, DELETE, or FOR [KEY] UPDATE/SHARE.
 		 */
 		if (parse->commandType != CMD_UPDATE &&
 			parse->commandType != CMD_DELETE)
@@ -2003,7 +2011,7 @@ preprocess_rowmarks(PlannerInfo *root)
 	/*
 	 * We need to have rowmarks for all base relations except the target. We
 	 * make a bitmapset of all base rels and then remove the items we don't
-	 * need or have FOR UPDATE/SHARE marks for.
+	 * need or have FOR [KEY] UPDATE/SHARE marks for.
 	 */
 	rels = get_base_rel_indexes((Node *) parse->jointree);
 	if (parse->resultRelation)
@@ -2020,7 +2028,7 @@ preprocess_rowmarks(PlannerInfo *root)
 		PlanRowMark *newrc;
 
 		/*
-		 * Currently, it is syntactically impossible to have FOR UPDATE
+		 * Currently, it is syntactically impossible to have FOR UPDATE et al
 		 * applied to an update/delete target rel.	If that ever becomes
 		 * possible, we should drop the target from the PlanRowMark list.
 		 */
@@ -2035,15 +2043,35 @@ preprocess_rowmarks(PlannerInfo *root)
 		if (rte->rtekind != RTE_RELATION)
 			continue;
 
+		/*
+		 * Similarly, ignore RowMarkClauses for foreign tables; foreign tables
+		 * will instead get ROW_MARK_COPY items in the next loop.  (FDWs might
+		 * choose to do something special while fetching their rows, but that
+		 * is of no concern here.)
+		 */
+		if (rte->relkind == RELKIND_FOREIGN_TABLE)
+			continue;
+
 		rels = bms_del_member(rels, rc->rti);
 
 		newrc = makeNode(PlanRowMark);
 		newrc->rti = newrc->prti = rc->rti;
 		newrc->rowmarkId = ++(root->glob->lastRowMarkId);
-		if (rc->forUpdate)
-			newrc->markType = ROW_MARK_EXCLUSIVE;
-		else
-			newrc->markType = ROW_MARK_SHARE;
+		switch (rc->strength)
+		{
+			case LCS_FORUPDATE:
+				newrc->markType = ROW_MARK_EXCLUSIVE;
+				break;
+			case LCS_FORNOKEYUPDATE:
+				newrc->markType = ROW_MARK_NOKEYEXCLUSIVE;
+				break;
+			case LCS_FORSHARE:
+				newrc->markType = ROW_MARK_SHARE;
+				break;
+			case LCS_FORKEYSHARE:
+				newrc->markType = ROW_MARK_KEYSHARE;
+				break;
+		}
 		newrc->noWait = rc->noWait;
 		newrc->isParent = false;
 
@@ -2267,6 +2295,60 @@ preprocess_limit(PlannerInfo *root, double tuple_fraction,
 	}
 
 	return tuple_fraction;
+}
+
+/*
+ * limit_needed - do we actually need a Limit plan node?
+ *
+ * If we have constant-zero OFFSET and constant-null LIMIT, we can skip adding
+ * a Limit node.  This is worth checking for because "OFFSET 0" is a common
+ * locution for an optimization fence.  (Because other places in the planner
+ * merely check whether parse->limitOffset isn't NULL, it will still work as
+ * an optimization fence --- we're just suppressing unnecessary run-time
+ * overhead.)
+ *
+ * This might look like it could be merged into preprocess_limit, but there's
+ * a key distinction: here we need hard constants in OFFSET/LIMIT, whereas
+ * in preprocess_limit it's good enough to consider estimated values.
+ */
+static bool
+limit_needed(Query *parse)
+{
+	Node	   *node;
+
+	node = parse->limitCount;
+	if (node)
+	{
+		if (IsA(node, Const))
+		{
+			/* NULL indicates LIMIT ALL, ie, no limit */
+			if (!((Const *) node)->constisnull)
+				return true;	/* LIMIT with a constant value */
+		}
+		else
+			return true;		/* non-constant LIMIT */
+	}
+
+	node = parse->limitOffset;
+	if (node)
+	{
+		if (IsA(node, Const))
+		{
+			/* Treat NULL as no offset; the executor would too */
+			if (!((Const *) node)->constisnull)
+			{
+				int64	offset = DatumGetInt64(((Const *) node)->constvalue);
+
+				/* Executor would treat less-than-zero same as zero */
+				if (offset > 0)
+					return true;	/* OFFSET with a positive value */
+			}
+		}
+		else
+			return true;		/* non-constant OFFSET */
+	}
+
+	return false;				/* don't need a Limit plan node */
 }
 
 
@@ -3375,7 +3457,7 @@ plan_cluster_use_sort(Oid tableOid, Oid indexOid)
 	rte = makeNode(RangeTblEntry);
 	rte->rtekind = RTE_RELATION;
 	rte->relid = tableOid;
-	rte->relkind = RELKIND_RELATION;
+	rte->relkind = RELKIND_RELATION;  /* Don't be too picky. */
 	rte->lateral = false;
 	rte->inh = false;
 	rte->inFromCl = true;

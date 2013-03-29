@@ -5,7 +5,7 @@
  *	  wherein you authenticate a user by seeing what IP address the system
  *	  says he comes from and choosing authentication method based on it).
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -37,11 +37,20 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 
+#ifdef USE_LDAP
+#ifdef WIN32
+#include <winldap.h>
+#else
+#include <ldap.h>
+#endif
+#endif
+
 
 #define atooid(x)  ((Oid) strtoul((x), NULL, 10))
 #define atoxid(x)  ((TransactionId) strtoul((x), NULL, 10))
 
 #define MAX_TOKEN	256
+#define MAX_LINE	8192
 
 /* callback data for check_network_callback */
 typedef struct check_network_data
@@ -85,7 +94,7 @@ static MemoryContext parsed_ident_context = NULL;
 
 
 static MemoryContext tokenize_file(const char *filename, FILE *file,
-			  List **lines, List **line_nums);
+			  List **lines, List **line_nums, List **raw_lines);
 static List *tokenize_inc_file(List *tokens, const char *outer_filename,
 				  const char *inc_filename);
 static bool parse_hba_auth_opt(char *name, char *val, HbaLine *hbaline,
@@ -103,7 +112,8 @@ pg_isblank(const char c)
 
 
 /*
- * Grab one token out of fp. Tokens are strings of non-blank
+ * Grab one token out of the string pointed to by lineptr.
+ * Tokens are strings of non-blank
  * characters bounded by blank characters, commas, beginning of line, and
  * end of line. Blank means space or tab. Tokens can be delimited by
  * double quotes (this allows the inclusion of blanks, but not newlines).
@@ -126,7 +136,7 @@ pg_isblank(const char c)
  * Handle comments.
  */
 static bool
-next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
+next_token(char **lineptr, char *buf, int bufsz, bool *initial_quote,
 		   bool *terminating_comma)
 {
 	int			c;
@@ -143,10 +153,10 @@ next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
 	*terminating_comma = false;
 
 	/* Move over initial whitespace and commas */
-	while ((c = getc(fp)) != EOF && (pg_isblank(c) || c == ','))
+	while ((c = (*(*lineptr)++)) != '\0' && (pg_isblank(c) || c == ','))
 		;
 
-	if (c == EOF || c == '\n')
+	if (c == '\0' || c == '\n')
 	{
 		*buf = '\0';
 		return false;
@@ -156,17 +166,17 @@ next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
 	 * Build a token in buf of next characters up to EOF, EOL, unquoted comma,
 	 * or unquoted whitespace.
 	 */
-	while (c != EOF && c != '\n' &&
+	while (c != '\0' && c != '\n' &&
 		   (!pg_isblank(c) || in_quote))
 	{
 		/* skip comments to EOL */
 		if (c == '#' && !in_quote)
 		{
-			while ((c = getc(fp)) != EOF && c != '\n')
+			while ((c = (*(*lineptr)++)) != '\0' && c != '\n')
 				;
 			/* If only comment, consume EOL too; return EOL */
-			if (c != EOF && buf == start_buf)
-				c = getc(fp);
+			if (c != '\0' && buf == start_buf)
+				(*lineptr)++;
 			break;
 		}
 
@@ -178,7 +188,7 @@ next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
 			   errmsg("authentication file token too long, skipping: \"%s\"",
 					  start_buf)));
 			/* Discard remainder of line */
-			while ((c = getc(fp)) != EOF && c != '\n')
+			while ((c = (*(*lineptr)++)) != '\0' && c != '\n')
 				;
 			break;
 		}
@@ -207,15 +217,14 @@ next_token(FILE *fp, char *buf, int bufsz, bool *initial_quote,
 				*initial_quote = true;
 		}
 
-		c = getc(fp);
+		c = *(*lineptr)++;
 	}
 
 	/*
 	 * Put back the char right after the token (critical in case it is EOL,
 	 * since we need to detect end-of-line at next call).
 	 */
-	if (c != EOF)
-		ungetc(c, fp);
+	(*lineptr)--;
 
 	*buf = '\0';
 
@@ -250,13 +259,13 @@ copy_hba_token(HbaToken *in)
 
 
 /*
- * Tokenize one HBA field from a file, handling file inclusion and comma lists.
+ * Tokenize one HBA field from a line, handling file inclusion and comma lists.
  *
  * The result is a List of HbaToken structs for each individual token,
  * or NIL if we reached EOL.
  */
 static List *
-next_field_expand(const char *filename, FILE *file)
+next_field_expand(const char *filename, char **lineptr)
 {
 	char		buf[MAX_TOKEN];
 	bool		trailing_comma;
@@ -265,7 +274,7 @@ next_field_expand(const char *filename, FILE *file)
 
 	do
 	{
-		if (!next_token(file, buf, sizeof(buf), &initial_quote, &trailing_comma))
+		if (!next_token(lineptr, buf, sizeof(buf), &initial_quote, &trailing_comma))
 			break;
 
 		/* Is this referencing a file? */
@@ -327,7 +336,7 @@ tokenize_inc_file(List *tokens,
 	}
 
 	/* There is possible recursion here if the file contains @ */
-	linecxt = tokenize_file(inc_fullname, inc_file, &inc_lines, &inc_line_nums);
+	linecxt = tokenize_file(inc_fullname, inc_file, &inc_lines, &inc_line_nums, NULL);
 
 	FreeFile(inc_file);
 	pfree(inc_fullname);
@@ -356,8 +365,8 @@ tokenize_inc_file(List *tokens,
 }
 
 /*
- * Tokenize the given file, storing the resulting data into two Lists: a
- * List of lines, and a List of line numbers.
+ * Tokenize the given file, storing the resulting data into three Lists: a
+ * List of lines, a List of line numbers, and a List of raw line contents.
  *
  * The list of lines is a triple-nested List structure.  Each line is a List of
  * fields, and each field is a List of HbaTokens.
@@ -369,7 +378,7 @@ tokenize_inc_file(List *tokens,
  */
 static MemoryContext
 tokenize_file(const char *filename, FILE *file,
-			  List **lines, List **line_nums)
+			  List **lines, List **line_nums, List **raw_lines)
 {
 	List	   *current_line = NIL;
 	List	   *current_field = NIL;
@@ -388,30 +397,51 @@ tokenize_file(const char *filename, FILE *file,
 
 	while (!feof(file) && !ferror(file))
 	{
-		current_field = next_field_expand(filename, file);
+		char rawline[MAX_LINE];
+		char *lineptr;
 
-		/* add tokens to list, unless we are at EOL or comment start */
-		if (list_length(current_field) > 0)
+		if (!fgets(rawline, sizeof(rawline), file))
+			break;
+		if (strlen(rawline) == MAX_LINE-1)
+			/* Line too long! */
+			ereport(ERROR,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("authentication file line too long"),
+					 errcontext("line %d of configuration file \"%s\"",
+								line_number, filename)));
+
+		/* Strip trailing linebreak from rawline */
+		while (rawline[strlen(rawline)-1] == '\n' ||
+			   rawline[strlen(rawline)-1] == '\r')
+			rawline[strlen(rawline)-1] = '\0';
+
+		lineptr = rawline;
+		while (strlen(lineptr) > 0)
 		{
-			if (current_line == NIL)
+			current_field = next_field_expand(filename, &lineptr);
+
+			/* add tokens to list, unless we are at EOL or comment start */
+			if (list_length(current_field) > 0)
 			{
-				/* make a new line List, record its line number */
-				current_line = lappend(current_line, current_field);
-				*lines = lappend(*lines, current_line);
-				*line_nums = lappend_int(*line_nums, line_number);
-			}
-			else
-			{
-				/* append tokens to current line's list */
-				current_line = lappend(current_line, current_field);
+				if (current_line == NIL)
+				{
+					/* make a new line List, record its line number */
+					current_line = lappend(current_line, current_field);
+					*lines = lappend(*lines, current_line);
+					*line_nums = lappend_int(*line_nums, line_number);
+					if (raw_lines)
+						*raw_lines = lappend(*raw_lines, pstrdup(rawline));
+				}
+				else
+				{
+					/* append tokens to current line's list */
+					current_line = lappend(current_line, current_field);
+				}
 			}
 		}
-		else
-		{
-			/* we are at real or logical EOL, so force a new line List */
-			current_line = NIL;
-			line_number++;
-		}
+		/* we are at real or logical EOL, so force a new line List */
+		current_line = NIL;
+		line_number++;
 	}
 
 	MemoryContextSwitchTo(oldcxt);
@@ -807,7 +837,7 @@ check_same_host_or_net(SockAddr *raddr, IPCompareMethod method)
  * NULL.
  */
 static HbaLine *
-parse_hba_line(List *line, int line_num)
+parse_hba_line(List *line, int line_num, char *raw_line)
 {
 	char	   *str;
 	struct addrinfo *gai_result;
@@ -823,6 +853,7 @@ parse_hba_line(List *line, int line_num)
 
 	parsedline = palloc0(sizeof(HbaLine));
 	parsedline->linenumber = line_num;
+	parsedline->rawline = pstrdup(raw_line);
 
 	/* Check the record type. */
 	field = list_head(line);
@@ -1336,7 +1367,7 @@ parse_hba_line(List *line, int line_num)
 			{
 				ereport(LOG,
 						(errcode(ERRCODE_CONFIG_FILE_ERROR),
-						 errmsg("cannot use ldapbasedn, ldapbinddn, ldapbindpasswd, or ldapsearchattribute together with ldapprefix"),
+						 errmsg("cannot use ldapbasedn, ldapbinddn, ldapbindpasswd, ldapsearchattribute, or ldapurl together with ldapprefix"),
 						 errcontext("line %d of configuration file \"%s\"",
 									line_num, HbaFileName)));
 				return NULL;
@@ -1378,6 +1409,10 @@ parse_hba_line(List *line, int line_num)
 static bool
 parse_hba_auth_opt(char *name, char *val, HbaLine *hbaline, int line_num)
 {
+#ifdef USE_LDAP
+	hbaline->ldapscope = LDAP_SCOPE_SUBTREE;
+#endif
+
 	if (strcmp(name, "map") == 0)
 	{
 		if (hbaline->auth_method != uaIdent &&
@@ -1436,6 +1471,55 @@ parse_hba_auth_opt(char *name, char *val, HbaLine *hbaline, int line_num)
 	{
 		REQUIRE_AUTH_OPTION(uaPAM, "pamservice", "pam");
 		hbaline->pamservice = pstrdup(val);
+	}
+	else if (strcmp(name, "ldapurl") == 0)
+	{
+#ifdef LDAP_API_FEATURE_X_OPENLDAP
+		LDAPURLDesc *urldata;
+		int rc;
+#endif
+
+		REQUIRE_AUTH_OPTION(uaLDAP, "ldapurl", "ldap");
+#ifdef LDAP_API_FEATURE_X_OPENLDAP
+		rc = ldap_url_parse(val, &urldata);
+		if (rc != LDAP_SUCCESS)
+		{
+			ereport(LOG,
+				 (errcode(ERRCODE_CONFIG_FILE_ERROR),
+				  errmsg("could not parse LDAP URL \"%s\": %s", val, ldap_err2string(rc))));
+			return false;
+		}
+
+		if (strcmp(urldata->lud_scheme, "ldap") != 0)
+		{
+			ereport(LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("unsupported LDAP URL scheme: %s", urldata->lud_scheme)));
+			ldap_free_urldesc(urldata);
+			return false;
+		}
+
+		hbaline->ldapserver = pstrdup(urldata->lud_host);
+		hbaline->ldapport = urldata->lud_port;
+		hbaline->ldapbasedn = pstrdup(urldata->lud_dn);
+
+		if (urldata->lud_attrs)
+			hbaline->ldapsearchattribute = pstrdup(urldata->lud_attrs[0]);  /* only use first one */
+		hbaline->ldapscope = urldata->lud_scope;
+		if (urldata->lud_filter)
+		{
+			ereport(LOG,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("filters not supported in LDAP URLs")));
+			ldap_free_urldesc(urldata);
+			return false;
+		}
+		ldap_free_urldesc(urldata);
+#else /* not OpenLDAP */
+		ereport(LOG,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("LDAP URLs not supported on this platform")));
+#endif /* not OpenLDAP */
 	}
 	else if (strcmp(name, "ldaptls") == 0)
 	{
@@ -1700,8 +1784,10 @@ load_hba(void)
 	FILE	   *file;
 	List	   *hba_lines = NIL;
 	List	   *hba_line_nums = NIL;
+	List	   *hba_raw_lines = NIL;
 	ListCell   *line,
-			   *line_num;
+			   *line_num,
+			   *raw_line;
 	List	   *new_parsed_lines = NIL;
 	bool		ok = true;
 	MemoryContext linecxt;
@@ -1718,7 +1804,7 @@ load_hba(void)
 		return false;
 	}
 
-	linecxt = tokenize_file(HbaFileName, file, &hba_lines, &hba_line_nums);
+	linecxt = tokenize_file(HbaFileName, file, &hba_lines, &hba_line_nums, &hba_raw_lines);
 	FreeFile(file);
 
 	/* Now parse all the lines */
@@ -1728,11 +1814,11 @@ load_hba(void)
 								   ALLOCSET_DEFAULT_MINSIZE,
 								   ALLOCSET_DEFAULT_MAXSIZE);
 	oldcxt = MemoryContextSwitchTo(hbacxt);
-	forboth(line, hba_lines, line_num, hba_line_nums)
+	forthree(line, hba_lines, line_num, hba_line_nums, raw_line, hba_raw_lines)
 	{
 		HbaLine    *newline;
 
-		if ((newline = parse_hba_line(lfirst(line), lfirst_int(line_num))) == NULL)
+		if ((newline = parse_hba_line(lfirst(line), lfirst_int(line_num), lfirst(raw_line))) == NULL)
 		{
 			/*
 			 * Parse error in the file, so indicate there's a problem.  NB: a
@@ -2092,7 +2178,7 @@ load_ident(void)
 		return false;
 	}
 
-	linecxt = tokenize_file(IdentFileName, file, &ident_lines, &ident_line_nums);
+	linecxt = tokenize_file(IdentFileName, file, &ident_lines, &ident_line_nums, NULL);
 	FreeFile(file);
 
 	/* Now parse all the lines */

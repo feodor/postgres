@@ -5,7 +5,7 @@
  *	  commands.  At one time acted as an interface between the Lisp and C
  *	  systems.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -37,6 +37,7 @@
 #include "commands/event_trigger.h"
 #include "commands/explain.h"
 #include "commands/extension.h"
+#include "commands/matview.h"
 #include "commands/lockcmds.h"
 #include "commands/portalcmds.h"
 #include "commands/prepare.h"
@@ -131,7 +132,7 @@ CommandIsReadOnly(Node *parsetree)
 		{
 			case CMD_SELECT:
 				if (stmt->rowMarks != NIL)
-					return false;		/* SELECT FOR UPDATE/SHARE */
+					return false;		/* SELECT FOR [KEY] UPDATE/SHARE */
 				else if (stmt->hasModifyingCTE)
 					return false;		/* data-modifying CTE */
 				else
@@ -202,6 +203,7 @@ check_xact_readonly(Node *parsetree)
 		case T_CreateSeqStmt:
 		case T_CreateStmt:
 		case T_CreateTableAsStmt:
+		case T_RefreshMatViewStmt:
 		case T_CreateTableSpaceStmt:
 		case T_CreateTrigStmt:
 		case T_CompositeTypeStmt:
@@ -340,6 +342,70 @@ ProcessUtility(Node *parsetree,
 								dest, completionTag, context);
 }
 
+#define InvokeDDLCommandEventTriggers(parsetree, fncall) \
+	do { \
+	    if (isCompleteQuery) \
+        { \
+			EventTriggerDDLCommandStart(parsetree); \
+		} \
+		fncall; \
+        if (isCompleteQuery) \
+        { \
+			EventTriggerSQLDrop(parsetree); \
+			EventTriggerDDLCommandEnd(parsetree); \
+		} \
+	} while (0)
+
+#define InvokeDDLCommandEventTriggersIfSupported(parsetree, fncall, objtype) \
+	do { \
+		bool	_supported = EventTriggerSupportsObjectType(objtype); \
+		\
+		if (_supported) \
+		{ \
+			EventTriggerDDLCommandStart(parsetree); \
+		} \
+		fncall; \
+		if (_supported) \
+		{ \
+			EventTriggerSQLDrop(parsetree); \
+			EventTriggerDDLCommandEnd(parsetree); \
+		} \
+	} while (0)
+
+/*
+ * UTILITY_BEGIN_QUERY and UTILITY_END_QUERY are a pair of macros to enclose
+ * execution of a single DDL command, to ensure the event trigger environment
+ * is appropriately set up before starting, and tore down after completion or
+ * error.
+ */
+#define UTILITY_BEGIN_QUERY(isComplete) \
+	do { \
+		bool		_needCleanup; \
+		\
+		_needCleanup = (isComplete) && EventTriggerBeginCompleteQuery(); \
+		\
+		PG_TRY(); \
+		{ \
+			/* avoid empty statement when followed by a semicolon */ \
+			(void) 0
+
+#define UTILITY_END_QUERY() \
+		} \
+		PG_CATCH(); \
+		{ \
+			if (_needCleanup) \
+			{ \
+				EventTriggerEndCompleteQuery(); \
+			} \
+			PG_RE_THROW(); \
+		} \
+		PG_END_TRY(); \
+		if (_needCleanup) \
+		{ \
+			EventTriggerEndCompleteQuery(); \
+		} \
+	} while (0)
+
 void
 standard_ProcessUtility(Node *parsetree,
 						const char *queryString,
@@ -355,6 +421,8 @@ standard_ProcessUtility(Node *parsetree,
 
 	if (completionTag)
 		completionTag[0] = '\0';
+
+	UTILITY_BEGIN_QUERY(isCompleteQuery);
 
 	switch (nodeTag(parsetree))
 	{
@@ -507,10 +575,10 @@ standard_ProcessUtility(Node *parsetree,
 			 * relation and attribute manipulation
 			 */
 		case T_CreateSchemaStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateSchemaCommand((CreateSchemaStmt *) parsetree,
-								queryString);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateSchemaCommand((CreateSchemaStmt *) parsetree,
+									queryString));
 			break;
 
 		case T_CreateStmt:
@@ -583,6 +651,12 @@ standard_ProcessUtility(Node *parsetree,
 					if (lnext(l) != NULL)
 						CommandCounterIncrement();
 				}
+
+				if (isCompleteQuery)
+				{
+					EventTriggerSQLDrop(parsetree);
+					EventTriggerDDLCommandEnd(parsetree);
+				}
 			}
 			break;
 
@@ -604,63 +678,63 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_CreateExtensionStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateExtension((CreateExtensionStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateExtension((CreateExtensionStmt *) parsetree));
 			break;
 
 		case T_AlterExtensionStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			ExecAlterExtensionStmt((AlterExtensionStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				ExecAlterExtensionStmt((AlterExtensionStmt *) parsetree));
 			break;
 
 		case T_AlterExtensionContentsStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			ExecAlterExtensionContentsStmt((AlterExtensionContentsStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				ExecAlterExtensionContentsStmt((AlterExtensionContentsStmt *) parsetree));
 			break;
 
 		case T_CreateFdwStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateForeignDataWrapper((CreateFdwStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateForeignDataWrapper((CreateFdwStmt *) parsetree));
 			break;
 
 		case T_AlterFdwStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			AlterForeignDataWrapper((AlterFdwStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterForeignDataWrapper((AlterFdwStmt *) parsetree));
 			break;
 
 		case T_CreateForeignServerStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateForeignServer((CreateForeignServerStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateForeignServer((CreateForeignServerStmt *) parsetree));
 			break;
 
 		case T_AlterForeignServerStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			AlterForeignServer((AlterForeignServerStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterForeignServer((AlterForeignServerStmt *) parsetree));
 			break;
 
 		case T_CreateUserMappingStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateUserMapping((CreateUserMappingStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateUserMapping((CreateUserMappingStmt *) parsetree));
 			break;
 
 		case T_AlterUserMappingStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			AlterUserMapping((AlterUserMappingStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterUserMapping((AlterUserMappingStmt *) parsetree));
 			break;
 
 		case T_DropUserMappingStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			RemoveUserMapping((DropUserMappingStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				RemoveUserMapping((DropUserMappingStmt *) parsetree));
 			break;
 
 		case T_DropStmt:
@@ -682,6 +756,7 @@ standard_ProcessUtility(Node *parsetree,
 					case OBJECT_TABLE:
 					case OBJECT_SEQUENCE:
 					case OBJECT_VIEW:
+					case OBJECT_MATVIEW:
 					case OBJECT_FOREIGN_TABLE:
 						RemoveRelations((DropStmt *) parsetree);
 						break;
@@ -689,6 +764,14 @@ standard_ProcessUtility(Node *parsetree,
 						RemoveObjects((DropStmt *) parsetree);
 						break;
 				}
+
+				if (isCompleteQuery
+					&& EventTriggerSupportsObjectType(stmt->removeType))
+				{
+					EventTriggerSQLDrop(parsetree);
+					EventTriggerDDLCommandEnd(parsetree);
+				}
+
 				break;
 			}
 
@@ -708,7 +791,7 @@ standard_ProcessUtility(Node *parsetree,
 			{
 				uint64		processed;
 
-				processed = DoCopy((CopyStmt *) parsetree, queryString);
+				DoCopy((CopyStmt *) parsetree, queryString, &processed);
 				if (completionTag)
 					snprintf(completionTag, COMPLETION_TAG_BUFSIZE,
 							 "COPY " UINT64_FORMAT, processed);
@@ -736,37 +819,29 @@ standard_ProcessUtility(Node *parsetree,
 			 */
 		case T_RenameStmt:
 			{
-				RenameStmt  *stmt;
+				RenameStmt *stmt = (RenameStmt *) parsetree;
 
-				stmt = (RenameStmt *) parsetree;
-				if (isCompleteQuery &&
-					EventTriggerSupportsObjectType(stmt->renameType))
-					EventTriggerDDLCommandStart(parsetree);
-				ExecRenameStmt(stmt);
+				InvokeDDLCommandEventTriggersIfSupported(parsetree,
+														 ExecRenameStmt(stmt),
+														 stmt->renameType);
 				break;
 			}
 
 		case T_AlterObjectSchemaStmt:
 			{
-				AlterObjectSchemaStmt  *stmt;
-
-				stmt = (AlterObjectSchemaStmt *) parsetree;
-				if (isCompleteQuery &&
-					EventTriggerSupportsObjectType(stmt->objectType))
-					EventTriggerDDLCommandStart(parsetree);
-				ExecAlterObjectSchemaStmt(stmt);
+				AlterObjectSchemaStmt  *stmt = (AlterObjectSchemaStmt *) parsetree;
+				InvokeDDLCommandEventTriggersIfSupported(parsetree,
+														 ExecAlterObjectSchemaStmt(stmt),
+														 stmt->objectType);
 				break;
 			}
 
 		case T_AlterOwnerStmt:
 			{
-				AlterOwnerStmt  *stmt;
-
-				stmt = (AlterOwnerStmt *) parsetree;
-				if (isCompleteQuery &&
-					EventTriggerSupportsObjectType(stmt->objectType))
-					EventTriggerDDLCommandStart(parsetree);
-				ExecAlterOwnerStmt(stmt);
+				AlterOwnerStmt  *stmt = (AlterOwnerStmt *) parsetree;
+				InvokeDDLCommandEventTriggersIfSupported(parsetree,
+														 ExecAlterOwnerStmt(stmt),
+														 stmt->objectType);
 				break;
 			}
 
@@ -825,6 +900,12 @@ standard_ProcessUtility(Node *parsetree,
 					ereport(NOTICE,
 						  (errmsg("relation \"%s\" does not exist, skipping",
 								  atstmt->relation->relname)));
+
+				if (isCompleteQuery)
+				{
+					EventTriggerSQLDrop(parsetree);
+					EventTriggerDDLCommandEnd(parsetree);
+				}
 			}
 			break;
 
@@ -889,9 +970,9 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_AlterDefaultPrivilegesStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			ExecAlterDefaultPrivilegesStmt((AlterDefaultPrivilegesStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				ExecAlterDefaultPrivilegesStmt((AlterDefaultPrivilegesStmt *) parsetree));
 			break;
 
 			/*
@@ -950,54 +1031,46 @@ standard_ProcessUtility(Node *parsetree,
 			{
 				CompositeTypeStmt *stmt = (CompositeTypeStmt *) parsetree;
 
-				if (isCompleteQuery)
-					EventTriggerDDLCommandStart(parsetree);
-
-				DefineCompositeType(stmt->typevar, stmt->coldeflist);
+				InvokeDDLCommandEventTriggers(
+					parsetree,
+					DefineCompositeType(stmt->typevar, stmt->coldeflist));
 			}
 			break;
 
 		case T_CreateEnumStmt:	/* CREATE TYPE AS ENUM */
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			DefineEnum((CreateEnumStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DefineEnum((CreateEnumStmt *) parsetree));
 			break;
 
 		case T_CreateRangeStmt:	/* CREATE TYPE AS RANGE */
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			DefineRange((CreateRangeStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DefineRange((CreateRangeStmt *) parsetree));
 			break;
 
 		case T_AlterEnumStmt:	/* ALTER TYPE (enum) */
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-
-			/*
-			 * We disallow this in transaction blocks, because we can't cope
-			 * with enum OID values getting into indexes and then having their
-			 * defining pg_enum entries go away.
-			 */
-			PreventTransactionChain(isTopLevel, "ALTER TYPE ... ADD");
-			AlterEnum((AlterEnumStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterEnum((AlterEnumStmt *) parsetree, isTopLevel));
 			break;
 
 		case T_ViewStmt:		/* CREATE VIEW */
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			DefineView((ViewStmt *) parsetree, queryString);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DefineView((ViewStmt *) parsetree, queryString));
 			break;
 
 		case T_CreateFunctionStmt:		/* CREATE FUNCTION */
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateFunction((CreateFunctionStmt *) parsetree, queryString);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateFunction((CreateFunctionStmt *) parsetree, queryString));
 			break;
 
 		case T_AlterFunctionStmt:		/* ALTER FUNCTION */
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			AlterFunction((AlterFunctionStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterFunction((AlterFunctionStmt *) parsetree));
 			break;
 
 		case T_IndexStmt:		/* CREATE INDEX */
@@ -1026,21 +1099,21 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_RuleStmt:		/* CREATE RULE */
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			DefineRule((RuleStmt *) parsetree, queryString);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DefineRule((RuleStmt *) parsetree, queryString));
 			break;
 
 		case T_CreateSeqStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			DefineSequence((CreateSeqStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DefineSequence((CreateSeqStmt *) parsetree));
 			break;
 
 		case T_AlterSeqStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			AlterSequence((AlterSeqStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterSequence((AlterSeqStmt *) parsetree));
 			break;
 
 		case T_DoStmt:
@@ -1138,10 +1211,17 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_CreateTableAsStmt:
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				ExecCreateTableAs((CreateTableAsStmt *) parsetree,
+								  queryString, params, completionTag));
+			break;
+
+		case T_RefreshMatViewStmt:
 			if (isCompleteQuery)
 				EventTriggerDDLCommandStart(parsetree);
-			ExecCreateTableAs((CreateTableAsStmt *) parsetree,
-							  queryString, params, completionTag);
+			ExecRefreshMatView((RefreshMatViewStmt *) parsetree,
+								queryString, params, completionTag);
 			break;
 
 		case T_VariableSetStmt:
@@ -1163,10 +1243,10 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_CreateTrigStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			(void) CreateTrigger((CreateTrigStmt *) parsetree, queryString,
-								 InvalidOid, InvalidOid, false);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				(void) CreateTrigger((CreateTrigStmt *) parsetree, queryString,
+									 InvalidOid, InvalidOid, false));
 			break;
 
 		case T_CreateEventTrigStmt:
@@ -1180,18 +1260,18 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_CreatePLangStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateProceduralLanguage((CreatePLangStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateProceduralLanguage((CreatePLangStmt *) parsetree));
 			break;
 
 			/*
 			 * ******************************** DOMAIN statements ****
 			 */
 		case T_CreateDomainStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			DefineDomain((CreateDomainStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DefineDomain((CreateDomainStmt *) parsetree));
 			break;
 
 			/*
@@ -1218,8 +1298,9 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_DropOwnedStmt:
-			/* no event triggers for global objects */
-			DropOwnedObjects((DropOwnedStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DropOwnedObjects((DropOwnedStmt *) parsetree));
 			break;
 
 		case T_ReassignOwnedStmt:
@@ -1270,6 +1351,7 @@ standard_ProcessUtility(Node *parsetree,
 						ReindexIndex(stmt->relation);
 						break;
 					case OBJECT_TABLE:
+					case OBJECT_MATVIEW:
 						ReindexTable(stmt->relation);
 						break;
 					case OBJECT_DATABASE:
@@ -1295,45 +1377,45 @@ standard_ProcessUtility(Node *parsetree,
 			break;
 
 		case T_CreateConversionStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateConversionCommand((CreateConversionStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateConversionCommand((CreateConversionStmt *) parsetree));
 			break;
 
 		case T_CreateCastStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			CreateCast((CreateCastStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				CreateCast((CreateCastStmt *) parsetree));
 			break;
 
 		case T_CreateOpClassStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			DefineOpClass((CreateOpClassStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DefineOpClass((CreateOpClassStmt *) parsetree));
 			break;
 
 		case T_CreateOpFamilyStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			DefineOpFamily((CreateOpFamilyStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				DefineOpFamily((CreateOpFamilyStmt *) parsetree));
 			break;
 
 		case T_AlterOpFamilyStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			AlterOpFamily((AlterOpFamilyStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterOpFamily((AlterOpFamilyStmt *) parsetree));
 			break;
 
 		case T_AlterTSDictionaryStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			AlterTSDictionary((AlterTSDictionaryStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterTSDictionary((AlterTSDictionaryStmt *) parsetree));
 			break;
 
 		case T_AlterTSConfigurationStmt:
-			if (isCompleteQuery)
-				EventTriggerDDLCommandStart(parsetree);
-			AlterTSConfiguration((AlterTSConfigurationStmt *) parsetree);
+			InvokeDDLCommandEventTriggers(
+				parsetree,
+				AlterTSConfiguration((AlterTSConfigurationStmt *) parsetree));
 			break;
 
 		default:
@@ -1341,6 +1423,8 @@ standard_ProcessUtility(Node *parsetree,
 				 (int) nodeTag(parsetree));
 			break;
 	}
+
+	UTILITY_END_QUERY();
 }
 
 /*
@@ -1489,9 +1573,10 @@ QueryReturnsTuples(Query *parsetree)
  * We assume it is invoked only on already-parse-analyzed statements
  * (else the contained parsetree isn't a Query yet).
  *
- * In some cases (currently, only EXPLAIN of CREATE TABLE AS/SELECT INTO),
- * potentially Query-containing utility statements can be nested.  This
- * function will drill down to a non-utility Query, or return NULL if none.
+ * In some cases (currently, only EXPLAIN of CREATE TABLE AS/SELECT INTO and
+ * CREATE MATERIALIZED VIEW), potentially Query-containing utility statements
+ * can be nested.  This function will drill down to a non-utility Query, or
+ * return NULL if none.
  */
 Query *
 UtilityContainsQuery(Node *parsetree)
@@ -1634,6 +1719,9 @@ AlterObjectTypeCommandTag(ObjectType objtype)
 			break;
 		case OBJECT_VIEW:
 			tag = "ALTER VIEW";
+			break;
+		case OBJECT_MATVIEW:
+			tag = "ALTER MATERIALIZED VIEW";
 			break;
 		default:
 			tag = "???";
@@ -1831,6 +1919,9 @@ CreateCommandTag(Node *parsetree)
 					break;
 				case OBJECT_VIEW:
 					tag = "DROP VIEW";
+					break;
+				case OBJECT_MATVIEW:
+					tag = "DROP MATERIALIZED VIEW";
 					break;
 				case OBJECT_INDEX:
 					tag = "DROP INDEX";
@@ -2093,10 +2184,24 @@ CreateCommandTag(Node *parsetree)
 			break;
 
 		case T_CreateTableAsStmt:
-			if (((CreateTableAsStmt *) parsetree)->is_select_into)
-				tag = "SELECT INTO";
-			else
-				tag = "CREATE TABLE AS";
+			switch (((CreateTableAsStmt *) parsetree)->relkind)
+			{
+				case OBJECT_TABLE:
+					if (((CreateTableAsStmt *) parsetree)->is_select_into)
+						tag = "SELECT INTO";
+					else
+						tag = "CREATE TABLE AS";
+					break;
+				case OBJECT_MATVIEW:
+					tag = "CREATE MATERIALIZED VIEW";
+					break;
+				default:
+					tag = "???";
+			}
+			break;
+
+		case T_RefreshMatViewStmt:
+			tag = "REFRESH MATERIALIZED VIEW";
 			break;
 
 		case T_VariableSetStmt:
@@ -2263,10 +2368,28 @@ CreateCommandTag(Node *parsetree)
 						else if (stmt->rowMarks != NIL)
 						{
 							/* not 100% but probably close enough */
-							if (((PlanRowMark *) linitial(stmt->rowMarks))->markType == ROW_MARK_EXCLUSIVE)
-								tag = "SELECT FOR UPDATE";
-							else
-								tag = "SELECT FOR SHARE";
+							switch (((PlanRowMark *) linitial(stmt->rowMarks))->markType)
+							{
+								case ROW_MARK_EXCLUSIVE:
+									tag = "SELECT FOR UPDATE";
+									break;
+								case ROW_MARK_NOKEYEXCLUSIVE:
+									tag = "SELECT FOR NO KEY UPDATE";
+									break;
+								case ROW_MARK_SHARE:
+									tag = "SELECT FOR SHARE";
+									break;
+								case ROW_MARK_KEYSHARE:
+									tag = "SELECT FOR KEY SHARE";
+									break;
+								case ROW_MARK_REFERENCE:
+								case ROW_MARK_COPY:
+									tag = "SELECT";
+									break;
+								default:
+									tag = "???";
+									break;
+							}
 						}
 						else
 							tag = "SELECT";
@@ -2311,10 +2434,24 @@ CreateCommandTag(Node *parsetree)
 						else if (stmt->rowMarks != NIL)
 						{
 							/* not 100% but probably close enough */
-							if (((RowMarkClause *) linitial(stmt->rowMarks))->forUpdate)
-								tag = "SELECT FOR UPDATE";
-							else
-								tag = "SELECT FOR SHARE";
+							switch (((RowMarkClause *) linitial(stmt->rowMarks))->strength)
+							{
+								case LCS_FORKEYSHARE:
+									tag = "SELECT FOR KEY SHARE";
+									break;
+								case LCS_FORSHARE:
+									tag = "SELECT FOR SHARE";
+									break;
+								case LCS_FORNOKEYUPDATE:
+									tag = "SELECT FOR NO KEY UPDATE";
+									break;
+								case LCS_FORUPDATE:
+									tag = "SELECT FOR UPDATE";
+									break;
+								default:
+									tag =  "???";
+									break;
+							}
 						}
 						else
 							tag = "SELECT";
@@ -2626,6 +2763,10 @@ GetCommandLogLevel(Node *parsetree)
 			break;
 
 		case T_CreateTableAsStmt:
+			lev = LOGSTMT_DDL;
+			break;
+
+		case T_RefreshMatViewStmt:
 			lev = LOGSTMT_DDL;
 			break;
 

@@ -27,7 +27,7 @@
  * the backend's "backend/libpq" is quite separate from "interfaces/libpq".
  * All that remains is similarities of names to trap the unwary...
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	src/backend/libpq/pqcomm.c
@@ -308,6 +308,14 @@ StreamServerPort(int family, char *hostName, unsigned short portNumber,
 		 * that file path
 		 */
 		UNIXSOCK_PATH(unixSocketPath, portNumber, unixSocketDir);
+		if (strlen(unixSocketPath) >= UNIXSOCK_PATH_BUFLEN)
+		{
+			ereport(LOG,
+					(errmsg("Unix-domain socket path \"%s\" is too long (maximum %d bytes)",
+							unixSocketPath,
+							(int) (UNIXSOCK_PATH_BUFLEN - 1))));
+			return STATUS_ERROR;
+		}
 		if (Lock_AF_UNIX(unixSocketDir, unixSocketPath) != STATUS_OK)
 			return STATUS_ERROR;
 		service = unixSocketPath;

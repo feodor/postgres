@@ -4,7 +4,7 @@
  *	  Definitions for planner's internal data structures.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/relation.h
@@ -487,9 +487,10 @@ typedef struct IndexOptInfo
 	Oid			reltablespace;	/* tablespace of index (not table) */
 	RelOptInfo *rel;			/* back-link to index's table */
 
-	/* statistics from pg_class */
+	/* index-size statistics (from pg_class and elsewhere) */
 	BlockNumber pages;			/* number of disk pages in index */
 	double		tuples;			/* number of index tuples in index */
+	int			tree_height;	/* index tree height, or -1 if unknown */
 
 	/* index descriptor information */
 	int			ncolumns;		/* number of columns in index */

@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_operator.h
@@ -527,6 +527,7 @@ DATA(insert OID = 671 (  "<>"	   PGNSP PGUID b f f	701  701	16 671 670 float8ne 
 DESCR("not equal");
 DATA(insert OID = 672 (  "<"	   PGNSP PGUID b f f	701  701	16 674 675 float8lt scalarltsel scalarltjoinsel ));
 DESCR("less than");
+#define Float8LessOperator	672
 DATA(insert OID = 673 (  "<="	   PGNSP PGUID b f f	701  701	16 675 674 float8le scalarltsel scalarltjoinsel ));
 DESCR("less than or equal");
 DATA(insert OID = 674 (  ">"	   PGNSP PGUID b f f	701  701	16 672 673 float8gt scalargtsel scalargtjoinsel ));
@@ -1728,7 +1729,7 @@ DESCR("range intersection");
 /*
  * function prototypes
  */
-extern void OperatorCreate(const char *operatorName,
+extern Oid OperatorCreate(const char *operatorName,
 			   Oid operatorNamespace,
 			   Oid leftTypeId,
 			   Oid rightTypeId,

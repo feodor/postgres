@@ -4,7 +4,7 @@
  *		Functions for archiving WAL files and restoring from the archive.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/xlogarchive.c
@@ -20,9 +20,11 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include "access/xlog.h"
 #include "access/xlog_internal.h"
 #include "miscadmin.h"
 #include "postmaster/startup.h"
+#include "replication/walsender.h"
 #include "storage/fd.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
@@ -41,10 +43,15 @@
  * For fixed-size files, the caller may pass the expected size as an
  * additional crosscheck on successful recovery.  If the file size is not
  * known, set expectedSize = 0.
+ *
+ * When 'cleanupEnabled' is false, refrain from deleting any old WAL segments
+ * in the archive. This is used when fetching the initial checkpoint record,
+ * when we are not yet sure how far back we need the WAL.
  */
 bool
 RestoreArchivedFile(char *path, const char *xlogfname,
-					const char *recovername, off_t expectedSize)
+					const char *recovername, off_t expectedSize,
+					bool cleanupEnabled)
 {
 	char		xlogpath[MAXPGPATH];
 	char		xlogRestoreCmd[MAXPGPATH];
@@ -113,9 +120,10 @@ RestoreArchivedFile(char *path, const char *xlogfname,
 	 * replication. All files earlier than this point can be deleted from the
 	 * archive, though there is no requirement to do so.
 	 *
-	 * We initialise this with the filename of an InvalidXLogRecPtr, which
-	 * will prevent the deletion of any WAL files from the archive because of
-	 * the alphabetic sorting property of WAL filenames.
+	 * If cleanup is not enabled, initialise this with the filename of
+	 * InvalidXLogRecPtr, which will prevent the deletion of any WAL files
+	 * from the archive because of the alphabetic sorting property of WAL
+	 * filenames.
 	 *
 	 * Once we have successfully located the redo pointer of the checkpoint
 	 * from which we start recovery we never request a file prior to the redo
@@ -124,9 +132,9 @@ RestoreArchivedFile(char *path, const char *xlogfname,
 	 * flags to signify the point when we can begin deleting WAL files from
 	 * the archive.
 	 */
-	GetOldestRestartPoint(&restartRedoPtr, &restartTli);
-	if (!XLogRecPtrIsInvalid(restartRedoPtr))
+	if (cleanupEnabled)
 	{
+		GetOldestRestartPoint(&restartRedoPtr, &restartTli);
 		XLByteToSeg(restartRedoPtr, restartSegNo);
 		XLogFileName(lastRestartPointFname, restartTli, restartSegNo);
 		/* we shouldn't need anything earlier than last restart point */
@@ -410,6 +418,86 @@ ExecuteRecoveryCommand(char *command, char *commandName, bool failOnSignal)
 
 
 /*
+ * A file was restored from the archive under a temporary filename (path),
+ * and now we want to keep it. Rename it under the permanent filename in
+ * in pg_xlog (xlogfname), replacing any existing file with the same name.
+ */
+void
+KeepFileRestoredFromArchive(char *path, char *xlogfname)
+{
+	char		xlogfpath[MAXPGPATH];
+	bool		reload = false;
+	struct stat statbuf;
+
+	snprintf(xlogfpath, MAXPGPATH, XLOGDIR "/%s", xlogfname);
+
+	if (stat(xlogfpath, &statbuf) == 0)
+	{
+		char oldpath[MAXPGPATH];
+#ifdef WIN32
+		static unsigned int deletedcounter = 1;
+		/*
+		 * On Windows, if another process (e.g a walsender process) holds
+		 * the file open in FILE_SHARE_DELETE mode, unlink will succeed,
+		 * but the file will still show up in directory listing until the
+		 * last handle is closed, and we cannot rename the new file in its
+		 * place until that. To avoid that problem, rename the old file to
+		 * a temporary name first. Use a counter to create a unique
+		 * filename, because the same file might be restored from the
+		 * archive multiple times, and a walsender could still be holding
+		 * onto an old deleted version of it.
+		 */
+		snprintf(oldpath, MAXPGPATH, "%s.deleted%u",
+				 xlogfpath, deletedcounter++);
+		if (rename(xlogfpath, oldpath) != 0)
+		{
+			ereport(ERROR,
+					(errcode_for_file_access(),
+					 errmsg("could not rename file \"%s\" to \"%s\": %m",
+							xlogfpath, oldpath)));
+		}
+#else
+		strncpy(oldpath, xlogfpath, MAXPGPATH);
+#endif
+		if (unlink(oldpath) != 0)
+			ereport(FATAL,
+					(errcode_for_file_access(),
+					 errmsg("could not remove file \"%s\": %m",
+							xlogfpath)));
+		reload = true;
+	}
+
+	if (rename(path, xlogfpath) < 0)
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not rename file \"%s\" to \"%s\": %m",
+						path, xlogfpath)));
+
+	/*
+	 * Create .done file forcibly to prevent the restored segment from
+	 * being archived again later.
+	 */
+	XLogArchiveForceDone(xlogfname);
+
+	/*
+	 * If the existing file was replaced, since walsenders might have it
+	 * open, request them to reload a currently-open segment. This is only
+	 * required for WAL segments, walsenders don't hold other files open, but
+	 * there's no harm in doing this too often, and we don't know what kind
+	 * of a file we're dealing with here.
+	 */
+	if (reload)
+		WalSndRqstFileReload();
+
+	/*
+	 * Signal walsender that new WAL has arrived. Again, this isn't necessary
+	 * if we restored something other than a WAL segment, but it does no harm
+	 * either.
+	 */
+	WalSndWakeup();
+}
+
+/*
  * XLogArchiveNotify
  *
  * Create an archive notification file
@@ -460,6 +548,59 @@ XLogArchiveNotifySeg(XLogSegNo segno)
 
 	XLogFileName(xlog, ThisTimeLineID, segno);
 	XLogArchiveNotify(xlog);
+}
+
+/*
+ * XLogArchiveForceDone
+ *
+ * Emit notification forcibly that an XLOG segment file has been successfully
+ * archived, by creating <XLOG>.done regardless of whether <XLOG>.ready
+ * exists or not.
+ */
+void
+XLogArchiveForceDone(const char *xlog)
+{
+	char		archiveReady[MAXPGPATH];
+	char		archiveDone[MAXPGPATH];
+	struct stat stat_buf;
+	FILE	   *fd;
+
+	/* Exit if already known done */
+	StatusFilePath(archiveDone, xlog, ".done");
+	if (stat(archiveDone, &stat_buf) == 0)
+		return;
+
+	/* If .ready exists, rename it to .done */
+	StatusFilePath(archiveReady, xlog, ".ready");
+	if (stat(archiveReady, &stat_buf) == 0)
+	{
+		if (rename(archiveReady, archiveDone) < 0)
+			ereport(WARNING,
+					(errcode_for_file_access(),
+					 errmsg("could not rename file \"%s\" to \"%s\": %m",
+							archiveReady, archiveDone)));
+
+		return;
+	}
+
+	/* insert an otherwise empty file called <XLOG>.done */
+	fd = AllocateFile(archiveDone, "w");
+	if (fd == NULL)
+	{
+		ereport(LOG,
+				(errcode_for_file_access(),
+				 errmsg("could not create archive status file \"%s\": %m",
+						archiveDone)));
+		return;
+	}
+	if (FreeFile(fd))
+	{
+		ereport(LOG,
+				(errcode_for_file_access(),
+				 errmsg("could not write archive status file \"%s\": %m",
+						archiveDone)));
+		return;
+	}
 }
 
 /*

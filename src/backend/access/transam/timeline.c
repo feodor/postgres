@@ -12,16 +12,16 @@
  *
  * Each line in the file represents a timeline switch:
  *
- * <parentTLI> <xlogfname> <reason>
+ * <parentTLI> <switchpoint> <reason>
  *
  *	parentTLI	ID of the parent timeline
- *	xlogfname	filename of the WAL segment where the switch happened
+ *	switchpoint	XLogRecPtr of the WAL position where the switch happened
  *	reason		human-readable explanation of why the timeline was changed
  *
  * The fields are separated by tabs. Lines beginning with # are comments, and
  * are ignored. Empty lines are also ignored.
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/timeline.c
@@ -41,6 +41,28 @@
 #include "storage/fd.h"
 
 /*
+ * Copies all timeline history files with id's between 'begin' and 'end'
+ * from archive to pg_xlog.
+ */
+void
+restoreTimeLineHistoryFiles(TimeLineID begin, TimeLineID end)
+{
+	char		path[MAXPGPATH];
+	char		histfname[MAXFNAMELEN];
+	TimeLineID tli;
+
+	for (tli = begin; tli < end; tli++)
+	{
+		if (tli == 1)
+			continue;
+
+		TLHistoryFileName(histfname, tli);
+		if (RestoreArchivedFile(path, histfname, "RECOVERYHISTORY", 0, false))
+			KeepFileRestoredFromArchive(path, histfname);
+	}
+}
+
+/*
  * Try to read a timeline's history file.
  *
  * If successful, return the list of component TLIs (the given TLI followed by
@@ -56,15 +78,25 @@ readTimeLineHistory(TimeLineID targetTLI)
 	char		histfname[MAXFNAMELEN];
 	char		fline[MAXPGPATH];
 	FILE	   *fd;
+	TimeLineHistoryEntry *entry;
+	TimeLineID	lasttli = 0;
+	XLogRecPtr	prevend;
+	bool		fromArchive = false;
 
 	/* Timeline 1 does not have a history file, so no need to check */
 	if (targetTLI == 1)
-		return list_make1_int((int) targetTLI);
+	{
+		entry = (TimeLineHistoryEntry *) palloc(sizeof(TimeLineHistoryEntry));
+		entry->tli = targetTLI;
+		entry->begin = entry->end = InvalidXLogRecPtr;
+		return list_make1(entry);
+	}
 
-	if (InArchiveRecovery)
+	if (ArchiveRecoveryRequested)
 	{
 		TLHistoryFileName(histfname, targetTLI);
-		RestoreArchivedFile(path, histfname, "RECOVERYHISTORY", 0);
+		fromArchive =
+			RestoreArchivedFile(path, histfname, "RECOVERYHISTORY", 0, false);
 	}
 	else
 		TLHistoryFilePath(path, targetTLI);
@@ -77,7 +109,10 @@ readTimeLineHistory(TimeLineID targetTLI)
 					(errcode_for_file_access(),
 					 errmsg("could not open file \"%s\": %m", path)));
 		/* Not there, so assume no parents */
-		return list_make1_int((int) targetTLI);
+		entry = (TimeLineHistoryEntry *) palloc(sizeof(TimeLineHistoryEntry));
+		entry->tli = targetTLI;
+		entry->begin = entry->end = InvalidXLogRecPtr;
+		return list_make1(entry);
 	}
 
 	result = NIL;
@@ -85,12 +120,15 @@ readTimeLineHistory(TimeLineID targetTLI)
 	/*
 	 * Parse the file...
 	 */
+	prevend = InvalidXLogRecPtr;
 	while (fgets(fline, sizeof(fline), fd) != NULL)
 	{
 		/* skip leading whitespace and check for # comment */
 		char	   *ptr;
-		char	   *endptr;
 		TimeLineID	tli;
+		uint32		switchpoint_hi;
+		uint32		switchpoint_lo;
+		int			nfields;
 
 		for (ptr = fline; *ptr; ptr++)
 		{
@@ -100,38 +138,63 @@ readTimeLineHistory(TimeLineID targetTLI)
 		if (*ptr == '\0' || *ptr == '#')
 			continue;
 
-		/* expect a numeric timeline ID as first field of line */
-		tli = (TimeLineID) strtoul(ptr, &endptr, 0);
-		if (endptr == ptr)
+		nfields = sscanf(fline, "%u\t%X/%X", &tli, &switchpoint_hi, &switchpoint_lo);
+
+		if (nfields < 1)
+		{
+			/* expect a numeric timeline ID as first field of line */
 			ereport(FATAL,
 					(errmsg("syntax error in history file: %s", fline),
 					 errhint("Expected a numeric timeline ID.")));
+		}
+		if (nfields != 3)
+			ereport(FATAL,
+					(errmsg("syntax error in history file: %s", fline),
+					 errhint("Expected an XLOG switchpoint location.")));
 
-		if (result &&
-			tli <= (TimeLineID) linitial_int(result))
+		if (result && tli <= lasttli)
 			ereport(FATAL,
 					(errmsg("invalid data in history file: %s", fline),
 				   errhint("Timeline IDs must be in increasing sequence.")));
 
+		lasttli = tli;
+
+		entry = (TimeLineHistoryEntry *) palloc(sizeof(TimeLineHistoryEntry));
+		entry->tli = tli;
+		entry->begin = prevend;
+		entry->end = ((uint64) (switchpoint_hi)) << 32 | (uint64) switchpoint_lo;
+		prevend = entry->end;
+
 		/* Build list with newest item first */
-		result = lcons_int((int) tli, result);
+		result = lcons(entry, result);
 
 		/* we ignore the remainder of each line */
 	}
 
 	FreeFile(fd);
 
-	if (result &&
-		targetTLI <= (TimeLineID) linitial_int(result))
+	if (result && targetTLI <= lasttli)
 		ereport(FATAL,
 				(errmsg("invalid data in history file \"%s\"", path),
 			errhint("Timeline IDs must be less than child timeline's ID.")));
 
-	result = lcons_int((int) targetTLI, result);
+	/*
+	 * Create one more entry for the "tip" of the timeline, which has no
+	 * entry in the history file.
+	 */
+	entry = (TimeLineHistoryEntry *) palloc(sizeof(TimeLineHistoryEntry));
+	entry->tli = targetTLI;
+	entry->begin = prevend;
+	entry->end = InvalidXLogRecPtr;
 
-	ereport(DEBUG3,
-			(errmsg_internal("history of timeline %u is %s",
-							 targetTLI, nodeToString(result))));
+	result = lcons(entry, result);
+
+	/*
+	 * If the history file was fetched from archive, save it in pg_xlog for
+	 * future reference.
+	 */
+	if (fromArchive)
+		KeepFileRestoredFromArchive(path, histfname);
 
 	return result;
 }
@@ -150,10 +213,10 @@ existsTimeLineHistory(TimeLineID probeTLI)
 	if (probeTLI == 1)
 		return false;
 
-	if (InArchiveRecovery)
+	if (ArchiveRecoveryRequested)
 	{
 		TLHistoryFileName(histfname, probeTLI);
-		RestoreArchivedFile(path, histfname, "RECOVERYHISTORY", 0);
+		RestoreArchivedFile(path, histfname, "RECOVERYHISTORY", 0, false);
 	}
 	else
 		TLHistoryFilePath(path, probeTLI);
@@ -214,7 +277,7 @@ findNewestTimeLine(TimeLineID startTLI)
  *
  *	newTLI: ID of the new timeline
  *	parentTLI: ID of its immediate parent
- *	endTLI et al: ID of the last used WAL file, for annotation purposes
+ *	switchpoint: XLOG position where the system switched to the new timeline
  *	reason: human-readable explanation of why the timeline was switched
  *
  * Currently this is only used at the end recovery, and so there are no locking
@@ -223,12 +286,11 @@ findNewestTimeLine(TimeLineID startTLI)
  */
 void
 writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
-					 TimeLineID endTLI, XLogSegNo endLogSegNo, char *reason)
+					 XLogRecPtr switchpoint, char *reason)
 {
 	char		path[MAXPGPATH];
 	char		tmppath[MAXPGPATH];
 	char		histfname[MAXFNAMELEN];
-	char		xlogfname[MAXFNAMELEN];
 	char		buffer[BLCKSZ];
 	int			srcfd;
 	int			fd;
@@ -244,8 +306,8 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 	unlink(tmppath);
 
 	/* do not use get_sync_bit() here --- want to fsync only at end of fill */
-	fd = BasicOpenFile(tmppath, O_RDWR | O_CREAT | O_EXCL,
-					   S_IRUSR | S_IWUSR);
+	fd = OpenTransientFile(tmppath, O_RDWR | O_CREAT | O_EXCL,
+						   S_IRUSR | S_IWUSR);
 	if (fd < 0)
 		ereport(ERROR,
 				(errcode_for_file_access(),
@@ -254,15 +316,15 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 	/*
 	 * If a history file exists for the parent, copy it verbatim
 	 */
-	if (InArchiveRecovery)
+	if (ArchiveRecoveryRequested)
 	{
 		TLHistoryFileName(histfname, parentTLI);
-		RestoreArchivedFile(path, histfname, "RECOVERYHISTORY", 0);
+		RestoreArchivedFile(path, histfname, "RECOVERYHISTORY", 0, false);
 	}
 	else
 		TLHistoryFilePath(path, parentTLI);
 
-	srcfd = BasicOpenFile(path, O_RDONLY, 0);
+	srcfd = OpenTransientFile(path, O_RDONLY, 0);
 	if (srcfd < 0)
 	{
 		if (errno != ENOENT)
@@ -304,7 +366,7 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 					 errmsg("could not write to file \"%s\": %m", tmppath)));
 			}
 		}
-		close(srcfd);
+		CloseTransientFile(srcfd);
 	}
 
 	/*
@@ -313,13 +375,11 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 	 * If we did have a parent file, insert an extra newline just in case the
 	 * parent file failed to end with one.
 	 */
-	XLogFileName(xlogfname, endTLI, endLogSegNo);
-
 	snprintf(buffer, sizeof(buffer),
-			 "%s%u\t%s\t%s\n",
+			 "%s%u\t%X/%X\t%s\n",
 			 (srcfd < 0) ? "" : "\n",
 			 parentTLI,
-			 xlogfname,
+			 (uint32) (switchpoint >> 32), (uint32) (switchpoint),
 			 reason);
 
 	nbytes = strlen(buffer);
@@ -345,7 +405,7 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 				(errcode_for_file_access(),
 				 errmsg("could not fsync file \"%s\": %m", tmppath)));
 
-	if (close(fd))
+	if (CloseTransientFile(fd))
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("could not close file \"%s\": %m", tmppath)));
@@ -358,7 +418,7 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 
 	/*
 	 * Prefer link() to rename() here just to be really sure that we don't
-	 * overwrite an existing logfile.  However, there shouldn't be one, so
+	 * overwrite an existing file.  However, there shouldn't be one, so
 	 * rename() is an acceptable substitute except for the truly paranoid.
 	 */
 #if HAVE_WORKING_LINK
@@ -379,4 +439,158 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 	/* The history file can be archived immediately. */
 	TLHistoryFileName(histfname, newTLI);
 	XLogArchiveNotify(histfname);
+}
+
+/*
+ * Writes a history file for given timeline and contents.
+ *
+ * Currently this is only used in the walreceiver process, and so there are
+ * no locking considerations.  But we should be just as tense as XLogFileInit
+ * to avoid emplacing a bogus file.
+ */
+void
+writeTimeLineHistoryFile(TimeLineID tli, char *content, int size)
+{
+	char		path[MAXPGPATH];
+	char		tmppath[MAXPGPATH];
+	int			fd;
+
+	/*
+	 * Write into a temp file name.
+	 */
+	snprintf(tmppath, MAXPGPATH, XLOGDIR "/xlogtemp.%d", (int) getpid());
+
+	unlink(tmppath);
+
+	/* do not use get_sync_bit() here --- want to fsync only at end of fill */
+	fd = OpenTransientFile(tmppath, O_RDWR | O_CREAT | O_EXCL,
+						   S_IRUSR | S_IWUSR);
+	if (fd < 0)
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not create file \"%s\": %m", tmppath)));
+
+	errno = 0;
+	if ((int) write(fd, content, size) != size)
+	{
+		int			save_errno = errno;
+
+		/*
+		 * If we fail to make the file, delete it to release disk space
+		 */
+		unlink(tmppath);
+		/* if write didn't set errno, assume problem is no disk space */
+		errno = save_errno ? save_errno : ENOSPC;
+
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not write to file \"%s\": %m", tmppath)));
+	}
+
+	if (pg_fsync(fd) != 0)
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not fsync file \"%s\": %m", tmppath)));
+
+	if (CloseTransientFile(fd))
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not close file \"%s\": %m", tmppath)));
+
+
+	/*
+	 * Now move the completed history file into place with its final name.
+	 */
+	TLHistoryFilePath(path, tli);
+
+	/*
+	 * Prefer link() to rename() here just to be really sure that we don't
+	 * overwrite an existing logfile.  However, there shouldn't be one, so
+	 * rename() is an acceptable substitute except for the truly paranoid.
+	 */
+#if HAVE_WORKING_LINK
+	if (link(tmppath, path) < 0)
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not link file \"%s\" to \"%s\": %m",
+						tmppath, path)));
+	unlink(tmppath);
+#else
+	if (rename(tmppath, path) < 0)
+		ereport(ERROR,
+				(errcode_for_file_access(),
+				 errmsg("could not rename file \"%s\" to \"%s\": %m",
+						tmppath, path)));
+#endif
+}
+
+/*
+ * Returns true if 'expectedTLEs' contains a timeline with id 'tli'
+ */
+bool
+tliInHistory(TimeLineID tli, List *expectedTLEs)
+{
+	ListCell *cell;
+
+	foreach(cell, expectedTLEs)
+	{
+		if (((TimeLineHistoryEntry *) lfirst(cell))->tli == tli)
+			return true;
+	}
+
+	return false;
+}
+
+/*
+ * Returns the ID of the timeline in use at a particular point in time, in
+ * the given timeline history.
+ */
+TimeLineID
+tliOfPointInHistory(XLogRecPtr ptr, List *history)
+{
+	ListCell *cell;
+
+	foreach(cell, history)
+	{
+		TimeLineHistoryEntry *tle = (TimeLineHistoryEntry *) lfirst(cell);
+		if ((XLogRecPtrIsInvalid(tle->begin) || tle->begin <= ptr) &&
+			(XLogRecPtrIsInvalid(tle->end) || ptr < tle->end))
+		{
+			/* found it */
+			return tle->tli;
+		}
+	}
+
+	/* shouldn't happen. */
+	elog(ERROR, "timeline history was not contiguous");
+	return 0;	/* keep compiler quiet */
+}
+
+/*
+ * Returns the point in history where we branched off the given timeline,
+ * and the timeline we branched to (*nextTLI). Returns InvalidXLogRecPtr if
+ * the timeline is current, ie. we have not branched off from it, and throws
+ * an error if the timeline is not part of this server's history.
+ */
+XLogRecPtr
+tliSwitchPoint(TimeLineID tli, List *history, TimeLineID *nextTLI)
+{
+	ListCell   *cell;
+
+	if (nextTLI)
+		*nextTLI = 0;
+	foreach (cell, history)
+	{
+		TimeLineHistoryEntry *tle = (TimeLineHistoryEntry *) lfirst(cell);
+
+		if (tle->tli == tli)
+			return tle->end;
+		if (nextTLI)
+			*nextTLI = tle->tli;
+	}
+
+	ereport(ERROR,
+			(errmsg("requested timeline %u is not in this server's history",
+					tli)));
+	return InvalidXLogRecPtr; /* keep compiler quiet */
 }

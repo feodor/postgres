@@ -496,6 +496,30 @@ typedef struct
      </listitem>
     </varlistentry>
 
+    <varlistentry id="libpq-pqconninfo">
+     <term><function>PQconninfo</function><indexterm><primary>PQconninfo</></></term>
+     <listitem>
+      <para>
+       Returns the connection options used by a live connection.
+<synopsis>
+PQconninfoOption *PQconninfo(PGconn *conn);
+</synopsis>
+      </para>
+
+      <para>
+       Returns a connection options array.  This can be used to determine
+       all possible <function>PQconnectdb</function> options and the
+       values that were used to connect to the server. The return
+       value points to an array of <structname>PQconninfoOption</structname>
+       structures, which ends with an entry having a null <structfield>keyword</>
+       pointer. All notes above for <function>PQconndefaults</function> also
+       apply to the result of <function>PQconninfo</function>.
+      </para>
+
+     </listitem>
+    </varlistentry>
+
+
     <varlistentry id="libpq-pqconninfoparse">
      <term><function>PQconninfoParse</function><indexterm><primary>PQconninfoParse</></></term>
      <listitem>
@@ -624,9 +648,10 @@ PostgresPollingStatusType PQresetPoll(PGconn *conn);
       <para>
        <function>PQpingParams</function> reports the status of the
        server.  It accepts connection parameters identical to those of
-       <function>PQconnectdbParams</>, described above.  It is not, however,
+       <function>PQconnectdbParams</>, described above.  It is not
        necessary to supply correct user name, password, or database name
-       values to obtain the server status.
+       values to obtain the server status; however, if incorrect values
+       are provided, the server will log a failed connection attempt.
 
 <synopsis>
 PGPing PQpingParams(const char * const *keywords,
@@ -692,9 +717,10 @@ PGPing PQpingParams(const char * const *keywords,
       <para>
        <function>PQping</function> reports the status of the
        server.  It accepts connection parameters identical to those of
-       <function>PQconnectdb</>, described above.  It is not, however,
+       <function>PQconnectdb</>, described above.  It is not
        necessary to supply correct user name, password, or database name
-       values to obtain the server status.
+       values to obtain the server status; however, if incorrect values
+       are provided, the server will log a failed connection attempt.
 
 <synopsis>
 PGPing PQping(const char *conninfo);
@@ -2445,7 +2471,8 @@ ExecStatusType PQresultStatus(const PGresult *res);
         command that happens to retrieve zero rows still shows
         <literal>PGRES_TUPLES_OK</literal>.
         <literal>PGRES_COMMAND_OK</literal> is for commands that can never
-        return rows (<command>INSERT</command>, <command>UPDATE</command>,
+        return rows (<command>INSERT</command> or <command>UPDATE</command>
+        without a <literal>RETURNING</literal> clause,
         etc.). A response of <literal>PGRES_EMPTY_QUERY</literal> might
         indicate a bug in the client software.
        </para>
@@ -2554,11 +2581,11 @@ char *PQresultErrorField(const PGresult *res, int fieldcode);
          </varlistentry>
 
          <varlistentry id="libpq-pg-diag-sqlstate">
+          <term><symbol>PG_DIAG_SQLSTATE</></term>
           <indexterm>
            <primary>error codes</primary>
            <secondary>libpq</secondary>
           </indexterm>
-          <term><symbol>PG_DIAG_SQLSTATE</></term>
           <listitem>
            <para>
             The SQLSTATE code for the error. The SQLSTATE code identifies
@@ -2652,6 +2679,62 @@ char *PQresultErrorField(const PGresult *res, int fieldcode);
           </listitem>
          </varlistentry>
 
+         <varlistentry id="libpq-pg-diag-schema-name">
+          <term><symbol>PG_DIAG_SCHEMA_NAME</></term>
+          <listitem>
+           <para>
+            If the error was associated with a specific database object,
+            the name of the schema containing that object, if any.
+           </para>
+          </listitem>
+         </varlistentry>
+
+         <varlistentry id="libpq-pg-diag-table-name">
+          <term><symbol>PG_DIAG_TABLE_NAME</></term>
+          <listitem>
+           <para>
+            If the error was associated with a specific table, the name of
+            the table.  (When this field is present, the schema name field
+            provides the name of the table's schema.)
+           </para>
+          </listitem>
+         </varlistentry>
+
+         <varlistentry id="libpq-pg-diag-column-name">
+          <term><symbol>PG_DIAG_COLUMN_NAME</></term>
+          <listitem>
+           <para>
+            If the error was associated with a specific table column, the
+            name of the column.  (When this field is present, the schema
+            and table name fields identify the table.)
+           </para>
+          </listitem>
+         </varlistentry>
+
+         <varlistentry id="libpq-pg-diag-datatype-name">
+          <term><symbol>PG_DIAG_DATATYPE_NAME</></term>
+          <listitem>
+           <para>
+            If the error was associated with a specific datatype, the name
+            of the datatype.  (When this field is present, the schema name
+            field provides the name of the datatype's schema.)
+           </para>
+          </listitem>
+         </varlistentry>
+
+         <varlistentry id="libpq-pg-diag-constraint-name">
+          <term><symbol>PG_DIAG_CONSTRAINT_NAME</></term>
+          <listitem>
+           <para>
+            If the error was associated with a specific constraint,
+            the name of the constraint.  The table or domain that the
+            constraint belongs to is reported using the fields listed
+            above.  (For this purpose, indexes are treated as constraints,
+            even if they weren't created with constraint syntax.)
+           </para>
+          </listitem>
+         </varlistentry>
+
          <varlistentry id="libpq-pg-diag-source-file">
           <term><symbol>PG_DIAG_SOURCE_FILE</></term>
           <listitem>
@@ -2682,6 +2765,14 @@ char *PQresultErrorField(const PGresult *res, int fieldcode);
          </varlistentry>
         </variablelist>
        </para>
+
+       <note>
+        <para>
+         The fields for schema name, table name, column name, datatype
+         name, and constraint name are supplied only for a limited number
+         of error types; see <xref linkend="errcodes-appendix">.
+        </para>
+       </note>
 
        <para>
         The client is responsible for formatting displayed information to meet
@@ -6850,7 +6941,7 @@ myEventProc(PGEventId evtId, void *evtInfo, void *passThrough)
   <para>
    The file uses an <quote>INI file</quote> format where the section
    name is the service name and the parameters are connection
-   parameters; see <xref linkend="libpq-connect"> for a list.  For
+   parameters; see <xref linkend="libpq-paramkeywords"> for a list.  For
    example:
 <programlisting>
 # comment

@@ -2,7 +2,7 @@
  * dbsize.c
  *		Database object size functions, and related inquiries
  *
- * Copyright (c) 2002-2012, PostgreSQL Global Development Group
+ * Copyright (c) 2002-2013, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/utils/adt/dbsize.c
@@ -21,6 +21,7 @@
 #include "catalog/pg_tablespace.h"
 #include "commands/dbcommands.h"
 #include "commands/tablespace.h"
+#include "common/relpath.h"
 #include "miscadmin.h"
 #include "storage/fd.h"
 #include "utils/acl.h"
@@ -260,6 +261,9 @@ pg_tablespace_size_name(PG_FUNCTION_ARGS)
 
 /*
  * calculate size of (one fork of) a relation
+ *
+ * Note: we can safely apply this to temp tables of other sessions, so there
+ * is no check here or at the call sites for that.
  */
 static int64
 calculate_relation_size(RelFileNode *rfn, BackendId backend, ForkNumber forknum)
@@ -314,7 +318,7 @@ pg_relation_size(PG_FUNCTION_ARGS)
 	 * that makes queries like "SELECT pg_relation_size(oid) FROM pg_class"
 	 * less robust, because while we scan pg_class with an MVCC snapshot,
 	 * someone else might drop the table. It's better to return NULL for
-	 * alread-dropped tables than throw an error and abort the whole query.
+	 * already-dropped tables than throw an error and abort the whole query.
 	 */
 	if (rel == NULL)
 		PG_RETURN_NULL();
@@ -715,6 +719,7 @@ pg_relation_filenode(PG_FUNCTION_ARGS)
 	switch (relform->relkind)
 	{
 		case RELKIND_RELATION:
+		case RELKIND_MATVIEW:
 		case RELKIND_INDEX:
 		case RELKIND_SEQUENCE:
 		case RELKIND_TOASTVALUE:
@@ -763,6 +768,7 @@ pg_relation_filepath(PG_FUNCTION_ARGS)
 	switch (relform->relkind)
 	{
 		case RELKIND_RELATION:
+		case RELKIND_MATVIEW:
 		case RELKIND_INDEX:
 		case RELKIND_SEQUENCE:
 		case RELKIND_TOASTVALUE:
@@ -827,4 +833,26 @@ pg_relation_filepath(PG_FUNCTION_ARGS)
 	path = relpathbackend(rnode, backend, MAIN_FORKNUM);
 
 	PG_RETURN_TEXT_P(cstring_to_text(path));
+}
+
+
+/*
+ * Indicate whether a relation is scannable.
+ *
+ * Currently, this is always true except for a materialized view which has not
+ * been populated.
+ */
+Datum
+pg_relation_is_scannable(PG_FUNCTION_ARGS)
+{
+	Oid			relid;
+	Relation	relation;
+	bool		result;
+
+	relid = PG_GETARG_OID(0);
+	relation = RelationIdGetRelation(relid);
+	result = relation->rd_isscannable;
+	RelationClose(relation);
+
+	PG_RETURN_BOOL(result);
 }

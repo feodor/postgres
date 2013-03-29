@@ -3,7 +3,7 @@
  * parse_clause.c
  *	  handle clauses in parser
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -243,9 +243,14 @@ interpretInhOption(InhOption inhOpt)
  * table/result set should be created with OIDs. This needs to be done after
  * parsing the query string because the return value can depend upon the
  * default_with_oids GUC var.
+ *
+ * Materialized views are handled here rather than reloptions.c because that
+ * code explicitly punts checking for oids to here.  We prohibit any explicit
+ * specification of the oids option for a materialized view, and indicate that
+ * oids are not needed if we don't get an error.
  */
 bool
-interpretOidsOption(List *defList)
+interpretOidsOption(List *defList, char relkind)
 {
 	ListCell   *cell;
 
@@ -256,8 +261,18 @@ interpretOidsOption(List *defList)
 
 		if (def->defnamespace == NULL &&
 			pg_strcasecmp(def->defname, "oids") == 0)
+		{
+			if (relkind == RELKIND_MATVIEW)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("unrecognized parameter \"%s\"", "oids")));
+
 			return defGetBoolean(def);
+		}
 	}
+
+	if (relkind == RELKIND_MATVIEW)
+		return false;
 
 	/* OIDS option was not specified, so use default. */
 	return default_with_oids;
@@ -503,6 +518,7 @@ transformRangeFunction(ParseState *pstate, RangeFunction *r)
 {
 	Node	   *funcexpr;
 	char	   *funcname;
+	bool		is_lateral;
 	RangeTblEntry *rte;
 
 	/*
@@ -514,12 +530,16 @@ transformRangeFunction(ParseState *pstate, RangeFunction *r)
 	funcname = FigureColname(r->funccallnode);
 
 	/*
-	 * If the function is LATERAL, make lateral_only names of this level
-	 * visible to it.  (LATERAL can't nest within a single pstate level, so we
-	 * don't need save/restore logic here.)
+	 * We make lateral_only names of this level visible, whether or not the
+	 * function is explicitly marked LATERAL.  This is needed for SQL spec
+	 * compliance in the case of UNNEST(), and seems useful on convenience
+	 * grounds for all functions in FROM.
+	 *
+	 * (LATERAL can't nest within a single pstate level, so we don't need
+	 * save/restore logic here.)
 	 */
 	Assert(!pstate->p_lateral_active);
-	pstate->p_lateral_active = r->lateral;
+	pstate->p_lateral_active = true;
 
 	/*
 	 * Transform the raw expression.
@@ -534,10 +554,16 @@ transformRangeFunction(ParseState *pstate, RangeFunction *r)
 	assign_expr_collations(pstate, funcexpr);
 
 	/*
+	 * Mark the RTE as LATERAL if the user said LATERAL explicitly, or if
+	 * there are any lateral cross-references in it.
+	 */
+	is_lateral = r->lateral || contain_vars_of_level(funcexpr, 0);
+
+	/*
 	 * OK, build an RTE for the function.
 	 */
 	rte = addRangeTableEntryForFunction(pstate, funcname, funcexpr,
-										r, r->lateral, true);
+										r, is_lateral, true);
 
 	/*
 	 * If a coldeflist was supplied, ensure it defines a legal set of names

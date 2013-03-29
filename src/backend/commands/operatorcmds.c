@@ -4,7 +4,7 @@
  *
  *	  Routines for operator manipulation commands
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -59,7 +59,7 @@
  *
  * 'parameters' is a list of DefElem
  */
-void
+Oid
 DefineOperator(List *names, List *parameters)
 {
 	char	   *oprName;
@@ -295,19 +295,19 @@ DefineOperator(List *names, List *parameters)
 	/*
 	 * now have OperatorCreate do all the work..
 	 */
-	OperatorCreate(oprName,		/* operator name */
-				   oprNamespace,	/* namespace */
-				   typeId1,		/* left type id */
-				   typeId2,		/* right type id */
-				   functionOid, /* function for operator */
-				   commutatorName,		/* optional commutator operator name */
-				   negatorName, /* optional negator operator name */
-				   restrictionOid,		/* optional restrict. sel. procedure */
-				   joinOid,		/* optional join sel. procedure name */
-				   canMerge,	/* operator merges */
-				   canHash);	/* operator hashes */
+	return
+		OperatorCreate(oprName,		/* operator name */
+					   oprNamespace,	/* namespace */
+					   typeId1,		/* left type id */
+					   typeId2,		/* right type id */
+					   functionOid, /* function for operator */
+					   commutatorName,		/* optional commutator operator name */
+					   negatorName, /* optional negator operator name */
+					   restrictionOid,		/* optional restrict. sel. procedure */
+					   joinOid,		/* optional join sel. procedure name */
+					   canMerge,	/* operator merges */
+					   canHash);	/* operator hashes */
 }
-
 
 /*
  * Guts of operator deletion.

@@ -3,7 +3,7 @@
  * misc.c
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -24,10 +24,12 @@
 #include "catalog/pg_tablespace.h"
 #include "catalog/pg_type.h"
 #include "commands/dbcommands.h"
+#include "common/relpath.h"
 #include "funcapi.h"
 #include "miscadmin.h"
 #include "parser/keywords.h"
 #include "postmaster/syslogger.h"
+#include "rewrite/rewriteHandler.h"
 #include "storage/fd.h"
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
@@ -522,4 +524,34 @@ pg_collation_for(PG_FUNCTION_ARGS)
 	if (!collid)
 		PG_RETURN_NULL();
 	PG_RETURN_TEXT_P(cstring_to_text(generate_collation_name(collid)));
+}
+
+
+/*
+ * information_schema support functions
+ *
+ * Test whether a view (identified by pg_class OID) is insertable-into or
+ * updatable.  The latter requires delete capability too.  This is an
+ * artifact of the way the SQL standard defines the information_schema views:
+ * if we defined separate functions for update and delete, we'd double the
+ * work required to compute the view columns.
+ *
+ * These rely on relation_is_updatable(), which is in rewriteHandler.c.
+ */
+Datum
+pg_view_is_insertable(PG_FUNCTION_ARGS)
+{
+	Oid			viewoid = PG_GETARG_OID(0);
+	int			req_events = (1 << CMD_INSERT);
+
+	PG_RETURN_BOOL(relation_is_updatable(viewoid, req_events));
+}
+
+Datum
+pg_view_is_updatable(PG_FUNCTION_ARGS)
+{
+	Oid			viewoid = PG_GETARG_OID(0);
+	int			req_events = (1 << CMD_UPDATE) | (1 << CMD_DELETE);
+
+	PG_RETURN_BOOL(relation_is_updatable(viewoid, req_events));
 }

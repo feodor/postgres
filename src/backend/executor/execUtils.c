@@ -3,7 +3,7 @@
  * execUtils.c
  *	  miscellaneous executor utility routines
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -906,6 +906,9 @@ ExecOpenIndices(ResultRelInfo *resultRelInfo)
 	/*
 	 * For each index, open the index relation and save pg_index info. We
 	 * acquire RowExclusiveLock, signifying we will update the index.
+	 *
+	 * Note: we do this even if the index is not IndexIsReady; it's not worth
+	 * the trouble to optimize for the case where it isn't.
 	 */
 	i = 0;
 	foreach(l, indexoidlist)
@@ -1304,14 +1307,18 @@ retry:
 					 errmsg("could not create exclusion constraint \"%s\"",
 							RelationGetRelationName(index)),
 					 errdetail("Key %s conflicts with key %s.",
-							   error_new, error_existing)));
+							   error_new, error_existing),
+					 errtableconstraint(heap,
+										RelationGetRelationName(index))));
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_EXCLUSION_VIOLATION),
 					 errmsg("conflicting key value violates exclusion constraint \"%s\"",
 							RelationGetRelationName(index)),
 					 errdetail("Key %s conflicts with existing key %s.",
-							   error_new, error_existing)));
+							   error_new, error_existing),
+					 errtableconstraint(heap,
+										RelationGetRelationName(index))));
 	}
 
 	index_endscan(index_scan);

@@ -4,7 +4,7 @@
  *	  Definitions for tagged nodes.
  *
  *
- * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/nodes.h
@@ -361,6 +361,7 @@ typedef enum NodeTag
 	T_AlterExtensionContentsStmt,
 	T_CreateEventTrigStmt,
 	T_AlterEventTrigStmt,
+	T_RefreshMatViewStmt,
 
 	/*
 	 * TAGS FOR PARSE TREE NODES (parsenodes.h)
@@ -407,6 +408,7 @@ typedef enum NodeTag
 	T_IdentifySystemCmd,
 	T_BaseBackupCmd,
 	T_StartReplicationCmd,
+	T_TimeLineHistoryCmd,
 
 	/*
 	 * TAGS FOR RANDOM OTHER STUFF
