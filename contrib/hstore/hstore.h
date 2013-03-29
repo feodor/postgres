@@ -212,6 +212,42 @@ typedef struct Pairs
 	bool		needfree;		/* need to pfree the value? */
 } Pairs;
 
+typedef struct HStorePair HStorePair;
+typedef struct HStoreValue HStoreValue;
+
+struct HStoreValue {
+	enum {
+		hsvNullString,
+		hsvString,
+		hsvArray,
+		hsvPairs
+	} type;
+
+	union {
+		struct {
+			char 		*val;
+			size_t		len;
+		} string;
+
+		struct {
+			HStoreValue	*elems;
+			int			nelems;
+		} array;
+
+		struct {
+			HStorePair 	*pairs;
+			int			npairs;
+		} hstore;
+	};
+
+}; 
+
+struct HStorePair {
+	HStoreValue	key;
+	HStoreValue	value;
+}; 
+
+
 extern Pairs* parseHStore(const char *str, int *npairs);
 extern int	hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen);
 extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);

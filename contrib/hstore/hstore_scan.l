@@ -32,7 +32,7 @@ any			[^\,\{\}\"\=\> \t\n\r\f\\]
 
 %%
 
-<INITIAL>[\,\{\}]				{ return *yytext; }
+<INITIAL>[\,\{\}\[\]]			{ return *yytext; }
 
 <INITIAL>\=\>					{ return DELIMITER_P; }
 
@@ -87,7 +87,7 @@ any			[^\,\{\}\"\=\> \t\n\r\f\\]
 									return STRING_P;
 								}
 
-<xNONQUOTED>[\,\{\}]				{
+<xNONQUOTED>[\,\{\}\[\]]		{
 									yylval->str = scanstring;
 									yyless(0);
 									BEGIN INITIAL;
@@ -229,10 +229,10 @@ parseHStore(const char *str, int *npairs) {
 
 	hstore_scanner_init(str);
 
-	if (hstore_yyparse((void*)&parseresult) != 0)
+	if (hstore_yyparse((void*)&parseresult) != 0) /* XXX */
 		hstore_yyerror("bugus input");
 
 	hstore_scanner_finish();
 
-	return convertListToPairs(parseresult, npairs);
+	return (Pairs*)parseresult /* HStoreValue */;
 }

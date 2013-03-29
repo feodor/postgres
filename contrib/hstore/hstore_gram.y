@@ -20,7 +20,13 @@
 
 /* Avoid exit() on fatal scanner errors (a bit ugly -- see yy_fatal_error) */
 #undef fprintf
-#define fprintf(file, fmt, msg)  ereport(ERROR, (errmsg_internal("%s", msg)))
+#define fprintf(file, fmt, msg)  fprintf_to_ereport(fmt, msg)
+
+static void
+fprintf_to_ereport(const char *fmt, const char *msg)
+{
+	ereport(ERROR, (errmsg_internal("%s", msg)));
+}
 
 /* struct string is shared between scan and gram */
 typedef struct string {
@@ -35,71 +41,92 @@ int hstore_yylex(YYSTYPE * yylval_param);
 int hstore_yyparse(void *result);
 void hstore_yyerror(const char *message);
 
-static string *
-makeCopyString(string *s) {
-	string *d = palloc(sizeof(*d));
+static HStoreValue*
+makeHStoreValueString(HStoreValue* v, string *s) {
+	if (v == NULL)
+		v = palloc(sizeof(*v));
 
-	*d = *s;
+	if (s == NULL) {
+		v->type = hsvNullString;
+	} else {
+		v->type = hsvString;
+		v->string.val = s->val;
+		v->string.len = s->len;
+	}
 
-	return d;
+	return v;
 }
 
-static char**
-convertListToStrings(List *inlist, int **elens, int *nelems) {
-	char	**result = NULL;
+static HStoreValue*
+makeHStoreValueArray(List *list) {
+	HStoreValue	*v = palloc(sizeof(*v));
 
-	*nelems = list_length(inlist);
+	v->type = hsvArray;
+	v->array.nelems = list_length(list);
 
-	if (*nelems > 0)
-	{
-		int			i = 0;
+	if (v->array.nelems > 0) {
 		ListCell	*cell;
+		int			i = 0;
 
-		result = palloc(sizeof(*result) * *nelems);
-		*elens = palloc(sizeof(**elens) * *nelems);
+		v->array.elems = palloc(sizeof(HStoreValue) * v->array.nelems);
 
-		foreach(cell, inlist) {
-			string	*s = (string*)lfirst(cell);
+		foreach(cell, list) {
+			HStoreValue	*s = (HStoreValue*)lfirst(cell);
 
-			if (s)
-			{
-				result[i] = s->val;
-				(*elens)[i] = s->len;
-			}
-			else
-			{
-				result[i] = NULL;
-				(*elens)[i] = 0;
-			}
-			i++;
+			v->array.elems[i++] = *s;
 		}
-	}
-	else
-	{
-		*elens = NULL;
+
+	} else {
+		v->array.elems = NULL;
 	}
 
-	return result;
+	return v;
 }
 
-static Pairs*
-convertListToPairs(List *inlist, int *npairs) {
-    Pairs       *result = NULL;
+static HStoreValue*
+makeHStoreValuePairs(List *list) {
+	HStoreValue	*v = palloc(sizeof(*v));
 
-	*npairs = list_length(inlist);
+	v->type = hsvPairs;
+	v->hstore.npairs = list_length(list);
 
-	if (*npairs > 0) 
-	{
-		int         i = 0;
-		ListCell    *cell;
+	if (v->hstore.npairs > 0) {
+		ListCell	*cell;
+		int			i = 0;
 
-		result = palloc(sizeof(*result) * *npairs);
+		v->hstore.pairs = palloc(sizeof(HStorePair) * v->hstore.npairs);
 
-		foreach(cell, inlist)
-			result[i++] = *(Pairs*)lfirst(cell);
+		foreach(cell, list) {
+			HStorePair	*s = (HStorePair*)lfirst(cell);
+
+			v->hstore.pairs[i++] = *s;
+		}
+
+	} else {
+		v->hstore.pairs = NULL;
 	}
 
-	return result;
+	return v;
+}
+
+static HStorePair*
+makeHStoreStringPair(string *key, string *value) {
+	HStorePair	*v = palloc(sizeof(*v));
+
+	makeHStoreValueString(&v->key, key);
+	makeHStoreValueString(&v->value, value);
+
+	return v;
+}
+
+static HStorePair*
+makeHStorePair(string *key, HStoreValue *value) {
+	HStorePair	*v = palloc(sizeof(*v));
+
+	makeHStoreValueString(&v->key, key);
+	v->value = *value;
+
+	return v;
 }
 
 %}
@@ -111,78 +138,68 @@ convertListToPairs(List *inlist, int *npairs) {
 %error-verbose
 
 %union {
-	string 	str;
-	List	*strs; 			/* list of string */
-
-	Pairs	*kv_pair;
-	List	*list_kv_pairs; /* list of kv_pair pair */
+	string 			str;
+	List			*elems; 		/* list of HStoreValue */
+	List			*pairs; 		/* list of HStorePair */
+	HStoreValue		*hvalue;
+	HStorePair		*pair;
 }
 
 %token	<str>			DELIMITER_P NULL_P STRING_P
 
-%type	<list_kv_pairs>	hstore list_pairs
-%type	<kv_pair>		pair
+%type	<hvalue>		hstore array result 
 %type	<str>			key
-%type	<strs>			array
+
+%type	<pair>			pair
+
+%type	<elems>			array_list
+%type 	<pairs>			pair_list
 
 /* Grammar follows */
 %%
 
-hstore: 
-	list_pairs						{ *((List**)result) = $1; }
-	| /* EMPTY */					{ *((List**)result) = NIL; }
-	;
-
-list_pairs:
-	pair							{ $$ = lappend(NIL, $1); }
-	| list_pairs ',' pair			{ $$ = lappend($1, $3); }
+result: 
+	hstore							{ *((HStoreValue**)result) = $1; }
+	|  array						{ *((HStoreValue**)result) = $1; }
+	|  key							{ *((HStoreValue**)result) = makeHStoreValueString(NULL, &$1); }
+	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
 
 array:
-	NULL_P							{ $$ = lappend(NIL, NULL); }
-	| STRING_P						{ $$ = lappend(NIL, makeCopyString(&$1)); }
-	| array ',' NULL_P				{ $$ = lappend($1, NULL); }
-	| array ',' STRING_P			{ $$ = lappend($1, makeCopyString(&$3)); }
+	'{' array_list '}'				{ $$ = makeHStoreValueArray($2); }
+	| '[' array_list ']'			{ $$ = makeHStoreValueArray($2); }
+	;
+
+array_list:
+	NULL_P							{ $$ = lappend(NIL, makeHStoreValueString(NULL, NULL)); }
+	| STRING_P						{ $$ = lappend(NIL, makeHStoreValueString(NULL, &$1)); }
+	| array							{ $$ = lappend(NIL, $1); }
+	| hstore						{ $$ = lappend(NIL, $1); }
+	| array_list ',' NULL_P			{ $$ = lappend($1, makeHStoreValueString(NULL, NULL)); }
+	| array_list ',' STRING_P		{ $$ = lappend($1, makeHStoreValueString(NULL, &$3)); }
+	| array_list ',' array		 	{ $$ = lappend($1, $3); }
+	| array_list ',' hstore			{ $$ = lappend($1, $3); }
+	;
+
+hstore:
+	'{' pair_list '}'				{ $$ = makeHStoreValuePairs($2); }	
+	;
+
+pair_list:
+	pair							{ $$ = lappend(NIL, $1); }
+	| pair_list ',' pair			{ $$ = lappend($1, $3); }
 	;
 
 pair:
-	key DELIMITER_P STRING_P		{
-			$$ = palloc(sizeof(*$$));
-			$$->key = $1.val;
-			$$->keylen = $1.len;
-			$$->valtype = valText;
-			$$->val.text.val = $3.val;
-			$$->val.text.vallen = $3.len;
-			$$->needfree = true;
-		}
-	| key DELIMITER_P NULL_P		{
-			$$ = palloc(sizeof(*$$));
-			$$->key = $1.val;
-			$$->keylen = $1.len;
-			$$->valtype = valNull;
-			$$->needfree = true;
-		}
-	| key DELIMITER_P '{' list_pairs '}'		{
-			$$ = palloc(sizeof(*$$));
-			$$->key = $1.val;
-			$$->keylen = $1.len;
-			$$->valtype = valHstore;
-			$$->val.hstore.pairs =  convertListToPairs($4, &$$->val.hstore.npairs);
-			$$->needfree = true;
-		}
-	| key DELIMITER_P '{' array '}'		{
-			$$ = palloc(sizeof(*$$));
-			$$->key = $1.val;
-			$$->keylen = $1.len;
-			$$->valtype = valArray;
-			$$->val.array.elems = convertListToStrings($4, &$$->val.array.elens, &$$->val.array.nelems);
-			$$->needfree = true;
-		}
+	key DELIMITER_P NULL_P			{ $$ = makeHStoreStringPair(&$1, NULL); }
+	| key DELIMITER_P STRING_P		{ $$ = makeHStoreStringPair(&$1, &$3); } 
+	| key DELIMITER_P hstore		{ $$ = makeHStorePair(&$1, $3); }
+	| key DELIMITER_P array			{ $$ = makeHStorePair(&$1, $3); }
 	;
 
 key:
-	STRING_P					{ $$ = $1; }
-	| NULL_P					{ $$ = $1; }
+	STRING_P						{ $$ = $1; }
+	| NULL_P						{ $$ = $1; }
 	;
 
 %%
