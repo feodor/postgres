@@ -225,18 +225,18 @@ struct HStoreValue {
 
 	union {
 		struct {
+			uint32		len;
 			char 		*val;
-			size_t		len;
 		} string;
 
 		struct {
-			HStoreValue	*elems;
 			int			nelems;
+			HStoreValue	*elems;
 		} array;
 
 		struct {
-			HStorePair 	*pairs;
 			int			npairs;
+			HStorePair 	*pairs;
 		} hstore;
 	};
 
@@ -251,6 +251,16 @@ struct HStorePair {
 extern Pairs* parseHStore(const char *str, int *npairs);
 extern int	hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen);
 extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
+
+#define WHS_KEY         (0x01)
+#define WHS_VALUE       (0x02)
+#define WHS_BEGIN_ARRAY (0x04)
+#define WHS_END_ARRAY   (0x08)
+#define WHS_BEFORE      (0x10)
+#define WHS_AFTER       (0x20)
+
+typedef bool (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, uint32 /* flags */, uint32 /* level */);
+void walkHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
 
 extern size_t hstoreCheckKeyLen(size_t len);
 extern size_t hstoreCheckValLen(size_t len);

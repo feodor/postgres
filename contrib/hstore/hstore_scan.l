@@ -236,3 +236,57 @@ parseHStore(const char *str, int *npairs) {
 
 	return (Pairs*)parseresult /* HStoreValue */;
 }
+
+static bool
+walkHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32 level) 
+{
+	int i;
+
+	switch(v->type) 
+	{
+		case hsvNullString:
+		case hsvString: 
+			cb(cb_arg, v, 0, level);
+			break;
+		case hsvArray:
+			cb(cb_arg, NULL, WHS_BEGIN_ARRAY, level);
+			for(i=0; i<v->array.nelems; i++)
+				if (walkHStoreDo(v->array.elems + i, cb, cb_arg, level + 1) == false)
+					return false;
+			cb(cb_arg, NULL, WHS_END_ARRAY, level);
+			break;
+		case hsvPairs:
+			for(i=0; i<v->hstore.npairs; i++)
+			{
+				if (cb(cb_arg, &v->hstore.pairs[i].key, WHS_KEY | WHS_BEFORE, level) == false)
+					return false;
+				
+				if (v->hstore.pairs[i].value.type == hsvNullString || v->hstore.pairs[i].value.type == hsvString)
+				{
+					if (cb(cb_arg, &v->hstore.pairs[i].value, WHS_VALUE, level) == false)
+						return false;
+				}
+				else 
+				{
+					if (walkHStoreDo(&v->hstore.pairs[i].value, cb, cb_arg, level + 1) == false)
+						return false;
+				}
+
+				if (cb(cb_arg, &v->hstore.pairs[i].key, WHS_KEY | WHS_AFTER, level) == false)
+					return false;
+			}
+			break;
+		default:
+			elog(PANIC, "impossible HStoreValue->type: %d", v->type);
+	}
+
+	return true;
+}
+
+void
+walkHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg)
+{
+	if (v)
+		walkHStoreDo(v, cb, cb_arg, 0); 
+}
+
