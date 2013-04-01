@@ -161,7 +161,7 @@ makeHStorePair(string *key, HStoreValue *value) {
 result: 
 	hstore							{ *((HStoreValue**)result) = $1; }
 	|  array						{ *((HStoreValue**)result) = $1; }
-	|  key							{ *((HStoreValue**)result) = makeHStoreValueString(NULL, &$1); }
+	| pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
 	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
 
