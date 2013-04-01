@@ -159,9 +159,8 @@ makeHStorePair(string *key, HStoreValue *value) {
 %%
 
 result: 
-	hstore							{ *((HStoreValue**)result) = $1; }
-	|  array						{ *((HStoreValue**)result) = $1; }
-	| pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
+	pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
+	| array_list					{ *((HStoreValue**)result) = makeHStoreValueArray($1); }
 	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
 
