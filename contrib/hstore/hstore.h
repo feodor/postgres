@@ -31,6 +31,7 @@ typedef struct
 #define HSE_ISNULL(he_) (((he_).entry & HENTRY_ISNULL) != 0)
 #define HSE_ISARRAY(he_) (((he_).entry & HENTRY_ISARRAY) != 0)
 #define HSE_ISHSTORE(he_) (((he_).entry & HENTRY_ISHSTORE) != 0)
+#define HSE_ISSTRING(he_) (((he_).entry & (HENTRY_ISHSTORE | HENTRY_ISARRAY)) == 0)
 #define HSE_ENDPOS(he_) ((he_).entry & HENTRY_POSMASK)
 #define HSE_OFF(he_) (HSE_ISFIRST(he_) ? 0 : HSE_ENDPOS((&(he_))[-1]))
 #define HSE_LEN(he_) (HSE_ISFIRST(he_)	\
@@ -40,8 +41,9 @@ typedef struct
 /*
  * determined by the size of "endpos" (ie HENTRY_POSMASK)
  */
-#define HSTORE_MAX_KEY_LEN 		0x0FFFFFFF
-#define HSTORE_MAX_VALUE_LEN 	0x0FFFFFFF
+#define HSTORE_MAX_KEY_LEN 		0x0FFFFFFF		/* XXX */
+#define HSTORE_MAX_VALUE_LEN 	0x0FFFFFFF		/* XXX */
+#define HSTORE_MAX_STRING_LEN	0x0FFFFFFF
 
 typedef struct
 {
@@ -55,9 +57,13 @@ typedef struct
  * so we reserve the top few bits of the size field. See hstore_compat.c
  * for one reason why.	Some bits are left for future use here.
  */
-#define HS_FLAG_NEWVERSION 0x80000000
+#define HS_FLAG_NEWVERSION 		0x80000000
+#define HS_FLAG_ARRAY			HENTRY_ISARRAY
+#define HS_FLAG_HSTORE			HENTRY_ISHSTORE
 
-#define HS_COUNT(hsp_) ((hsp_)->size_ & 0x0FFFFFFF)
+#define HS_COUNT_MASK			0x0FFFFFFF
+
+#define HS_COUNT(hsp_) ((hsp_)->size_ & 0x0FFFFFFF)							/* XXX */
 #define HS_SETCOUNT(hsp_,c_) ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION)
 
 
@@ -74,6 +80,7 @@ typedef struct
 #define HS_KEYLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)]))
 #define HS_VALLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)+1]))
 #define HS_VALISNULL(arr_,i_) (HSE_ISNULL((arr_)[2*(i_)+1]))
+#define HS_VALISSTRING(arr_,i_) (HSE_ISSTRING((arr_)[2*(i_)+1]))
 #define HS_VALISARRAY(arr_,i_) (HSE_ISARRAY((arr_)[2*(i_)+1]))
 #define HS_VALISHSTORE(arr_,i_) (HSE_ISHSTORE((arr_)[2*(i_)+1]))
 
@@ -223,6 +230,8 @@ struct HStoreValue {
 		hsvPairs
 	} type;
 
+	uint32		size; /* INTALIGN'ed size of node (including subnodes) */
+
 	union {
 		struct {
 			uint32		len;
@@ -252,15 +261,63 @@ extern Pairs* parseHStore(const char *str, int *npairs);
 extern int	hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen);
 extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
 
-#define WHS_KEY         (0x01)
-#define WHS_VALUE       (0x02)
-#define WHS_BEGIN_ARRAY (0x04)
-#define WHS_END_ARRAY   (0x08)
-#define WHS_BEFORE      (0x10)
-#define WHS_AFTER       (0x20)
+/*
+ * hstore support functios
+ */
 
-typedef bool (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, uint32 /* flags */, uint32 /* level */);
-void walkHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
+#define WHS_KEY         	(0x01)
+#define WHS_VALUE       	(0x02)
+#define WHS_BEGIN_ARRAY 	(0x04)
+#define WHS_END_ARRAY   	(0x08)
+#define WHS_BEGIN_HSTORE    (0x10)
+#define WHS_END_HSTORE      (0x20)
+#define WHS_BEFORE      	(0x40)
+#define WHS_AFTER       	(0x80)
+
+typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, 
+											uint32 /* flags */, uint32 /* level */);
+void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
+
+void walkCompressedHStore(char *buffer, walk_hstore_cb cb, void *cb_arg);
+
+int compareHStorePair(const void *a, const void *b, void *arg);
+
+/* be aware: size effects for n argument */
+#define ORDER_PAIRS(a, n, delaction)												\
+	do {																			\
+		bool	hasNonUniq = false;													\
+																					\
+		if ((n) > 1)																\
+			qsort_arg((a), (n), sizeof(HStorePair), compareHStorePair, &hasNonUniq);\
+																					\
+		if (hasNonUniq)																\
+		{																			\
+			HStorePair	*ptr = (a) + 1,												\
+						*res = (a);													\
+																					\
+			while (ptr - (a) < (n))													\
+			{																		\
+				if (ptr->key.string.len == res->key.string.len && 					\
+					memcmp(ptr->key.string.val, res->key.string.val,				\
+						   ptr->key.string.len) == 0)								\
+				{																	\
+					delaction;														\
+				}																	\
+				else																\
+				{																	\
+					res++;															\
+					if (ptr != res)													\
+						memcpy(res, ptr, sizeof(*res));								\
+				}																	\
+				ptr++;																\
+			}																		\
+																					\
+			(n) = res + 1 - a;														\
+		}																			\
+	} while(0)																		
+
+uint32 compressHStore(HStoreValue *v, char *buffer);
+
 
 extern size_t hstoreCheckKeyLen(size_t len);
 extern size_t hstoreCheckValLen(size_t len);

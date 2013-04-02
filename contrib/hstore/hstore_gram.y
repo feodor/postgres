@@ -48,10 +48,12 @@ makeHStoreValueString(HStoreValue* v, string *s) {
 
 	if (s == NULL) {
 		v->type = hsvNullString;
+		v->size = sizeof(HEntry);
 	} else {
 		v->type = hsvString;
 		v->string.val = s->val;
 		v->string.len = s->len;
+		v->size = sizeof(HEntry) + (s->len);
 	}
 
 	return v;
@@ -63,6 +65,7 @@ makeHStoreValueArray(List *list) {
 
 	v->type = hsvArray;
 	v->array.nelems = list_length(list);
+	v->size = sizeof(HEntry);
 
 	if (v->array.nelems > 0) {
 		ListCell	*cell;
@@ -73,9 +76,9 @@ makeHStoreValueArray(List *list) {
 		foreach(cell, list) {
 			HStoreValue	*s = (HStoreValue*)lfirst(cell);
 
+			v->size += v->array.elems[i].size; 
 			v->array.elems[i++] = *s;
 		}
-
 	} else {
 		v->array.elems = NULL;
 	}
@@ -89,6 +92,7 @@ makeHStoreValuePairs(List *list) {
 
 	v->type = hsvPairs;
 	v->hstore.npairs = list_length(list);
+	v->size = sizeof(HEntry);
 
 	if (v->hstore.npairs > 0) {
 		ListCell	*cell;
@@ -99,9 +103,11 @@ makeHStoreValuePairs(List *list) {
 		foreach(cell, list) {
 			HStorePair	*s = (HStorePair*)lfirst(cell);
 
+			v->size += v->hstore.pairs[i].key.size + v->hstore.pairs[i].value.size;
 			v->hstore.pairs[i++] = *s;
 		}
 
+		ORDER_PAIRS(v->hstore.pairs, v->hstore.npairs, v->size -= ptr->key.size + ptr->value.size);
 	} else {
 		v->hstore.pairs = NULL;
 	}
