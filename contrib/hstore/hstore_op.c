@@ -275,6 +275,7 @@ hstore_delete(PG_FUNCTION_ARGS)
 		}
 	}
 
+	out->size_ = hs->size_ & (HS_FLAG_ARRAY | HS_FLAG_HSTORE); 
 	HS_FINALIZE(out, outcount, bufd, ptrd);
 
 	PG_RETURN_POINTER(out);
@@ -355,6 +356,7 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 		}
 	}
 
+	out->size_ = hs->size_ & (HS_FLAG_ARRAY | HS_FLAG_HSTORE); 
 	HS_FINALIZE(out, outcount, bufd, pd);
 
 	PG_RETURN_POINTER(out);
@@ -455,6 +457,7 @@ hstore_delete_hstore(PG_FUNCTION_ARGS)
 		}
 	}
 
+	out->size_ = hs->size_ & (HS_FLAG_ARRAY | HS_FLAG_HSTORE); 
 	HS_FINALIZE(out, outcount, bufd, pd);
 
 	PG_RETURN_POINTER(out);
@@ -478,8 +481,8 @@ hstore_concat(PG_FUNCTION_ARGS)
 			   *ed;
 	int			s1idx;
 	int			s2idx;
-	int			s1count = HS_COUNT(s1);
-	int			s2count = HS_COUNT(s2);
+	int			s1count = (VARSIZE(s1) <= VARHDRSZ) ? 0 : HS_COUNT(s1);
+	int			s2count = (VARSIZE(s2) <= VARHDRSZ) ? 0 : HS_COUNT(s2);
 	int			outcount = 0;
 
 	SET_VARSIZE(out, VARSIZE(s1) + VARSIZE(s2) - HSHRDSIZE);
@@ -489,8 +492,6 @@ hstore_concat(PG_FUNCTION_ARGS)
 	{
 		/* return a copy of the input, unchanged */
 		memcpy(out, s2, VARSIZE(s2));
-		HS_FIXSIZE(out, s2count);
-		HS_SETCOUNT(out, s2count);
 		PG_RETURN_POINTER(out);
 	}
 
@@ -498,8 +499,6 @@ hstore_concat(PG_FUNCTION_ARGS)
 	{
 		/* return a copy of the input, unchanged */
 		memcpy(out, s1, VARSIZE(s1));
-		HS_FIXSIZE(out, s1count);
-		HS_SETCOUNT(out, s1count);
 		PG_RETURN_POINTER(out);
 	}
 
@@ -554,6 +553,7 @@ hstore_concat(PG_FUNCTION_ARGS)
 		}
 	}
 
+	out->size_ = HS_FLAG_HSTORE; 
 	HS_FINALIZE(out, outcount, bufd, pd);
 
 	PG_RETURN_POINTER(out);
@@ -1257,7 +1257,7 @@ hstore_hash(PG_FUNCTION_ARGS)
 		   (HS_COUNT(hs) != 0 ?
 			CALCDATASIZE(HS_COUNT(hs),
 						 HSE_ENDPOS(ARRPTR(hs)[2 * HS_COUNT(hs) - 1])) :
-			HSHRDSIZE));
+			VARHDRSZ));
 
 	PG_FREE_IF_COPY(hs, 0);
 	PG_RETURN_DATUM(hval);

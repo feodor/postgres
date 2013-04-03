@@ -9,10 +9,12 @@ compareHStorePair(const void *a, const void *b, void *arg)
 	const HStorePair *pb = b;
 
 	if (pa->key.string.len == pb->key.string.len) {
-		int res =  memcmp(pa->key.string.val, pb->key.string.val, pa->key.string.len);
+		int res = memcmp(pa->key.string.val, pb->key.string.val, pa->key.string.len);
 
 		if (res == 0)
 			*(bool*)arg = true;
+
+		return res;
 	}
 
 	return (pa->key.string.len > pb->key.string.len) ? 1 : -1;
@@ -31,7 +33,7 @@ walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32
 			for(i=0; i<v->array.nelems; i++)
 			{
 				if (v->array.elems[i].type == hsvNullString || v->array.elems[i].type == hsvString)
-					cb(cb_arg, v->array.elems + i, 0, level);
+					cb(cb_arg, v->array.elems + i, WHS_ELEM, level);
 				else
 					walkUncompressedHStoreDo(v->array.elems + i, cb, cb_arg, level + 1);
 			}
@@ -88,10 +90,10 @@ walkCompressedHStoreDo(char *buffer, walk_hstore_cb cb, void *cb_arg, uint32 lev
 		case HS_FLAG_ARRAY:
 			data = buffer + nelem * sizeof(HEntry);
 
-			v.type = hsvArray;
-			v.array.nelems = nelem;
+			k.type = hsvArray;
+			k.array.nelems = nelem;
 
-			cb(cb_arg, &v, WHS_BEGIN_ARRAY, level);
+			cb(cb_arg, &k, WHS_BEGIN_ARRAY, level);
 
 			for(i=0; i<nelem; i++)
 			{
@@ -100,7 +102,7 @@ walkCompressedHStoreDo(char *buffer, walk_hstore_cb cb, void *cb_arg, uint32 lev
 
 					if (HSE_ISNULL(array[i]))
 					{
-							v.type = hsvNullString;
+						v.type = hsvNullString;
 					}
 					else
 					{
@@ -108,15 +110,15 @@ walkCompressedHStoreDo(char *buffer, walk_hstore_cb cb, void *cb_arg, uint32 lev
 						v.string.val = data + HSE_OFF(array[i]);
 						v.string.len = HSE_LEN(array[i]);
 					}
-					cb(cb_arg, &v, 0, level);
+					cb(cb_arg, &v, WHS_ELEM, level);
 				}
 				else
 				{
-					walkCompressedHStoreDo(data + HSE_OFF(array[i]), cb, cb_arg, level + 1);
+					walkCompressedHStoreDo(data + INTALIGN(HSE_OFF(array[i])), cb, cb_arg, level + 1);
 				}
 			}
 
-			cb(cb_arg, &v, WHS_END_ARRAY, level);
+			cb(cb_arg, &k, WHS_END_ARRAY, level);
 
 			break;
 		case HS_FLAG_HSTORE:
@@ -140,7 +142,7 @@ walkCompressedHStoreDo(char *buffer, walk_hstore_cb cb, void *cb_arg, uint32 lev
 				{
 					if (HS_VALISNULL(array, i))
 					{
-							v.type = hsvNullString;
+						v.type = hsvNullString;
 					}
 					else
 					{
@@ -152,7 +154,7 @@ walkCompressedHStoreDo(char *buffer, walk_hstore_cb cb, void *cb_arg, uint32 lev
 				}
 				else
 				{
-					walkCompressedHStoreDo(HS_VAL(array, data, i), cb, cb_arg, level + 1);
+					walkCompressedHStoreDo(data + INTALIGN(HSE_OFF(array[2*i + 1])), cb, cb_arg, level + 1);
 				}
 
 
@@ -181,27 +183,186 @@ walkCompressedHStore(char *buffer, walk_hstore_cb cb, void *cb_arg)
 
 typedef struct CompressState
 {
+	char	*begin;
 	char	*ptr;
+
+	struct {
+		uint32	i;
+		uint32	*header;
+		HEntry	*array;
+		char	*begin;
+	} *levelstate, *lptr, *pptr;
+
+	uint32	maxlevel;
+	
 } CompressState;
 
+#define	curLevelState	state->lptr
+#define prevLevelState	state->pptr
+
 static void
-compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level) {
+putHEntryString(CompressState *state, HStoreValue* value, uint32 level, uint32 i)
+{
+	Assert(value->type == hsvString || value->type == hsvNullString);
+	curLevelState = state->levelstate + level;
+
+	if (i == 0)
+		curLevelState->array[0].entry = HENTRY_ISFIRST;
+	else
+		curLevelState->array[i].entry = 0;
+
+	if (value->type == hsvNullString)
+	{
+		curLevelState->array[i].entry |= HENTRY_ISNULL;
+
+		if (i>0)
+			curLevelState->array[i].entry |=
+				curLevelState->array[i - 1].entry & HENTRY_POSMASK;
+	}
+	else
+	{
+		memcpy(state->ptr, value->string.val, value->string.len);
+		state->ptr += value->string.len;
+
+		if (i == 0)
+			curLevelState->array[i].entry |= value->string.len;
+		else
+			curLevelState->array[i].entry |= 
+				(curLevelState->array[i - 1].entry & HENTRY_POSMASK) + value->string.len;
+	}
+}
+
+static void
+compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
+{
 	CompressState	*state = arg;
 
+	if (level == state->maxlevel) {
+		state->maxlevel *= 2;
+		state->levelstate = repalloc(state->levelstate, sizeof(*state->levelstate) * state->maxlevel);
+	}
+
+	curLevelState = state->levelstate + level;
+
+	if (flags & (WHS_BEGIN_ARRAY | WHS_BEGIN_HSTORE))
+	{
+		Assert(((flags & WHS_BEGIN_ARRAY) && value->type == hsvArray) ||
+			   ((flags & WHS_BEGIN_HSTORE) && value->type == hsvPairs));
+
+		curLevelState->begin = state->ptr;
+
+		switch(INTALIGN(state->ptr - state->begin) - (state->ptr - state->begin))
+		{
+			case 3:
+				*state->ptr = '\0'; state->ptr++;
+			case 2:
+				*state->ptr = '\0'; state->ptr++;
+			case 1:
+				*state->ptr = '\0'; state->ptr++;
+			case 0:
+			default:
+				break;
+		}
+
+		curLevelState->header = (uint32*)state->ptr;
+		state->ptr += sizeof(*curLevelState->header);
+
+		curLevelState->array = (HEntry*)state->ptr;
+		curLevelState->i = 0;
+
+		if (value->type == hsvArray)
+		{
+			state->ptr += sizeof(HEntry) * value->array.nelems;
+			*curLevelState->header = value->array.nelems | HENTRY_ISARRAY;
+		}
+		else
+		{
+			state->ptr += sizeof(HEntry) * value->hstore.npairs * 2;
+			*curLevelState->header = value->hstore.npairs | HENTRY_ISHSTORE;
+		}
+
+		if (level == 0)
+			*curLevelState->header |= HS_FLAG_NEWVERSION;
+	}
+	else if (flags & WHS_ELEM)
+	{
+		putHEntryString(state, value, level, curLevelState->i); 
+		curLevelState->i++;
+	}
+	else if (flags & WHS_KEY)
+	{
+		if (flags & WHS_AFTER)
+			return;
+		Assert(value->type == hsvString);
+		Assert(flags & WHS_BEFORE);
+
+		putHEntryString(state, value, level, curLevelState->i * 2); 
+	}
+	else if (flags & WHS_VALUE)
+	{
+		putHEntryString(state, value, level, curLevelState->i * 2 + 1);
+		curLevelState->i++;
+	}
+	else if (flags & (WHS_END_ARRAY | WHS_END_HSTORE))
+	{
+		uint32	len, i;
+
+		Assert(((flags & WHS_END_ARRAY) && value->type == hsvArray) ||
+			   ((flags & WHS_END_HSTORE) && value->type == hsvPairs));
+		if (level == 0)
+			return;
+
+		len = state->ptr - (char*)curLevelState->begin;
+
+		prevLevelState = curLevelState - 1;
+
+		if (*prevLevelState->header & HENTRY_ISARRAY) {
+			i = prevLevelState->i;
+
+			prevLevelState->array[i].entry =  HENTRY_ISARRAY;
+
+			if (i == 0)
+				prevLevelState->array[0].entry |= HENTRY_ISFIRST | len;
+			else
+				prevLevelState->array[i].entry |=
+					(prevLevelState->array[i - 1].entry & HENTRY_POSMASK) + len;
+		}
+		else if (*prevLevelState->header & HENTRY_ISHSTORE)
+		{
+			i = 2 * prevLevelState->i + 1; /* VALUE, not a KEY */
+
+			prevLevelState->array[i].entry =  HENTRY_ISHSTORE;
+
+			prevLevelState->array[i].entry |=
+				(prevLevelState->array[i - 1].entry & HENTRY_POSMASK) + len;
+		}
+		else
+		{
+			elog(PANIC, "Wrong parent");
+		}
+
+		Assert(state->ptr - curLevelState->begin <= value->size);
+		prevLevelState->i++;
+	}
+	else
+	{
+		elog(PANIC, "Wrong flags");
+	}
 }
 
 uint32
 compressHStore(HStoreValue *v, char *buffer) {
-	uint32	l = 0;
-
+	uint32			l = 0;
 	CompressState	state;
 
-	state.ptr = buffer;
+	state.begin = state.ptr = buffer;
+	state.maxlevel = 8;
+	state.levelstate = palloc(sizeof(*state.levelstate) * state.maxlevel);
 
 	walkUncompressedHStore(v, compressCallback, &state);
 
 	l = state.ptr - buffer;
-	Assert(l == v->size);
+	Assert(l <= v->size);
 
 	return l;
 }

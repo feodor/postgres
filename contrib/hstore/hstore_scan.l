@@ -223,17 +223,17 @@ addchar(bool init, char s) {
 	}
 }
 
-Pairs* 
-parseHStore(const char *str, int *npairs) {
-	List		*parseresult;
+HStoreValue* 
+parseHStore(const char *str) {
+	HStoreValue		*parseresult;
 
 	hstore_scanner_init(str);
 
-	if (hstore_yyparse((void*)&parseresult) != 0) /* XXX */
+	if (hstore_yyparse((void*)&parseresult) != 0)
 		hstore_yyerror("bugus input");
 
 	hstore_scanner_finish();
 
-	return (Pairs*)parseresult /* HStoreValue */;
+	return parseresult;
 }
 

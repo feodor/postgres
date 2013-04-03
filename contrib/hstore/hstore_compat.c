@@ -241,7 +241,8 @@ hstoreUpgrade(Datum orig)
 	bool		writable;
 
 	/* Return immediately if no conversion needed */
-	if ((hs->size_ & HS_FLAG_NEWVERSION) ||
+	if (VARSIZE_ANY(hs) <= VARHDRSZ || 
+		(hs->size_ & HS_FLAG_NEWVERSION) ||
 		hs->size_ == 0 ||
 		(VARSIZE(hs) < 32768 && HSE_ISFIRST((ARRPTR(hs)[0]))))
 		return hs;

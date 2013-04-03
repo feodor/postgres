@@ -46,14 +46,22 @@ makeHStoreValueString(HStoreValue* v, string *s) {
 	if (v == NULL)
 		v = palloc(sizeof(*v));
 
-	if (s == NULL) {
+	if (s == NULL)
+	{
 		v->type = hsvNullString;
 		v->size = sizeof(HEntry);
-	} else {
+	}
+	else if (s->len > HENTRY_POSMASK)
+	{
+		elog(ERROR, "string is too long");
+	}
+	else
+	{
 		v->type = hsvString;
 		v->string.val = s->val;
 		v->string.len = s->len;
-		v->size = sizeof(HEntry) + (s->len);
+		v->size = sizeof(HEntry) + s->len;
+
 	}
 
 	return v;
@@ -76,8 +84,12 @@ makeHStoreValueArray(List *list) {
 		foreach(cell, list) {
 			HStoreValue	*s = (HStoreValue*)lfirst(cell);
 
-			v->size += v->array.elems[i].size; 
+			v->size += s->size + sizeof(HEntry); 
+
 			v->array.elems[i++] = *s;
+
+			if (v->size > HENTRY_POSMASK)
+				elog(ERROR, "array is too long");
 		}
 	} else {
 		v->array.elems = NULL;
@@ -103,8 +115,11 @@ makeHStoreValuePairs(List *list) {
 		foreach(cell, list) {
 			HStorePair	*s = (HStorePair*)lfirst(cell);
 
-			v->size += v->hstore.pairs[i].key.size + v->hstore.pairs[i].value.size;
+			v->size += s->key.size + s->value.size + sizeof(HEntry); 
 			v->hstore.pairs[i++] = *s;
+
+			if (v->size > HENTRY_POSMASK)
+				elog(ERROR, "hstore is too long");
 		}
 
 		ORDER_PAIRS(v->hstore.pairs, v->hstore.npairs, v->size -= ptr->key.size + ptr->value.size);
@@ -121,6 +136,9 @@ makeHStoreStringPair(string *key, string *value) {
 
 	makeHStoreValueString(&v->key, key);
 	makeHStoreValueString(&v->value, value);
+
+	if (v->key.size + v->value.size > HENTRY_POSMASK)
+		elog(ERROR, "pair is too long");
 
 	return v;
 }

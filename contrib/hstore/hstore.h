@@ -63,8 +63,8 @@ typedef struct
 
 #define HS_COUNT_MASK			0x0FFFFFFF
 
-#define HS_COUNT(hsp_) ((hsp_)->size_ & 0x0FFFFFFF)							/* XXX */
-#define HS_SETCOUNT(hsp_,c_) ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION)
+#define HS_COUNT(hsp_) ((VARSIZE(hsp_) <= VARHDRSZ) ? 0 : (hsp_)->size_ & 0x0FFFFFFF)		/* XXX */
+#define HS_SETCOUNT(hsp_,c_) ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION | ((hsp_)->size_ & ~HS_COUNT_MASK))
 
 
 #define HSHRDSIZE	(sizeof(HStore))
@@ -230,7 +230,7 @@ struct HStoreValue {
 		hsvPairs
 	} type;
 
-	uint32		size; /* INTALIGN'ed size of node (including subnodes) */
+	uint32		size; /* size of node (including subnodes) */
 
 	union {
 		struct {
@@ -257,7 +257,7 @@ struct HStorePair {
 }; 
 
 
-extern Pairs* parseHStore(const char *str, int *npairs);
+extern HStoreValue* parseHStore(const char *str);
 extern int	hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen);
 extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
 
@@ -265,14 +265,15 @@ extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
  * hstore support functios
  */
 
-#define WHS_KEY         	(0x01)
-#define WHS_VALUE       	(0x02)
-#define WHS_BEGIN_ARRAY 	(0x04)
-#define WHS_END_ARRAY   	(0x08)
-#define WHS_BEGIN_HSTORE    (0x10)
-#define WHS_END_HSTORE      (0x20)
-#define WHS_BEFORE      	(0x40)
-#define WHS_AFTER       	(0x80)
+#define WHS_KEY         	(0x001)
+#define WHS_VALUE       	(0x002)
+#define WHS_ELEM       		(0x004)
+#define WHS_BEGIN_ARRAY 	(0x008)
+#define WHS_END_ARRAY   	(0x010)
+#define WHS_BEGIN_HSTORE    (0x020)
+#define WHS_END_HSTORE      (0x040)
+#define WHS_BEFORE      	(0x080)
+#define WHS_AFTER       	(0x100)
 
 typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, 
 											uint32 /* flags */, uint32 /* level */);

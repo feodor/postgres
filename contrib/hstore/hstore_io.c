@@ -255,6 +255,7 @@ hstorePairs(Pairs *pairs, int32 pcount, int32 buflen)
 	for (i = 0; i < pcount; i++)
 		HS_ADDITEM(entry, buf, ptr, pairs[i]);
 
+	out->size_ = HS_FLAG_HSTORE;
 	HS_FINALIZE(out, pcount, buf, ptr);
 
 	return out;
@@ -266,20 +267,36 @@ Datum		hstore_in(PG_FUNCTION_ARGS);
 Datum
 hstore_in(PG_FUNCTION_ARGS)
 {
-	int32		buflen;
-	HStore	   *out;
-	Pairs	   *parsedPairs;
-	int			nParsedPairs;
+	uint32			buflen;
+	HStore	 	   *out;
+	HStoreValue	   *parsed;
 
-	parsedPairs = parseHStore(PG_GETARG_CSTRING(0), &nParsedPairs);
+	parsed = parseHStore(PG_GETARG_CSTRING(0));
 
-	nParsedPairs = hstoreUniquePairs(parsedPairs, nParsedPairs, &buflen);
+	if (parsed == NULL)
+	{
+		buflen = 0;
+		out = palloc(VARHDRSZ);
+	}
+	else
+	{
+		buflen = VARHDRSZ + parsed->size; 
+		out = palloc(buflen);
+		SET_VARSIZE(out, buflen);
 
-	out = hstorePairs(parsedPairs, nParsedPairs, buflen);
+		buflen = compressHStore(parsed, VARDATA(out));
+	}
+	SET_VARSIZE(out, buflen + VARHDRSZ);
+
+	
+	Assert(VARSIZE(out) ==
+			    (HS_COUNT(out) != 0 ?
+				CALCDATASIZE(HS_COUNT(out),
+				HSE_ENDPOS(ARRPTR(out)[2 * HS_COUNT(out) - 1])) :
+				VARHDRSZ));
 
 	PG_RETURN_POINTER(out);
 }
-
 
 PG_FUNCTION_INFO_V1(hstore_recv);
 Datum		hstore_recv(PG_FUNCTION_ARGS);
@@ -946,20 +963,97 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(rettuple));
 }
 
-
-static char *
-cpw(char *dst, char *src, int len)
+static void
+putEscapedString(StringInfo str, char *string, uint32 len)
 {
-	char	   *ptr = src;
-
-	while (ptr - src < len)
+	if (string)
 	{
-		if (*ptr == '"' || *ptr == '\\')
-			*dst++ = '\\';
-		*dst++ = *ptr++;
+		char       *ptr = string;
+
+		appendStringInfoCharMacro(str, '"');
+		while (ptr - string < len)
+		{
+			if (*ptr == '"' || *ptr == '\\')
+				appendStringInfoCharMacro(str, '\\');
+			appendStringInfoCharMacro(str, *ptr);
+			ptr++;
+		}
+		appendStringInfoCharMacro(str, '"');
 	}
-	return dst;
+	else
+	{
+		appendBinaryStringInfo(str, "NULL", 4);
+	}
 }
+
+typedef struct OutState {
+	StringInfo	str;
+	bool first;
+} OutState;
+
+static void
+outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
+{
+	OutState	*state = arg;
+
+	if (flags & WHS_BEGIN_ARRAY)
+	{
+		if (state->first == false && (flags & WHS_ELEM))
+			appendBinaryStringInfo(state->str, ", ", 2);
+		state->first = true;
+
+		if (level > 0)
+			appendStringInfoCharMacro(state->str, '{' /* XXX */);
+	}
+	else if (flags & WHS_BEGIN_HSTORE)
+	{
+		if (state->first == false && (flags & WHS_ELEM))
+			appendBinaryStringInfo(state->str, ", ", 2);
+		state->first = true;
+
+		if (level > 0)
+			appendStringInfoCharMacro(state->str, '{');
+	}
+	else if (flags & WHS_KEY)
+	{
+		if (flags & WHS_AFTER)
+			return;
+
+		if (state->first == false)
+			appendBinaryStringInfo(state->str, ", ", 2);
+		else
+			state->first = false;
+
+		putEscapedString(state->str, value->string.val,  value->string.len);
+		appendBinaryStringInfo(state->str, "=>", 2);
+	}
+	else if (flags & (WHS_ELEM | WHS_VALUE))
+	{
+		if (state->first == false && (flags & WHS_ELEM))
+			appendBinaryStringInfo(state->str, ", ", 2);
+		else
+			state->first = false;
+
+		putEscapedString(state->str, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
+	}
+	else if (flags & WHS_END_ARRAY)
+	{
+		if (level > 0)
+			appendStringInfoCharMacro(state->str, '}' /* XXX */);
+		state->first = false;
+	}
+	else if (flags & WHS_END_HSTORE)
+	{
+		if (level > 0)
+			appendStringInfoCharMacro(state->str, '}');
+		state->first = false;
+	}
+	else
+	{
+		elog(PANIC, "Wrong flags");
+	}
+}
+
 
 PG_FUNCTION_INFO_V1(hstore_out);
 Datum		hstore_out(PG_FUNCTION_ARGS);
@@ -967,119 +1061,30 @@ Datum
 hstore_out(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	int			buflen,
-				i;
-	int			count = HS_COUNT(in);
-	char	   *out,
-			   *ptr;
-	char	   *base = STRPTR(in);
-	HEntry	   *entries = ARRPTR(in);
-	char	   **nestedDatum;
-	int	 	   *nestedLength;
+	OutState	state;
 
-	if (count == 0)
+
+	if (VARSIZE_ANY(in) <= VARHDRSZ)
 	{
-		out = palloc(1);
+		char *out = palloc(1);
 		*out = '\0';
 		PG_RETURN_CSTRING(out);
 	}
+/*
+	Assert(VARSIZE(in) ==
+			    (HS_COUNT(in) != 0 ?
+				CALCDATASIZE(HS_COUNT(in),
+				HSE_ENDPOS(ARRPTR(in)[2 * HS_COUNT(in) - 1])) :
+				VARHDRSZ));
+*/
+	state.str = makeStringInfo();
+	enlargeStringInfo(state.str, (VARSIZE_ANY(in) * 3) >> 1 /* just estimation */);
 
-	buflen = 0;
-	nestedDatum = palloc(sizeof(*nestedDatum) * count);
-	nestedLength = palloc(sizeof(*nestedLength) * count);
+	state.first = true;
 
-	/*
-	 * this loop overestimates due to pessimistic assumptions about escaping,
-	 * so very large hstore values can't be output. this could be fixed, but
-	 * many other data types probably have the same issue. This replaced code
-	 * that used the original varlena size for calculations, which was wrong
-	 * in some subtle ways.
-	 */
+	walkCompressedHStore(VARDATA_ANY(in), outCallback, &state); 
 
-	for (i = 0; i < count; i++)
-	{
-		/* include "" and => and comma-space */
-		buflen += 6 + 2 * HS_KEYLEN(entries, i);
-		/* include "" only if nonnull */
-	
-		buflen += 2;
-
-		if (HS_VALISNULL(entries, i))
-		{
-			buflen += 2;
-		}
-		else if (HS_VALISARRAY(entries, i))
-		{
-			char *p = HS_VAL(entries, base, i);
-
-			while (INTALIGN(p - (char*)base) != (p - (char*)base))
-				p++;
-			nestedDatum[i] = DatumGetPointer(OidOutputFunctionCall(F_ARRAY_OUT, PointerGetDatum(p)));
-			nestedLength[i] = strlen(nestedDatum[i]);
-			buflen += nestedLength[i];
-		} 
-		else if (HS_VALISHSTORE(entries, i))
-		{
-			char *p = HS_VAL(entries, base, i);
-
-			while (INTALIGN(p - (char*)base) != (p - (char*)base))
-				p++;
-			nestedDatum[i] = DatumGetPointer(DirectFunctionCall1(hstore_out, PointerGetDatum(p)));
-			nestedLength[i] = strlen(nestedDatum[i]);
-			buflen += nestedLength[i] + 2 /* {} */;
-		}
-		else
-		{
-			buflen += 2 * HS_VALLEN(entries, i);
-		}
-	}
-
-	out = ptr = palloc(buflen);
-
-	for (i = 0; i < count; i++)
-	{
-		*ptr++ = '"';
-		ptr = cpw(ptr, HS_KEY(entries, base, i), HS_KEYLEN(entries, i));
-		*ptr++ = '"';
-		*ptr++ = '=';
-		*ptr++ = '>';
-		if (HS_VALISNULL(entries, i))
-		{
-			*ptr++ = 'N';
-			*ptr++ = 'U';
-			*ptr++ = 'L';
-			*ptr++ = 'L';
-		}
-		else if (HS_VALISARRAY(entries, i))
-		{
-			memcpy(ptr, nestedDatum[i], nestedLength[i]);
-			ptr += nestedLength[i];
-		}
-		else if (HS_VALISHSTORE(entries, i))
-		{
-			*ptr++ = '{';
-			memcpy(ptr, nestedDatum[i], nestedLength[i]);
-			ptr += nestedLength[i];
-			*ptr++ = '}';
-		}
-		else
-		{
-			*ptr++ = '"';
-			ptr = cpw(ptr, HS_VAL(entries, base, i), HS_VALLEN(entries, i));
-			*ptr++ = '"';
-		}
-
-		if (i + 1 != count)
-		{
-			*ptr++ = ',';
-			*ptr++ = ' ';
-		}
-
-		Assert(ptr-out < buflen);
-	}
-	*ptr = '\0';
-
-	PG_RETURN_CSTRING(out);
+	PG_RETURN_CSTRING(state.str->data);
 }
 
 
