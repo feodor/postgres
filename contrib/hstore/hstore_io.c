@@ -834,7 +834,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	 * domain nulls.
 	 */
 
-	if (VARSIZE(hs) <= VARHDRSZ && rec)
+	if (HS_ISEMPTY(hs) && rec)
 		PG_RETURN_POINTER(rec);
 
 	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
@@ -907,7 +907,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			continue;
 		}
 
-		if (VARSIZE(hs) > VARHDRSZ)
+		if (!HS_ISEMPTY(hs))
 		{
 			char *key = NameStr(tupdesc->attrs[i]->attname);
 
@@ -1066,7 +1066,7 @@ hstore_out(PG_FUNCTION_ARGS)
 	OutState	state;
 
 
-	if (VARSIZE_ANY(in) <= VARHDRSZ)
+	if (HS_ISEMPTY(in))
 	{
 		char *out = palloc(1);
 		*out = '\0';

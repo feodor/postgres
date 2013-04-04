@@ -63,8 +63,9 @@ typedef struct
 
 #define HS_COUNT_MASK			0x0FFFFFFF
 
-#define HS_COUNT(hsp_) ((VARSIZE(hsp_) <= VARHDRSZ) ? 0 : (hsp_)->size_ & 0x0FFFFFFF)		/* XXX */
-#define HS_SETCOUNT(hsp_,c_) ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION | ((hsp_)->size_ & ~HS_COUNT_MASK))
+#define HS_ISEMPTY(hsp_)		(VARSIZE(hsp_) <= VARHDRSZ)
+#define HS_COUNT(hsp_) 			(HS_ISEMPTY(hsp_) ? 0 : (hsp_)->size_ & 0x0FFFFFFF)		/* XXX */
+#define HS_SETCOUNT(hsp_,c_) 	((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION | ((hsp_)->size_ & ~HS_COUNT_MASK))
 
 
 #define HSHRDSIZE	(sizeof(HStore))
