@@ -172,7 +172,7 @@ makeHStorePair(string *key, HStoreValue *value) {
 %token	<str>			DELIMITER_P NULL_P STRING_P
 
 %type	<hvalue>		hstore array result 
-%type	<str>			key
+%type	<str>			key	nil
 
 %type	<pair>			pair
 
@@ -184,22 +184,30 @@ makeHStorePair(string *key, HStoreValue *value) {
 
 result: 
 	pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
+	/* | hstore						{ *((HStoreValue**)result) = $1; } XXX is it needed or wanted? */
 	| array							{ *((HStoreValue**)result) = $1; }
+	| '{' '}'						{ *((HStoreValue**)result) = NULL; }
+	| '[' ']'						{ *((HStoreValue**)result) = NULL; }
 	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
 
 array:
-	'{' '}'							{ $$ = makeHStoreValueArray(NIL); }
-	| '{' array_list '}'			{ $$ = makeHStoreValueArray($2); }
+	'{' array_list '}'				{ $$ = makeHStoreValueArray($2); }
 	| '[' array_list ']'			{ $$ = makeHStoreValueArray($2); }
 	;
 
+nil:
+	NULL_P							{ $$ = $1; }
+	| '{' '}'						{ $$.val = strdup("NULL"); $$.len = $$.total = 4; }
+	| '[' ']'						{ $$.val = strdup("NULL"); $$.len = $$.total = 4; }
+	;
+
 array_list:
-	NULL_P							{ $$ = lappend(NIL, makeHStoreValueString(NULL, NULL)); }
+	nil								{ $$ = lappend(NIL, makeHStoreValueString(NULL, NULL)); }
 	| STRING_P						{ $$ = lappend(NIL, makeHStoreValueString(NULL, &$1)); }
 	| array							{ $$ = lappend(NIL, $1); }
 	| hstore						{ $$ = lappend(NIL, $1); }
-	| array_list ',' NULL_P			{ $$ = lappend($1, makeHStoreValueString(NULL, NULL)); }
+	| array_list ',' nil			{ $$ = lappend($1, makeHStoreValueString(NULL, NULL)); }
 	| array_list ',' STRING_P		{ $$ = lappend($1, makeHStoreValueString(NULL, &$3)); }
 	| array_list ',' array		 	{ $$ = lappend($1, $3); }
 	| array_list ',' hstore			{ $$ = lappend($1, $3); }
@@ -215,7 +223,7 @@ pair_list:
 	;
 
 pair:
-	key DELIMITER_P NULL_P			{ $$ = makeHStoreStringPair(&$1, NULL); }
+	key DELIMITER_P nil				{ $$ = makeHStoreStringPair(&$1, NULL); }
 	| key DELIMITER_P STRING_P		{ $$ = makeHStoreStringPair(&$1, &$3); } 
 	| key DELIMITER_P hstore		{ $$ = makeHStorePair(&$1, $3); }
 	| key DELIMITER_P array			{ $$ = makeHStorePair(&$1, $3); }
