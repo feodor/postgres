@@ -277,11 +277,14 @@ extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
 
 typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, 
 											uint32 /* flags */, uint32 /* level */);
-void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
+extern void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
 
-void walkCompressedHStore(char *buffer, walk_hstore_cb cb, void *cb_arg);
+extern void walkCompressedHStore(char *buffer, walk_hstore_cb cb, void *cb_arg);
 
-int compareHStorePair(const void *a, const void *b, void *arg);
+extern int compareHStorePair(const void *a, const void *b, void *arg);
+
+extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
+												uint32 *lowbound, char *key, uint32 keylen);
 
 /* be aware: size effects for n argument */
 #define ORDER_PAIRS(a, n, delaction)												\

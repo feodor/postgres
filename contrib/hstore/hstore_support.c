@@ -2,24 +2,132 @@
 
 #include "hstore.h"
 
+static int
+compareHStoreValue(const HStoreValue *va, const HStoreValue *vb)
+{
+	Assert(va->type == hsvString);
+	Assert(vb->type == hsvString);
+
+	if (va->string.len == vb->string.len)
+		return memcmp(va->string.val, vb->string.val, va->string.len);
+
+	return (va->string.len > vb->string.len) ? 1 : -1;
+}
+
 int
 compareHStorePair(const void *a, const void *b, void *arg)
 {
 	const HStorePair *pa = a;
 	const HStorePair *pb = b;
 
-	if (pa->key.string.len == pb->key.string.len) {
-		int res = memcmp(pa->key.string.val, pb->key.string.val, pa->key.string.len);
+	int res = compareHStoreValue(&pa->key, &pb->key);
 
-		if (res == 0)
-			*(bool*)arg = true;
+	if (res == 0)
+		*(bool*)arg = true;
 
-		return res;
-	}
-
-	return (pa->key.string.len > pb->key.string.len) ? 1 : -1;
+	return res;
 }
 
+HStoreValue*
+findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *key, uint32 keylen)
+{
+	uint32				header = *(uint32*)buffer;
+	static HStoreValue 	r;
+
+	if (flags & HS_FLAG_ARRAY & header)
+	{
+		HEntry	*array = (HEntry*)(buffer + sizeof(header));
+		char 	*data = (char*)(array + (header & HS_COUNT_MASK));
+		int 	i;
+
+		for(i=(lowbound) ? *lowbound : 0; i<(header & HS_COUNT_MASK); i++) {
+			HEntry	*e = array + i;
+
+			if ((e->entry & HENTRY_ISNULL) && key == NULL) 
+			{
+				r.type = hsvNullString;
+				if (lowbound)
+					*lowbound = i;
+
+				return &r;
+			} 
+			else if ((e->entry & (HENTRY_ISARRAY | HENTRY_ISHSTORE)) == 0 && key != NULL)
+			{
+				if (keylen == HSE_LEN(*e) && memcmp(key, data + HSE_OFF(*e), keylen) == 0)
+				{
+					r.type = hsvString;
+					r.string.val = data + HSE_OFF(*e);
+					r.string.len = keylen;
+					if (lowbound)
+						*lowbound = i;
+
+					return &r;
+				}
+			}
+		}
+	}
+	else if (flags & HS_FLAG_HSTORE & header)
+	{
+		HEntry  *array = (HEntry*)(buffer + sizeof(header));
+		char    *data = (char*)(array + (header & HS_COUNT_MASK) * 2);
+		uint32	stopLow = lowbound ? *lowbound : 0,
+				stopHigh = (header & HS_COUNT_MASK),
+				stopMiddle;
+
+		while (stopLow < stopHigh)
+		{
+			int		difference;
+			HEntry	*e;
+
+			stopMiddle = stopLow + (stopHigh - stopLow) / 2;
+
+			e = array + stopMiddle * 2;
+
+			if (keylen == HSE_LEN(*e))
+				difference = memcmp(data + HSE_OFF(*e), key, keylen);
+			else
+				difference = (HSE_LEN(*e) > keylen) ? 1 : -1;
+
+			if (difference == 0)
+			{
+				HEntry	*v = e + 1;
+
+				if (lowbound)
+					*lowbound = stopMiddle + 1;
+
+				if (HSE_ISSTRING(*v))
+				{
+					if (HSE_ISNULL(*v))
+					{
+						r.type = hsvNullString;
+					}
+					else
+					{
+						r.type = hsvString;
+						r.string.val = data + HSE_OFF(*v);
+						r.string.len = HSE_LEN(*v);
+					}
+				}
+				else
+				{
+					elog(PANIC, "can't for now");
+				}
+
+				return &r;
+			}
+			else if (difference < 0)
+			{
+				stopLow = stopMiddle + 1;
+			}
+			else
+			{
+				stopHigh = stopMiddle;
+			}
+		}
+	}
+
+	return NULL;
+}
 
 static void
 walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32 level) 

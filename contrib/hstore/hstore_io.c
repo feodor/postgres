@@ -625,7 +625,6 @@ Datum
 hstore_from_record(PG_FUNCTION_ARGS)
 {
 	HeapTupleHeader rec;
-	int32			buflen;
 	HStore		   *out;
 	HStoreValue	   v;
 	Oid				tupType;
@@ -783,8 +782,6 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 {
 	Oid			argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	HStore	   *hs;
-	HEntry	   *entries;
-	char	   *ptr;
 	HeapTupleHeader rec;
 	Oid			tupType;
 	int32		tupTypmod;
@@ -830,8 +827,6 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	}
 
 	hs = PG_GETARG_HS(1);
-	entries = ARRPTR(hs);
-	ptr = STRPTR(hs);
 
 	/*
 	 * if the input hstore is empty, we can only skip the rest if we were
@@ -839,7 +834,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	 * domain nulls.
 	 */
 
-	if (HS_COUNT(hs) == 0 && rec)
+	if (VARSIZE(hs) <= VARHDRSZ && rec)
 		PG_RETURN_POINTER(rec);
 
 	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
@@ -903,9 +898,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	{
 		ColumnIOData *column_info = &my_extra->columns[i];
 		Oid			column_type = tupdesc->attrs[i]->atttypid;
-		char	   *value;
-		int			idx;
-		int			vallen;
+		HStoreValue	*v = NULL;
 
 		/* Ignore dropped columns in datatype */
 		if (tupdesc->attrs[i]->attisdropped)
@@ -914,9 +907,12 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			continue;
 		}
 
-		idx = hstoreFindKey(hs, 0,
-							NameStr(tupdesc->attrs[i]->attname),
-							strlen(NameStr(tupdesc->attrs[i]->attname)));
+		if (VARSIZE(hs) > VARHDRSZ)
+		{
+			char *key = NameStr(tupdesc->attrs[i]->attname);
+
+			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, NULL, key, strlen(key));
+		}
 
 		/*
 		 * we can't just skip here if the key wasn't found since we might have
@@ -926,7 +922,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 		 * then every field which we don't populate needs to be run through
 		 * the input function just in case it's a domain type.
 		 */
-		if (idx < 0 && rec)
+		if (v == NULL && rec)
 			continue;
 
 		/*
@@ -942,7 +938,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			column_info->column_type = column_type;
 		}
 
-		if (idx < 0 || HS_VALISNULL(entries, idx))
+		if (v == NULL || v->type == hsvNullString)
 		{
 			/*
 			 * need InputFunctionCall to happen even for nulls, so that domain
@@ -955,12 +951,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 		}
 		else
 		{
-			vallen = HS_VALLEN(entries, idx);
-			value = palloc(1 + vallen);
-			memcpy(value, HS_VAL(entries, ptr, idx), vallen);
-			value[vallen] = 0;
-
-			values[i] = InputFunctionCall(&column_info->proc, value,
+			values[i] = InputFunctionCall(&column_info->proc, pnstrdup(v->string.val, v->string.len),
 										  column_info->typioparam,
 										  tupdesc->attrs[i]->atttypmod);
 			nulls[i] = false;
