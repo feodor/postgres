@@ -965,97 +965,157 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(rettuple));
 }
 
-static void
-putEscapedString(StringInfo str, char *string, uint32 len)
-{
-	if (string)
-	{
-		char       *ptr = string;
-
-		appendStringInfoCharMacro(str, '"');
-		while (ptr - string < len)
-		{
-			if (*ptr == '"' || *ptr == '\\')
-				appendStringInfoCharMacro(str, '\\');
-			appendStringInfoCharMacro(str, *ptr);
-			ptr++;
-		}
-		appendStringInfoCharMacro(str, '"');
-	}
-	else
-	{
-		appendBinaryStringInfo(str, "NULL", 4);
-	}
-}
-
 typedef struct OutState {
 	StringInfo	str;
 	bool first;
+	enum {
+		HStoreOutput,
+		JsonOutput,
+		JsonLooseOutput
+	} kind;
 } OutState;
+
+static bool
+stringIsNumber(char *string, int len) {
+
+	if (!(string[0] == '0' && isdigit((unsigned char) string[1])) && strspn(string, "+-0123456789Ee.") == len)
+	{
+		char	*endptr = "junk";
+		long	lval;
+		double	dval;
+
+		lval =  strtol(string, &endptr, 10);
+		(void) lval;
+		if (*endptr == '\0')
+			return true;
+
+		dval = strtod(string, &endptr);
+		(void) dval;
+		if (*endptr == '\0')
+			return true;
+	}
+
+	return false;
+}
+
+static void
+putEscapedString(OutState *state, char *string, uint32 len)
+{
+	if (string)
+	{
+		switch(state->kind)
+		{
+			case HStoreOutput:
+				do
+				{
+					char       *ptr = string;
+
+					appendStringInfoCharMacro(state->str, '"');
+					while (ptr - string < len)
+					{
+						if (*ptr == '"' || *ptr == '\\')
+							appendStringInfoCharMacro(state->str, '\\');
+						appendStringInfoCharMacro(state->str, *ptr);
+						ptr++;
+					}
+					appendStringInfoCharMacro(state->str, '"');
+				} while(0);
+				break;
+			case JsonOutput:
+				escape_json(state->str, pnstrdup(string, len));
+				break;
+			case JsonLooseOutput:
+				do 
+				{
+					char *s = pnstrdup(string, len);
+
+					if (len == 1 && *string == 't')
+						appendStringInfoString(state->str, "true");
+					else if (len == 1 && *string == 'f')
+						appendStringInfoString(state->str, "false");
+					else if (len > 0 && stringIsNumber(s, len))
+						appendBinaryStringInfo(state->str, string, len);
+					else
+						escape_json(state->str, s);
+				} while(0);
+				break;
+			default:
+				elog(PANIC, "Unknown kind");
+		}
+	}
+	else
+	{
+		appendBinaryStringInfo(state->str, (state->kind == HStoreOutput) ? "NULL" : "null", 4);
+	}
+}
 
 static void
 outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 {
 	OutState	*state = arg;
 
-	if (flags & WHS_BEGIN_ARRAY)
+	switch(flags & ~(WHS_BEFORE | WHS_AFTER))
 	{
-		if (state->first == false && (flags & WHS_ELEM))
-			appendBinaryStringInfo(state->str, ", ", 2);
-		state->first = true;
+		case WHS_BEGIN_ARRAY:
+			if (state->first == false && (flags & WHS_ELEM))
+				appendBinaryStringInfo(state->str, ", ", 2);
+			state->first = true;
+	
+			if (level > 0 || state->kind != HStoreOutput)
+				appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '{' : '[' /* XXX */);
+			break;
+		case WHS_BEGIN_HSTORE:
+			if (state->first == false && (flags & WHS_ELEM))
+				appendBinaryStringInfo(state->str, ", ", 2);
+			state->first = true;
 
-		if (level > 0)
-			appendStringInfoCharMacro(state->str, '{' /* XXX */);
-	}
-	else if (flags & WHS_BEGIN_HSTORE)
-	{
-		if (state->first == false && (flags & WHS_ELEM))
-			appendBinaryStringInfo(state->str, ", ", 2);
-		state->first = true;
+			if (level > 0 || state->kind != HStoreOutput )
+				appendStringInfoCharMacro(state->str, '{');
+			break;
+		case WHS_KEY:
+			if (flags & WHS_AFTER)
+				break;
 
-		if (level > 0)
-			appendStringInfoCharMacro(state->str, '{');
-	}
-	else if (flags & WHS_KEY)
-	{
-		if (flags & WHS_AFTER)
-			return;
+			if (state->first == false)
+				appendBinaryStringInfo(state->str, ", ", 2);
+			else
+				state->first = false;
 
-		if (state->first == false)
-			appendBinaryStringInfo(state->str, ", ", 2);
-		else
+			if (state->kind == JsonLooseOutput)
+			{
+				state->kind = JsonOutput;
+				putEscapedString(state, value->string.val,  value->string.len);
+				state->kind = JsonLooseOutput;
+			}
+			else
+			{
+				putEscapedString(state, value->string.val,  value->string.len);
+			}
+			appendBinaryStringInfo(state->str, (state->kind == HStoreOutput) ? "=>" : ": ", 2);
+			break;
+		case WHS_ELEM:
+		case WHS_VALUE:
+			if (state->first == false && (flags & WHS_ELEM))
+				appendBinaryStringInfo(state->str, ", ", 2);
+			else
+				state->first = false;
+
+			putEscapedString(state, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
+			break;
+		case WHS_END_ARRAY:
+			if (level > 0 || state->kind != HStoreOutput)
+				appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '}' : ']' /* XXX */);
 			state->first = false;
-
-		putEscapedString(state->str, value->string.val,  value->string.len);
-		appendBinaryStringInfo(state->str, "=>", 2);
-	}
-	else if (flags & (WHS_ELEM | WHS_VALUE))
-	{
-		if (state->first == false && (flags & WHS_ELEM))
-			appendBinaryStringInfo(state->str, ", ", 2);
-		else
+			break;
+		case WHS_END_HSTORE:
+			if (level > 0 || state->kind != HStoreOutput)
+				appendStringInfoCharMacro(state->str, '}');
 			state->first = false;
-
-		putEscapedString(state->str, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
-	}
-	else if (flags & WHS_END_ARRAY)
-	{
-		if (level > 0)
-			appendStringInfoCharMacro(state->str, '}' /* XXX */);
-		state->first = false;
-	}
-	else if (flags & WHS_END_HSTORE)
-	{
-		if (level > 0)
-			appendStringInfoCharMacro(state->str, '}');
-		state->first = false;
-	}
-	else
-	{
-		elog(PANIC, "Wrong flags");
+			break;
+		default:
+			elog(PANIC, "Wrong flags");
 	}
 }
-
 
 PG_FUNCTION_INFO_V1(hstore_out);
 Datum		hstore_out(PG_FUNCTION_ARGS);
@@ -1064,7 +1124,6 @@ hstore_out(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
 	OutState	state;
-
 
 	if (HS_ISEMPTY(in))
 	{
@@ -1083,49 +1142,71 @@ hstore_out(PG_FUNCTION_ARGS)
 	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
 
 	state.first = true;
+	state.kind = HStoreOutput;
 
 	walkCompressedHStore(VARDATA_ANY(in), outCallback, &state); 
 
 	PG_RETURN_CSTRING(state.str->data);
 }
 
+static void
+sendCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
+{
+	OutState	*state = arg;
+
+	switch(flags & ~(WHS_BEFORE | WHS_AFTER))
+	{
+		case WHS_BEGIN_ARRAY:
+			pq_sendint(state->str, value->array.nelems | HS_FLAG_ARRAY, 4);
+			break;
+		case WHS_BEGIN_HSTORE:
+			pq_sendint(state->str, value->hstore.npairs | HS_FLAG_HSTORE, 4);
+			break;
+		case WHS_KEY:
+			if (flags & WHS_AFTER)
+				break;
+
+			pq_sendint(state->str, value->string.len, 4);
+			pq_sendtext(state->str, value->string.val, value->string.len);
+			break;
+		case WHS_ELEM:
+		case WHS_VALUE:
+			if (value->type == hsvNullString)
+			{
+				pq_sendint(state->str, -1, 4);
+			}
+			else
+			{
+				pq_sendint(state->str, value->string.len, 4);
+				pq_sendtext(state->str, value->string.val, value->string.len);
+			}
+			break;
+		case WHS_END_ARRAY:
+		case WHS_END_HSTORE:
+			break;
+		default:
+			elog(PANIC, "Wrong flags");
+	}
+}
 
 PG_FUNCTION_INFO_V1(hstore_send);
 Datum		hstore_send(PG_FUNCTION_ARGS);
 Datum
 hstore_send(PG_FUNCTION_ARGS)
 {
-	HStore	   *in = PG_GETARG_HS(0);
-	int			i;
-	int			count = HS_COUNT(in);
-	char	   *base = STRPTR(in);
-	HEntry	   *entries = ARRPTR(in);
-	StringInfoData buf;
+	HStore	   		*in = PG_GETARG_HS(0);
+	OutState		state;
+	StringInfoData	buf;
 
 	pq_begintypsend(&buf);
+	state.str = &buf;
 
-	pq_sendint(&buf, count, 4);
+	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
 
-	for (i = 0; i < count; i++)
-	{
-		int32		keylen = HS_KEYLEN(entries, i);
+	if (!HS_ISEMPTY(in))
+		walkCompressedHStore(VARDATA_ANY(in), sendCallback, &state);
 
-		pq_sendint(&buf, keylen, 4);
-		pq_sendtext(&buf, HS_KEY(entries, base, i), keylen);
-		if (HS_VALISNULL(entries, i))
-		{
-			pq_sendint(&buf, -1, 4);
-		}
-		else
-		{
-			int32		vallen = HS_VALLEN(entries, i);
-
-			pq_sendint(&buf, vallen, 4);
-			pq_sendtext(&buf, HS_VAL(entries, base, i), vallen);
-		}
-	}
-
-	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+	PG_RETURN_BYTEA_P(pq_endtypsend(state.str));
 }
 
 
@@ -1143,127 +1224,33 @@ Datum
 hstore_to_json_loose(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	int			buflen,
-				i;
-	int			count = HS_COUNT(in);
-	char	   *out,
-			   *ptr;
-	char	   *base = STRPTR(in);
-	HEntry	   *entries = ARRPTR(in);
-	bool		is_number;
-	StringInfo	src,
-				dst;
+	OutState	state;
+	text		*out;
 
-	if (count == 0)
-	{
-		out = palloc(1);
-		*out = '\0';
-		PG_RETURN_TEXT_P(cstring_to_text(out));
-	}
+	if (HS_ISEMPTY(in))
+		PG_RETURN_CSTRING(cstring_to_text(""));
+/*
+	Assert(VARSIZE(in) ==
+			    (HS_COUNT(in) != 0 ?
+				CALCDATASIZE(HS_COUNT(in),
+				HSE_ENDPOS(ARRPTR(in)[2 * HS_COUNT(in) - 1])) :
+				VARHDRSZ));
+*/
+	state.str = makeStringInfo();
+	appendBinaryStringInfo(state.str, "    ", 4); /* VARHDRSZ */
 
-	buflen = 3;
+	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
 
-	/*
-	 * Formula adjusted slightly from the logic in hstore_out. We have to take
-	 * account of out treatment of booleans to be a bit more pessimistic about
-	 * the length of values.
-	 */
+	state.first = true;
+	state.kind = JsonLooseOutput;
 
-	for (i = 0; i < count; i++)
-	{
-		/* include "" and colon-space and comma-space */
-		buflen += 6 + 2 * HS_KEYLEN(entries, i);
-		/* include "" only if nonnull */
-		buflen += 3 + (HS_VALISNULL(entries, i)
-					   ? 1
-					   : 2 * HS_VALLEN(entries, i));
-	}
+	walkCompressedHStore(VARDATA_ANY(in), outCallback, &state); 
 
-	out = ptr = palloc(buflen);
+	out = (text*)state.str->data;
 
-	src = makeStringInfo();
-	dst = makeStringInfo();
+	SET_VARSIZE(out, VARHDRSZ + state.str->len);
 
-	*ptr++ = '{';
-
-	for (i = 0; i < count; i++)
-	{
-		resetStringInfo(src);
-		resetStringInfo(dst);
-		appendBinaryStringInfo(src, HS_KEY(entries, base, i), HS_KEYLEN(entries, i));
-		escape_json(dst, src->data);
-		strncpy(ptr, dst->data, dst->len);
-		ptr += dst->len;
-		*ptr++ = ':';
-		*ptr++ = ' ';
-		resetStringInfo(dst);
-		if (HS_VALISNULL(entries, i))
-			appendStringInfoString(dst, "null");
-		/* guess that values of 't' or 'f' are booleans */
-		else if (HS_VALLEN(entries, i) == 1 && *(HS_VAL(entries, base, i)) == 't')
-			appendStringInfoString(dst, "true");
-		else if (HS_VALLEN(entries, i) == 1 && *(HS_VAL(entries, base, i)) == 'f')
-			appendStringInfoString(dst, "false");
-		else
-		{
-			is_number = false;
-			resetStringInfo(src);
-			appendBinaryStringInfo(src, HS_VAL(entries, base, i), HS_VALLEN(entries, i));
-
-			/*
-			 * don't treat something with a leading zero followed by another
-			 * digit as numeric - could be a zip code or similar
-			 */
-			if (src->len > 0 &&
-				!(src->data[0] == '0' && isdigit((unsigned char) src->data[1])) &&
-				strspn(src->data, "+-0123456789Ee.") == src->len)
-			{
-				/*
-				 * might be a number. See if we can input it as a numeric
-				 * value. Ignore any actual parsed value.
-				 */
-				char	   *endptr = "junk";
-				long        lval;
-
-				lval =  strtol(src->data, &endptr, 10);
-				(void) lval;
-				if (*endptr == '\0')
-				{
-					/*
-					 * strol man page says this means the whole string is
-					 * valid
-					 */
-					is_number = true;
-				}
-				else
-				{
-					/* not an int - try a double */
-					double dval;
-
-					dval = strtod(src->data, &endptr);
-					(void) dval;
-					if (*endptr == '\0')
-						is_number = true;
-				}
-			}
-			if (is_number)
-				appendBinaryStringInfo(dst, src->data, src->len);
-			else
-				escape_json(dst, src->data);
-		}
-		strncpy(ptr, dst->data, dst->len);
-		ptr += dst->len;
-
-		if (i + 1 != count)
-		{
-			*ptr++ = ',';
-			*ptr++ = ' ';
-		}
-	}
-	*ptr++ = '}';
-	*ptr = '\0';
-
-	PG_RETURN_TEXT_P(cstring_to_text(out));
+	PG_RETURN_TEXT_P(out);
 }
 
 PG_FUNCTION_INFO_V1(hstore_to_json);
@@ -1272,78 +1259,31 @@ Datum
 hstore_to_json(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	int			buflen,
-				i;
-	int			count = HS_COUNT(in);
-	char	   *out,
-			   *ptr;
-	char	   *base = STRPTR(in);
-	HEntry	   *entries = ARRPTR(in);
-	StringInfo	src,
-				dst;
+	OutState	state;
+	text		*out;
 
-	if (count == 0)
-	{
-		out = palloc(1);
-		*out = '\0';
-		PG_RETURN_TEXT_P(cstring_to_text(out));
-	}
+	if (HS_ISEMPTY(in))
+		PG_RETURN_CSTRING(cstring_to_text(""));
+/*
+	Assert(VARSIZE(in) ==
+			    (HS_COUNT(in) != 0 ?
+				CALCDATASIZE(HS_COUNT(in),
+				HSE_ENDPOS(ARRPTR(in)[2 * HS_COUNT(in) - 1])) :
+				VARHDRSZ));
+*/
+	state.str = makeStringInfo();
+	appendBinaryStringInfo(state.str, "    ", 4); /* VARHDRSZ */
 
-	buflen = 3;
+	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
 
-	/*
-	 * Formula adjusted slightly from the logic in hstore_out. We have to take
-	 * account of out treatment of booleans to be a bit more pessimistic about
-	 * the length of values.
-	 */
+	state.first = true;
+	state.kind = JsonOutput;
 
-	for (i = 0; i < count; i++)
-	{
-		/* include "" and colon-space and comma-space */
-		buflen += 6 + 2 * HS_KEYLEN(entries, i);
-		/* include "" only if nonnull */
-		buflen += 3 + (HS_VALISNULL(entries, i)
-					   ? 1
-					   : 2 * HS_VALLEN(entries, i));
-	}
+	walkCompressedHStore(VARDATA_ANY(in), outCallback, &state); 
 
-	out = ptr = palloc(buflen);
+	out = (text*)state.str->data;
 
-	src = makeStringInfo();
-	dst = makeStringInfo();
+	SET_VARSIZE(out, VARHDRSZ + state.str->len);
 
-	*ptr++ = '{';
-
-	for (i = 0; i < count; i++)
-	{
-		resetStringInfo(src);
-		resetStringInfo(dst);
-		appendBinaryStringInfo(src, HS_KEY(entries, base, i), HS_KEYLEN(entries, i));
-		escape_json(dst, src->data);
-		strncpy(ptr, dst->data, dst->len);
-		ptr += dst->len;
-		*ptr++ = ':';
-		*ptr++ = ' ';
-		resetStringInfo(dst);
-		if (HS_VALISNULL(entries, i))
-			appendStringInfoString(dst, "null");
-		else
-		{
-			resetStringInfo(src);
-			appendBinaryStringInfo(src, HS_VAL(entries, base, i), HS_VALLEN(entries, i));
-			escape_json(dst, src->data);
-		}
-		strncpy(ptr, dst->data, dst->len);
-		ptr += dst->len;
-
-		if (i + 1 != count)
-		{
-			*ptr++ = ',';
-			*ptr++ = ' ';
-		}
-	}
-	*ptr++ = '}';
-	*ptr = '\0';
-
-	PG_RETURN_TEXT_P(cstring_to_text(out));
+	PG_RETURN_TEXT_P(out);
 }
