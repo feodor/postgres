@@ -261,33 +261,26 @@ hstorePairs(Pairs *pairs, int32 pcount, int32 buflen)
 	return out;
 }
 
-
-PG_FUNCTION_INFO_V1(hstore_in);
-Datum		hstore_in(PG_FUNCTION_ARGS);
-Datum
-hstore_in(PG_FUNCTION_ARGS)
+static HStore*
+hstoreDump(HStoreValue *p)
 {
 	uint32			buflen;
 	HStore	 	   *out;
-	HStoreValue	   *parsed;
 
-	parsed = parseHStore(PG_GETARG_CSTRING(0));
-
-	if (parsed == NULL)
+	if (p == NULL)
 	{
 		buflen = 0;
 		out = palloc(VARHDRSZ);
 	}
 	else
 	{
-		buflen = VARHDRSZ + parsed->size; 
+		buflen = VARHDRSZ + p->size; 
 		out = palloc(buflen);
 		SET_VARSIZE(out, buflen);
 
-		buflen = compressHStore(parsed, VARDATA(out));
+		buflen = compressHStore(p, VARDATA(out));
 	}
 	SET_VARSIZE(out, buflen + VARHDRSZ);
-
 	
 	Assert(VARSIZE(out) ==
 			    (HS_COUNT(out) != 0 ?
@@ -295,7 +288,15 @@ hstore_in(PG_FUNCTION_ARGS)
 				HSE_ENDPOS(ARRPTR(out)[2 * HS_COUNT(out) - 1])) :
 				VARHDRSZ));
 
-	PG_RETURN_POINTER(out);
+	return out;
+}
+
+PG_FUNCTION_INFO_V1(hstore_in);
+Datum		hstore_in(PG_FUNCTION_ARGS);
+Datum
+hstore_in(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_POINTER(hstoreDump(parseHStore(PG_GETARG_CSTRING(0))));
 }
 
 PG_FUNCTION_INFO_V1(hstore_recv);
@@ -362,35 +363,40 @@ Datum		hstore_from_text(PG_FUNCTION_ARGS);
 Datum
 hstore_from_text(PG_FUNCTION_ARGS)
 {
-	text	   *key;
-	text	   *val = NULL;
-	Pairs		p;
-	HStore	   *out;
+	text	   	*key;
+	text	   	*val = NULL;
+	HStoreValue	v;
+	HStorePair	pair;
 
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	p.needfree = false;
 	key = PG_GETARG_TEXT_PP(0);
-	p.key = VARDATA_ANY(key);
-	p.keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.type = hsvString;
+	pair.key.string.val = VARDATA_ANY(key);
+	pair.key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.size = pair.key.string.len + sizeof(HEntry);
 
 	if (PG_ARGISNULL(1))
 	{
-		p.val.text.vallen = 0;
-		p.valtype = valNull;
+		pair.value.type = hsvNullString;
+		pair.value.size = sizeof(HEntry);
 	}
 	else
 	{
 		val = PG_GETARG_TEXT_PP(1);
-		p.val.text.val = VARDATA_ANY(val);
-		p.val.text.vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(val));
-		p.valtype = valText;
+		pair.value.type = hsvString;
+		pair.value.string.val = VARDATA_ANY(val);
+		pair.value.string.len = hstoreCheckValLen(VARSIZE_ANY_EXHDR(val));
+		pair.value.size = pair.value.string.len + sizeof(HEntry);
 	}
 
-	out = hstorePairs(&p, 1, p.keylen + p.val.text.vallen);
+	v.type = hsvPairs;
+	v.size = sizeof(HEntry) + pair.key.size + pair.value.size; 
+	v.hstore.npairs = 1;
+	v.hstore.pairs = &pair;
 
-	PG_RETURN_POINTER(out);
+	PG_RETURN_POINTER(hstoreDump(&v));
 }
 
 
