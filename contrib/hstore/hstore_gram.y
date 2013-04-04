@@ -189,7 +189,8 @@ result:
 	;
 
 array:
-	'{' array_list '}'				{ $$ = makeHStoreValueArray($2); }
+	'{' '}'							{ $$ = makeHStoreValueArray(NIL); }
+	| '{' array_list '}'			{ $$ = makeHStoreValueArray($2); }
 	| '[' array_list ']'			{ $$ = makeHStoreValueArray($2); }
 	;
 
