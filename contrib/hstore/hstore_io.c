@@ -521,8 +521,7 @@ hstore_from_array(PG_FUNCTION_ARGS)
 	int			ndims = ARR_NDIM(in_array);
 	int			count;
 	int32		buflen;
-	HStore	   *out;
-	Pairs	   *pairs;
+	HStoreValue	v;
 	Datum	   *in_datums;
 	bool	   *in_nulls;
 	int			in_count;
@@ -533,8 +532,7 @@ hstore_from_array(PG_FUNCTION_ARGS)
 	switch (ndims)
 	{
 		case 0:
-			out = hstorePairs(NULL, 0, 0);
-			PG_RETURN_POINTER(out);
+			PG_RETURN_POINTER(hstoreDump(NULL));
 
 		case 1:
 			if ((ARR_DIMS(in_array)[0]) % 2)
@@ -562,7 +560,10 @@ hstore_from_array(PG_FUNCTION_ARGS)
 
 	count = in_count / 2;
 
-	pairs = palloc(count * sizeof(Pairs));
+	v.type = hsvPairs;
+	v.size = 2*sizeof(HEntry);
+	v.hstore.npairs = count;
+	v.hstore.pairs = palloc(count * sizeof(Pairs));
 
 	for (i = 0; i < count; ++i)
 	{
@@ -571,31 +572,31 @@ hstore_from_array(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 					 errmsg("null value not allowed for hstore key")));
 
+		v.hstore.pairs[i].key.type = hsvString;
+		v.hstore.pairs[i].key.string.val = VARDATA_ANY(in_datums[i * 2]);
+		v.hstore.pairs[i].key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
+		v.hstore.pairs[i].key.size = sizeof(HEntry) + v.hstore.pairs[i].key.string.len; 
+
 		if (in_nulls[i * 2 + 1])
 		{
-			pairs[i].key = VARDATA_ANY(in_datums[i * 2]);
-			pairs[i].val.text.val = NULL;
-			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
-			pairs[i].val.text.vallen = 4;
-			pairs[i].valtype = valNull;
-			pairs[i].needfree = false;
+			v.hstore.pairs[i].value.type = hsvNullString;
+			v.hstore.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
 		{
-			pairs[i].key = VARDATA_ANY(in_datums[i * 2]);
-			pairs[i].val.text.val = VARDATA_ANY(in_datums[i * 2 + 1]);
-			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
-			pairs[i].val.text.vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(in_datums[i * 2 + 1]));
-			pairs[i].valtype = valText;
-			pairs[i].needfree = false;
+			v.hstore.pairs[i].value.type = hsvString;
+			v.hstore.pairs[i].value.size = sizeof(HEntry);
+			v.hstore.pairs[i].value.string.val = VARDATA_ANY(in_datums[i * 2 + 1]);
+			v.hstore.pairs[i].value.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2 + 1]));
+			v.hstore.pairs[i].value.size = sizeof(HEntry) + v.hstore.pairs[i].value.string.len;
 		}
+
+		v.size += v.hstore.pairs[i].key.size + v.hstore.pairs[i].value.size;
 	}
 
-	count = hstoreUniquePairs(pairs, count, &buflen);
+	ORDER_PAIRS(v.hstore.pairs, v.hstore.npairs, v.size -= ptr->key.size + ptr->value.size);
 
-	out = hstorePairs(pairs, count, buflen);
-
-	PG_RETURN_POINTER(out);
+	PG_RETURN_POINTER(hstoreDump(&v));
 }
 
 /* most of hstore_from_record is shamelessly swiped from record_out */
