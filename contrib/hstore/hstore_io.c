@@ -1078,7 +1078,7 @@ hstore_out(PG_FUNCTION_ARGS)
 				VARHDRSZ));
 */
 	state.str = makeStringInfo();
-	enlargeStringInfo(state.str, (VARSIZE_ANY(in) * 3) >> 1 /* just estimation */);
+	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
 
 	state.first = true;
 

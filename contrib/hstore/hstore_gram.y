@@ -73,7 +73,7 @@ makeHStoreValueArray(List *list) {
 
 	v->type = hsvArray;
 	v->array.nelems = list_length(list);
-	v->size = sizeof(HEntry);
+	v->size = sizeof(uint32) /* header */ + sizeof(HEntry) /* parent's entry */ + sizeof(HEntry) - 1 /*alignment*/;
 
 	if (v->array.nelems > 0) {
 		ListCell	*cell;
@@ -84,7 +84,7 @@ makeHStoreValueArray(List *list) {
 		foreach(cell, list) {
 			HStoreValue	*s = (HStoreValue*)lfirst(cell);
 
-			v->size += s->size + sizeof(HEntry); 
+			v->size += s->size; 
 
 			v->array.elems[i++] = *s;
 
@@ -104,7 +104,7 @@ makeHStoreValuePairs(List *list) {
 
 	v->type = hsvPairs;
 	v->hstore.npairs = list_length(list);
-	v->size = sizeof(HEntry);
+	v->size = sizeof(uint32) /* header */ + sizeof(HEntry) /* parent's entry */ + sizeof(HEntry) - 1 /*alignment*/;
 
 	if (v->hstore.npairs > 0) {
 		ListCell	*cell;
@@ -115,7 +115,7 @@ makeHStoreValuePairs(List *list) {
 		foreach(cell, list) {
 			HStorePair	*s = (HStorePair*)lfirst(cell);
 
-			v->size += s->key.size + s->value.size + sizeof(HEntry); 
+			v->size += s->key.size + s->value.size; 
 			v->hstore.pairs[i++] = *s;
 
 			if (v->size > HENTRY_POSMASK)
