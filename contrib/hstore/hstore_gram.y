@@ -184,7 +184,7 @@ makeHStorePair(string *key, HStoreValue *value) {
 
 result: 
 	pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
-	/* | hstore						{ *((HStoreValue**)result) = $1; } XXX is it needed or wanted? */
+	| hstore						{ *((HStoreValue**)result) = $1; } /* XXX is it needed or wanted? */
 	| array							{ *((HStoreValue**)result) = $1; }
 	| '{' '}'						{ *((HStoreValue**)result) = NULL; }
 	| '[' ']'						{ *((HStoreValue**)result) = NULL; }
