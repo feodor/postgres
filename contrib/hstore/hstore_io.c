@@ -23,6 +23,10 @@ PG_MODULE_MAGIC;
 /* old names for C functions */
 HSTORE_POLLUTE(hstore_from_text, tconvert);
 
+static char* hstoreToCString(char *v, int len);
+static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
+
+
 static int
 comparePairs(const void *a, const void *b)
 {
@@ -247,7 +251,10 @@ hstorePairs(Pairs *pairs, int32 pcount, int32 buflen)
 	HS_SETCOUNT(out, pcount);
 
 	if (pcount == 0)
+	{
+		SET_VARSIZE(out, VARHDRSZ);
 		return out;
+	}
 
 	entry = ARRPTR(out);
 	buf = ptr = STRPTR(out);
@@ -257,7 +264,7 @@ hstorePairs(Pairs *pairs, int32 pcount, int32 buflen)
 
 	out->size_ = HS_FLAG_HSTORE;
 	HS_FINALIZE(out, pcount, buf, ptr);
-
+	
 	return out;
 }
 
@@ -282,12 +289,6 @@ hstoreDump(HStoreValue *p)
 	}
 	SET_VARSIZE(out, buflen + VARHDRSZ);
 
-	Assert(VARSIZE(out) ==
-			    (HS_COUNT(out) != 0 ?
-				CALCDATASIZE(HS_COUNT(out),
-				HSE_ENDPOS(ARRPTR(out)[2 * HS_COUNT(out) - 1])) :
-				VARHDRSZ));
-
 	return out;
 }
 
@@ -299,19 +300,17 @@ hstore_in(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(hstoreDump(parseHStore(PG_GETARG_CSTRING(0))));
 }
 
-static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
-
 static void
 recvHStoreValue(StringInfo buf, HStoreValue *v, uint32 level, int c)
 {
-	uint32  header = c;
+	uint32  hentry = c;
 
 	if (c == -1)
 	{
 		v->type = hsvNullString;
 		v->size = sizeof(HEntry);
 	} 
-	else if (header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE))
+	else if (hentry & (HS_FLAG_ARRAY | HS_FLAG_HSTORE))
 	{
 		recvHStore(buf, v, level + 1);
 	}
@@ -984,7 +983,16 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 		}
 		else
 		{
-			values[i] = InputFunctionCall(&column_info->proc, pnstrdup(v->string.val, v->string.len),
+			char *s = NULL;
+
+			if (v->type == hsvString)
+				s = pnstrdup(v->string.val, v->string.len);
+			else if (v->type == hsvDumped)
+				s = hstoreToCString(v->dump.data, v->dump.len);
+			else
+				elog(PANIC, "Wrong hstore");
+
+			values[i] = InputFunctionCall(&column_info->proc, s,
 										  column_info->typioparam,
 										  tupdesc->attrs[i]->atttypmod);
 			nulls[i] = false;
@@ -1094,8 +1102,7 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 				appendBinaryStringInfo(state->str, ", ", 2);
 			state->first = true;
 	
-			if (level > 0 || state->kind != HStoreOutput)
-				appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '{' : '[' /* XXX */);
+			appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '{' : '[' /* XXX */);
 			break;
 		case WHS_BEGIN_HSTORE:
 			if (state->first == false && (flags & WHS_ELEM))
@@ -1136,8 +1143,7 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 			putEscapedString(state, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
 			break;
 		case WHS_END_ARRAY:
-			if (level > 0 || state->kind != HStoreOutput)
-				appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '}' : ']' /* XXX */);
+			appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '}' : ']' /* XXX */);
 			state->first = false;
 			break;
 		case WHS_END_HSTORE:
@@ -1150,36 +1156,40 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 	}
 }
 
+static char*
+hstoreToCString(char *v, int len /* estimation */)
+{
+	OutState	state;
+
+	if (v == NULL)
+	{
+		char *out = palloc(1);
+		*out = '\0';
+		return out;
+	}
+
+	state.str = makeStringInfo();
+	enlargeStringInfo(state.str, len);
+
+	state.first = true;
+	state.kind = HStoreOutput;
+
+	walkCompressedHStore(v, outCallback, &state); 
+
+	return state.str->data;
+}
+
 PG_FUNCTION_INFO_V1(hstore_out);
 Datum		hstore_out(PG_FUNCTION_ARGS);
 Datum
 hstore_out(PG_FUNCTION_ARGS)
 {
-	HStore	   *in = PG_GETARG_HS(0);
-	OutState	state;
+	HStore	*hs = PG_GETARG_HS(0);
+	char 	*out;
 
-	if (HS_ISEMPTY(in))
-	{
-		char *out = palloc(1);
-		*out = '\0';
-		PG_RETURN_CSTRING(out);
-	}
-/*
-	Assert(VARSIZE(in) ==
-			    (HS_COUNT(in) != 0 ?
-				CALCDATASIZE(HS_COUNT(in),
-				HSE_ENDPOS(ARRPTR(in)[2 * HS_COUNT(in) - 1])) :
-				VARHDRSZ));
-*/
-	state.str = makeStringInfo();
-	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
+	out = hstoreToCString((HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs));
 
-	state.first = true;
-	state.kind = HStoreOutput;
-
-	walkCompressedHStore(VARDATA_ANY(in), outCallback, &state); 
-
-	PG_RETURN_CSTRING(state.str->data);
+	PG_RETURN_CSTRING(out);
 }
 
 static void

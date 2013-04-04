@@ -110,7 +110,9 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 				}
 				else
 				{
-					elog(PANIC, "can't for now");
+					r.type = hsvDumped;
+					r.dump.data = data + INTALIGN(HSE_OFF(*v));
+					r.dump.len = HSE_LEN(*v);		
 				}
 
 				return &r;

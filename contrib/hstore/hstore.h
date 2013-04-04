@@ -228,7 +228,8 @@ struct HStoreValue {
 		hsvNullString,
 		hsvString,
 		hsvArray,
-		hsvPairs
+		hsvPairs,
+		hsvDumped
 	} type;
 
 	uint32		size; /* size of node (including subnodes) */
@@ -248,6 +249,11 @@ struct HStoreValue {
 			int			npairs;
 			HStorePair 	*pairs;
 		} hstore;
+
+		struct {
+			uint32		len;
+			char		*data;
+		} dump;
 	};
 
 }; 
