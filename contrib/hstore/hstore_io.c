@@ -299,64 +299,97 @@ hstore_in(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(hstoreDump(parseHStore(PG_GETARG_CSTRING(0))));
 }
 
+static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
+
+static void
+recvHStoreValue(StringInfo buf, HStoreValue *v, uint32 level, int c)
+{
+	uint32  header = c;
+
+	if (c == -1)
+	{
+		v->type = hsvNullString;
+		v->size = sizeof(HEntry);
+	} 
+	else if (header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE))
+	{
+		recvHStore(buf, v, level + 1);
+	}
+	else
+	{
+		v->type = hsvString;
+
+		v->string.val = pq_getmsgtext(buf, c, &c);
+		v->string.len = hstoreCheckKeyLen(c);
+		v->size = sizeof(HEntry) + v->string.len;
+	}
+}
+
+static void
+recvHStore(StringInfo buf, HStoreValue *v, uint32 level)
+{
+	uint32	header = pq_getmsgint(buf, 4);
+	uint32	i;
+
+	if (level == 0 && (header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE)) == 0)
+		header |= HS_FLAG_HSTORE; /* old version */
+
+	v->size = 3 * sizeof(HEntry);
+	if (header & HS_FLAG_HSTORE)
+	{
+		v->type = hsvPairs;
+		v->hstore.npairs = header & HS_COUNT_MASK;
+		if (v->hstore.npairs > 0)
+		{
+			v->hstore.pairs = palloc(sizeof(*v->hstore.pairs) * v->hstore.npairs);
+	
+			for(i=0; i<v->hstore.npairs; i++)
+			{
+				recvHStoreValue(buf, &v->hstore.pairs[i].key, level, pq_getmsgint(buf, 4));
+				if (v->hstore.pairs[i].key.type != hsvString)
+					elog(ERROR, "hstore's key could be only a string");
+
+				recvHStoreValue(buf, &v->hstore.pairs[i].value, level, pq_getmsgint(buf, 4));
+
+				v->size += v->hstore.pairs[i].key.size + v->hstore.pairs[i].value.size;
+			}
+
+			ORDER_PAIRS(v->hstore.pairs, v->hstore.npairs, v->size -= ptr->key.size + ptr->value.size);
+		}
+	}
+	else if (header & HS_FLAG_ARRAY)
+	{
+		v->type = hsvArray;
+		v->array.nelems = header & HS_COUNT_MASK;
+		if (v->array.nelems > 0)
+		{
+			v->array.elems = palloc(sizeof(*v->array.elems) * v->array.nelems);
+
+			for(i=0; i<v->array.nelems; i++)
+			{
+				recvHStoreValue(buf, v->array.elems + i, level, pq_getmsgint(buf, 4));
+				v->size += v->array.elems[i].size;
+			}
+		}
+	}
+	else
+	{
+			elog(ERROR, "bogus input");
+	}
+}
+
 PG_FUNCTION_INFO_V1(hstore_recv);
 Datum		hstore_recv(PG_FUNCTION_ARGS);
 Datum
 hstore_recv(PG_FUNCTION_ARGS)
 {
-	int32		buflen;
-	HStore	   *out;
-	Pairs	   *pairs;
-	int32		i;
-	int32		pcount;
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
+	HStoreValue	v;
 
-	pcount = pq_getmsgint(buf, 4);
+	recvHStore(buf, &v, 0);
 
-	if (pcount == 0)
-	{
-		out = hstorePairs(NULL, 0, 0);
-		PG_RETURN_POINTER(out);
-	}
-
-	pairs = palloc(pcount * sizeof(Pairs));
-
-	for (i = 0; i < pcount; ++i)
-	{
-		int			rawlen = pq_getmsgint(buf, 4);
-		int			len;
-
-		if (rawlen < 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-					 errmsg("null value not allowed for hstore key")));
-
-		pairs[i].key = pq_getmsgtext(buf, rawlen, &len);
-		pairs[i].keylen = hstoreCheckKeyLen(len);
-		pairs[i].needfree = true;
-
-		rawlen = pq_getmsgint(buf, 4);
-		if (rawlen < 0)
-		{
-			pairs[i].val.text.val = NULL;
-			pairs[i].val.text.vallen = 0;
-			pairs[i].valtype = valNull;
-		}
-		else
-		{
-			pairs[i].val.text.val = pq_getmsgtext(buf, rawlen, &len);
-			pairs[i].val.text.vallen = hstoreCheckValLen(len);
-			pairs[i].valtype = valText;
-		}
-	}
-
-	pcount = hstoreUniquePairs(pairs, pcount, &buflen);
-
-	out = hstorePairs(pairs, pcount, buflen);
-
-	PG_RETURN_POINTER(out);
+	PG_RETURN_POINTER(hstoreDump(&v));
 }
-
 
 PG_FUNCTION_INFO_V1(hstore_from_text);
 Datum		hstore_from_text(PG_FUNCTION_ARGS);
