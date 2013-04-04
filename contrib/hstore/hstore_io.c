@@ -520,7 +520,6 @@ hstore_from_array(PG_FUNCTION_ARGS)
 	ArrayType  *in_array = PG_GETARG_ARRAYTYPE_P(0);
 	int			ndims = ARR_NDIM(in_array);
 	int			count;
-	int32		buflen;
 	HStoreValue	v;
 	Datum	   *in_datums;
 	bool	   *in_nulls;
@@ -626,19 +625,18 @@ Datum
 hstore_from_record(PG_FUNCTION_ARGS)
 {
 	HeapTupleHeader rec;
-	int32		buflen;
-	HStore	   *out;
-	Pairs	   *pairs;
-	Oid			tupType;
-	int32		tupTypmod;
-	TupleDesc	tupdesc;
-	HeapTupleData tuple;
-	RecordIOData *my_extra;
-	int			ncolumns;
-	int			i,
-				j;
-	Datum	   *values;
-	bool	   *nulls;
+	int32			buflen;
+	HStore		   *out;
+	HStoreValue	   v;
+	Oid				tupType;
+	int32			tupTypmod;
+	TupleDesc		tupdesc;
+	HeapTupleData 	tuple;
+	RecordIOData   *my_extra;
+	int				ncolumns;
+	int				i;
+	Datum	   	   *values;
+	bool	   	   *nulls;
 
 	if (PG_ARGISNULL(0))
 	{
@@ -694,7 +692,10 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		my_extra->ncolumns = ncolumns;
 	}
 
-	pairs = palloc(ncolumns * sizeof(Pairs));
+	v.type = hsvPairs;
+	v.size = 2*sizeof(HEntry);
+	v.hstore.npairs = ncolumns;
+	v.hstore.pairs = palloc(ncolumns * sizeof(Pairs));
 
 	if (rec)
 	{
@@ -716,7 +717,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		nulls = NULL;
 	}
 
-	for (i = 0, j = 0; i < ncolumns; ++i)
+	for (i = 0; i < ncolumns; ++i)
 	{
 		ColumnIOData *column_info = &my_extra->columns[i];
 		Oid			column_type = tupdesc->attrs[i]->atttypid;
@@ -726,46 +727,48 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		if (tupdesc->attrs[i]->attisdropped)
 			continue;
 
-		pairs[j].key = NameStr(tupdesc->attrs[i]->attname);
-		pairs[j].keylen = hstoreCheckKeyLen(strlen(NameStr(tupdesc->attrs[i]->attname)));
+		v.hstore.pairs[i].key.type = hsvString;
+		v.hstore.pairs[i].key.string.val = NameStr(tupdesc->attrs[i]->attname);
+		v.hstore.pairs[i].key.string.len = hstoreCheckKeyLen(strlen(v.hstore.pairs[i].key.string.val));
+		v.hstore.pairs[i].key.size = sizeof(HEntry) + v.hstore.pairs[i].key.string.len; 
 
 		if (!nulls || nulls[i])
 		{
-			pairs[j].val.text.val = NULL;
-			pairs[j].val.text.vallen = 4;
-			pairs[j].valtype = valNull;
-			pairs[j].needfree = false;
-			++j;
-			continue;
+			v.hstore.pairs[i].value.type = hsvNullString;
+			v.hstore.pairs[i].value.size = sizeof(HEntry);
 		}
-
-		/*
-		 * Convert the column value to text
-		 */
-		if (column_info->column_type != column_type)
+		else
 		{
-			bool		typIsVarlena;
+			/*
+			 * Convert the column value to text
+			 */
+			if (column_info->column_type != column_type)
+			{
+				bool		typIsVarlena;
 
-			getTypeOutputInfo(column_type,
-							  &column_info->typiofunc,
-							  &typIsVarlena);
-			fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
-						  fcinfo->flinfo->fn_mcxt);
-			column_info->column_type = column_type;
+				getTypeOutputInfo(column_type,
+								  &column_info->typiofunc,
+								  &typIsVarlena);
+				fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
+							  fcinfo->flinfo->fn_mcxt);
+				column_info->column_type = column_type;
+			}
+
+			value = OutputFunctionCall(&column_info->proc, values[i]);
+
+			v.hstore.pairs[i].value.type = hsvString;
+			v.hstore.pairs[i].value.size = sizeof(HEntry);
+			v.hstore.pairs[i].value.string.val = value;
+			v.hstore.pairs[i].value.string.len = hstoreCheckValLen(strlen(value));
+			v.hstore.pairs[i].value.size = sizeof(HEntry) + v.hstore.pairs[i].value.string.len;
 		}
 
-		value = OutputFunctionCall(&column_info->proc, values[i]);
-
-		pairs[j].val.text.val = value;
-		pairs[j].val.text.vallen = hstoreCheckValLen(strlen(value));
-		pairs[j].valtype = valText;
-		pairs[j].needfree = false;
-		++j;
+		v.size += v.hstore.pairs[i].key.size + v.hstore.pairs[i].value.size;
 	}
 
-	ncolumns = hstoreUniquePairs(pairs, j, &buflen);
+	ORDER_PAIRS(v.hstore.pairs, v.hstore.npairs, v.size -= ptr->key.size + ptr->value.size);
 
-	out = hstorePairs(pairs, ncolumns, buflen);
+	out = hstoreDump(&v);
 
 	ReleaseTupleDesc(tupdesc);
 
