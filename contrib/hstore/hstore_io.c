@@ -1098,14 +1098,14 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 	switch(flags & ~(WHS_BEFORE | WHS_AFTER))
 	{
 		case WHS_BEGIN_ARRAY:
-			if (state->first == false && (flags & WHS_ELEM))
+			if (state->first == false)
 				appendBinaryStringInfo(state->str, ", ", 2);
 			state->first = true;
 	
 			appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '{' : '[' /* XXX */);
 			break;
 		case WHS_BEGIN_HSTORE:
-			if (state->first == false && (flags & WHS_ELEM))
+			if (state->first == false)
 				appendBinaryStringInfo(state->str, ", ", 2);
 			state->first = true;
 
@@ -1118,8 +1118,7 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 
 			if (state->first == false)
 				appendBinaryStringInfo(state->str, ", ", 2);
-			else
-				state->first = false;
+			state->first = true;
 
 			if (state->kind == JsonLooseOutput)
 			{
@@ -1134,12 +1133,15 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 			appendBinaryStringInfo(state->str, (state->kind == HStoreOutput) ? "=>" : ": ", 2);
 			break;
 		case WHS_ELEM:
-		case WHS_VALUE:
-			if (state->first == false && (flags & WHS_ELEM))
+			if (state->first == false)
 				appendBinaryStringInfo(state->str, ", ", 2);
 			else
 				state->first = false;
 
+			putEscapedString(state, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
+			break;
+		case WHS_VALUE:
+			state->first = false;
 			putEscapedString(state, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
 			break;
 		case WHS_END_ARRAY:
