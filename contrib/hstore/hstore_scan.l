@@ -27,7 +27,7 @@ static void addchar(bool init, char s);
 %x xQUOTED
 %x xNONQUOTED
 
-any			[^\,\{\}\"\=\> \t\n\r\f\\]
+any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\]
 
 
 %%

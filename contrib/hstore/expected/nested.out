@@ -1,9 +1,3 @@
-select 'ff => {a,aaa}'::hstore;
-       hstore       
---------------------
- "ff"=>{"a", "aaa"}
-(1 row)
-
 select 'ff => {a=>12, b=>16}'::hstore;
             hstore            
 ------------------------------
@@ -28,6 +22,315 @@ select '"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2}, "d"=>{"d1"=>"d
  "aa"=>{"a", "aaa"}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{"c1", "c2"}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}
 (1 row)
 
+select '"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{c3},{c4=>4}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore;
+                                                         hstore                                                          
+-------------------------------------------------------------------------------------------------------------------------
+ "aa"=>{"a", "aaa"}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{"c1", "c2", {"c3"}, {"c4"=>"4"}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}
+(1 row)
+
+select 'ff => {a,aaa}'::hstore;
+       hstore       
+--------------------
+ "ff"=>{"a", "aaa"}
+(1 row)
+
+--test optional outer braces
+SELECT	'a=>1'::hstore;
+  hstore  
+----------
+ "a"=>"1"
+(1 row)
+
+SELECT	'{a=>1}'::hstore;
+  hstore  
+----------
+ "a"=>"1"
+(1 row)
+
+SELECT	'a,b'::hstore;
+   hstore   
+------------
+ {"a", "b"}
+(1 row)
+
+SELECT	'{a,b}'::hstore;
+   hstore   
+------------
+ {"a", "b"}
+(1 row)
+
+SELECT	'a,{b}'::hstore;
+    hstore    
+--------------
+ {"a", {"b"}}
+(1 row)
+
+SELECT	'{a,{b}}'::hstore;
+    hstore    
+--------------
+ {"a", {"b"}}
+(1 row)
+
+SELECT	'{a},b'::hstore;
+    hstore    
+--------------
+ {{"a"}, "b"}
+(1 row)
+
+SELECT	'{{a},b}'::hstore;
+    hstore    
+--------------
+ {{"a"}, "b"}
+(1 row)
+
+SELECT	'a,{b},{c}'::hstore;
+       hstore        
+---------------------
+ {"a", {"b"}, {"c"}}
+(1 row)
+
+SELECT	'{a,{b},{c}}'::hstore;
+       hstore        
+---------------------
+ {"a", {"b"}, {"c"}}
+(1 row)
+
+SELECT	'{a},{b},c'::hstore;
+       hstore        
+---------------------
+ {{"a"}, {"b"}, "c"}
+(1 row)
+
+SELECT	'{{a},{b},c}'::hstore;
+       hstore        
+---------------------
+ {{"a"}, {"b"}, "c"}
+(1 row)
+
+SELECT	'{a},b,{c}'::hstore;
+       hstore        
+---------------------
+ {{"a"}, "b", {"c"}}
+(1 row)
+
+SELECT	'{{a},b,{c}}'::hstore;
+       hstore        
+---------------------
+ {{"a"}, "b", {"c"}}
+(1 row)
+
+SELECT	'a,{b=>1}'::hstore;
+      hstore       
+-------------------
+ {"a", {"b"=>"1"}}
+(1 row)
+
+SELECT	'{a,{b=>1}}'::hstore;
+      hstore       
+-------------------
+ {"a", {"b"=>"1"}}
+(1 row)
+
+SELECT	'{a},{b=>1}'::hstore;
+       hstore        
+---------------------
+ {{"a"}, {"b"=>"1"}}
+(1 row)
+
+SELECT	'{{a},{b=>1}}'::hstore;
+       hstore        
+---------------------
+ {{"a"}, {"b"=>"1"}}
+(1 row)
+
+SELECT	'{a},{b=>1},{c}'::hstore;
+           hstore           
+----------------------------
+ {{"a"}, {"b"=>"1"}, {"c"}}
+(1 row)
+
+SELECT	'{{a},{b=>1},{c}}'::hstore;
+           hstore           
+----------------------------
+ {{"a"}, {"b"=>"1"}, {"c"}}
+(1 row)
+
+SELECT	'a'::hstore;
+ hstore 
+--------
+ {"a"}
+(1 row)
+
+SELECT	'{a}'::hstore;
+ hstore 
+--------
+ {"a"}
+(1 row)
+
+SELECT	''::hstore;
+ hstore 
+--------
+ 
+(1 row)
+
+SELECT	'{}'::hstore;
+ hstore 
+--------
+ 
+(1 row)
+
+--nested json
+SELECT	hstore_to_json('a=>1');
+ hstore_to_json 
+----------------
+ {"a": "1"}
+(1 row)
+
+SELECT	hstore_to_json('{a=>1}');
+ hstore_to_json 
+----------------
+ {"a": "1"}
+(1 row)
+
+SELECT	hstore_to_json('a,b');
+ hstore_to_json 
+----------------
+ ["a", "b"]
+(1 row)
+
+SELECT	hstore_to_json('{a,b}');
+ hstore_to_json 
+----------------
+ ["a", "b"]
+(1 row)
+
+SELECT	hstore_to_json('a,{b}');
+ hstore_to_json 
+----------------
+ ["a", ["b"]]
+(1 row)
+
+SELECT	hstore_to_json('{a,{b}}');
+ hstore_to_json 
+----------------
+ ["a", ["b"]]
+(1 row)
+
+SELECT	hstore_to_json('{a},b');
+ hstore_to_json 
+----------------
+ [["a"], "b"]
+(1 row)
+
+SELECT	hstore_to_json('{{a},b}');
+ hstore_to_json 
+----------------
+ [["a"], "b"]
+(1 row)
+
+SELECT	hstore_to_json('a,{b},{c}');
+   hstore_to_json    
+---------------------
+ ["a", ["b"], ["c"]]
+(1 row)
+
+SELECT	hstore_to_json('{a,{b},{c}}');
+   hstore_to_json    
+---------------------
+ ["a", ["b"], ["c"]]
+(1 row)
+
+SELECT	hstore_to_json('{a},{b},c');
+   hstore_to_json    
+---------------------
+ [["a"], ["b"], "c"]
+(1 row)
+
+SELECT	hstore_to_json('{{a},{b},c}');
+   hstore_to_json    
+---------------------
+ [["a"], ["b"], "c"]
+(1 row)
+
+SELECT	hstore_to_json('{a},b,{c}');
+   hstore_to_json    
+---------------------
+ [["a"], "b", ["c"]]
+(1 row)
+
+SELECT	hstore_to_json('{{a},b,{c}}');
+   hstore_to_json    
+---------------------
+ [["a"], "b", ["c"]]
+(1 row)
+
+SELECT	hstore_to_json('a,{b=>1}');
+  hstore_to_json   
+-------------------
+ ["a", {"b": "1"}]
+(1 row)
+
+SELECT	hstore_to_json('{a,{b=>1}}');
+  hstore_to_json   
+-------------------
+ ["a", {"b": "1"}]
+(1 row)
+
+SELECT	hstore_to_json('{a},{b=>1}');
+   hstore_to_json    
+---------------------
+ [["a"], {"b": "1"}]
+(1 row)
+
+SELECT	hstore_to_json('{{a},{b=>1}}');
+   hstore_to_json    
+---------------------
+ [["a"], {"b": "1"}]
+(1 row)
+
+SELECT	hstore_to_json('{a},{b=>1},{c}');
+       hstore_to_json       
+----------------------------
+ [["a"], {"b": "1"}, ["c"]]
+(1 row)
+
+SELECT	hstore_to_json('{{a},{b=>1},{c}}');
+       hstore_to_json       
+----------------------------
+ [["a"], {"b": "1"}, ["c"]]
+(1 row)
+
+SELECT	hstore_to_json('a');
+ hstore_to_json 
+----------------
+ ["a"]
+(1 row)
+
+SELECT	hstore_to_json('{a}');
+ hstore_to_json 
+----------------
+ ["a"]
+(1 row)
+
+SELECT	hstore_to_json('');
+ hstore_to_json 
+----------------
+ 
+(1 row)
+
+SELECT	hstore_to_json('{}');
+ hstore_to_json 
+----------------
+ 
+(1 row)
+
+select hstore_to_json('"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{c3},{c4=>4}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore);
+                                                      hstore_to_json                                                       
+---------------------------------------------------------------------------------------------------------------------------
+ {"aa": ["a", "aaa"], "qq": {"a": "12", "b": "16", "c": ["c1", "c2", ["c3"], {"c4": "4"}], "d": {"d1": "d1", "d2": "d2"}}}
+(1 row)
+
+--
 CREATE TABLE testtype (i int, h hstore, a int[]);
 INSERT INTO testtype VALUES (1, 'a=>1', '{1,2,3}');
 SELECT populate_record(v, 'i=>2'::hstore) FROM testtype v;

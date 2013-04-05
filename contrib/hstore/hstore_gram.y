@@ -131,19 +131,6 @@ makeHStoreValuePairs(List *list) {
 }
 
 static HStorePair*
-makeHStoreStringPair(string *key, string *value) {
-	HStorePair	*v = palloc(sizeof(*v));
-
-	makeHStoreValueString(&v->key, key);
-	makeHStoreValueString(&v->value, value);
-
-	if (v->key.size + v->value.size > HENTRY_POSMASK)
-		elog(ERROR, "pair is too long");
-
-	return v;
-}
-
-static HStorePair*
 makeHStorePair(string *key, HStoreValue *value) {
 	HStorePair	*v = palloc(sizeof(*v));
 
@@ -153,6 +140,30 @@ makeHStorePair(string *key, HStoreValue *value) {
 	return v;
 }
 
+/*
+ * See comments below, in result product
+ */
+static HStoreValue*
+makeHStoreValueFinalArray(List *l)
+{
+	HStoreValue	*v = NULL;
+
+	if (list_length(l) == 1)
+	{
+		v = ((HStoreValue*)linitial(l));
+
+		if (v->type == hsvString)
+			v = makeHStoreValueArray(l);
+		else if (v->type == hsvNullString)
+			v = NULL;
+	}
+	else if (list_length(l) > 1)
+	{
+		v = makeHStoreValueArray(l);
+	}
+
+	return v;
+}
 %}
 
 /* BISON Declarations */
@@ -165,14 +176,15 @@ makeHStorePair(string *key, HStoreValue *value) {
 	string 			str;
 	List			*elems; 		/* list of HStoreValue */
 	List			*pairs; 		/* list of HStorePair */
+
 	HStoreValue		*hvalue;
 	HStorePair		*pair;
 }
 
 %token	<str>			DELIMITER_P NULL_P STRING_P
 
-%type	<hvalue>		hstore array result 
-%type	<str>			key	null
+%type	<hvalue>		result hstore value 
+%type	<str>			key
 
 %type	<pair>			pair
 
@@ -184,54 +196,47 @@ makeHStorePair(string *key, HStoreValue *value) {
 
 result: 
 	pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
-	| hstore						{ *((HStoreValue**)result) = $1; } /* XXX is it needed or wanted? */
-	| array							{ *((HStoreValue**)result) = $1; }
-	| '{' '}'						{ *((HStoreValue**)result) = NULL; }
-	| '[' ']'						{ *((HStoreValue**)result) = NULL; }
+	/* 
+	 * hstore product produces reduce/reduce conflict althought we would like to make 'a,b'::hstore and
+	 * '{a,b}'::hstore etc the same. In other words it's desirable to make outer {} braces optional.
+	 * To make it we just remove root array if it contains only one non-scalar element, see 
+	 * makeHStoreValueFinalArray() definition. 
+	 */
+	| array_list					{ *((HStoreValue**)result) = makeHStoreValueFinalArray($1); }
 	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
 
-array:
-	'{' array_list '}'				{ $$ = makeHStoreValueArray($2); }
+hstore:
+	'{' pair_list '}'				{ $$ = makeHStoreValuePairs($2); }
+	| '{' array_list '}'			{ $$ = makeHStoreValueArray($2); }
 	| '[' array_list ']'			{ $$ = makeHStoreValueArray($2); }
+	| '{' '}'						{ $$ = makeHStoreValueString(NULL, NULL); }
+	| '[' ']'						{ $$ = makeHStoreValueString(NULL, NULL); }
 	;
 
-null:
-	NULL_P							{ $$ = $1; }
-	| '{' '}'						{ $$.val = strdup("NULL"); $$.len = $$.total = 4; }
-	| '[' ']'						{ $$.val = strdup("NULL"); $$.len = $$.total = 4; }
+value:
+	NULL_P							{ $$ = makeHStoreValueString(NULL, NULL); }
+	| STRING_P						{ $$ = makeHStoreValueString(NULL, &$1); }
+	| hstore						{ $$ = $1; } 
 	;
 
 array_list:
-	null							{ $$ = lappend(NIL, makeHStoreValueString(NULL, NULL)); }
-	| STRING_P						{ $$ = lappend(NIL, makeHStoreValueString(NULL, &$1)); }
-	| array							{ $$ = lappend(NIL, $1); }
-	| hstore						{ $$ = lappend(NIL, $1); }
-	| array_list ',' null			{ $$ = lappend($1, makeHStoreValueString(NULL, NULL)); }
-	| array_list ',' STRING_P		{ $$ = lappend($1, makeHStoreValueString(NULL, &$3)); }
-	| array_list ',' array		 	{ $$ = lappend($1, $3); }
-	| array_list ',' hstore			{ $$ = lappend($1, $3); }
-	;
-
-hstore:
-	'{' pair_list '}'				{ $$ = makeHStoreValuePairs($2); }	
-	;
-
-pair_list:
-	pair							{ $$ = lappend(NIL, $1); }
-	| pair_list ',' pair			{ $$ = lappend($1, $3); }
-	;
-
-pair:
-	key DELIMITER_P null			{ $$ = makeHStoreStringPair(&$1, NULL); }
-	| key DELIMITER_P STRING_P		{ $$ = makeHStoreStringPair(&$1, &$3); } 
-	| key DELIMITER_P hstore		{ $$ = makeHStorePair(&$1, $3); }
-	| key DELIMITER_P array			{ $$ = makeHStorePair(&$1, $3); }
+	value							{ $$ = lappend(NIL, $1); } 
+	| array_list ',' value			{ $$ = lappend($1, $3); } 
 	;
 
 key:
 	STRING_P						{ $$ = $1; }
 	| NULL_P						{ $$ = $1; }
+	;
+
+pair:
+	key DELIMITER_P value			{ $$ = makeHStorePair(&$1, $3); }
+	;
+
+pair_list:
+	pair							{ $$ = lappend(NIL, $1); }
+	| pair_list ',' pair			{ $$ = lappend($1, $3); }
 	;
 
 %%
