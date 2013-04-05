@@ -42,7 +42,8 @@ int hstore_yyparse(void *result);
 void hstore_yyerror(const char *message);
 
 static HStoreValue*
-makeHStoreValueString(HStoreValue* v, string *s) {
+makeHStoreValueString(HStoreValue* v, string *s)
+{
 	if (v == NULL)
 		v = palloc(sizeof(*v));
 
@@ -68,20 +69,23 @@ makeHStoreValueString(HStoreValue* v, string *s) {
 }
 
 static HStoreValue*
-makeHStoreValueArray(List *list) {
+makeHStoreValueArray(List *list)
+{
 	HStoreValue	*v = palloc(sizeof(*v));
 
 	v->type = hsvArray;
 	v->array.nelems = list_length(list);
 	v->size = sizeof(uint32) /* header */ + sizeof(HEntry) /* parent's entry */ + sizeof(HEntry) - 1 /*alignment*/;
 
-	if (v->array.nelems > 0) {
+	if (v->array.nelems > 0)
+	{
 		ListCell	*cell;
 		int			i = 0;
 
 		v->array.elems = palloc(sizeof(HStoreValue) * v->array.nelems);
 
-		foreach(cell, list) {
+		foreach(cell, list)
+		{
 			HStoreValue	*s = (HStoreValue*)lfirst(cell);
 
 			v->size += s->size; 
@@ -91,7 +95,9 @@ makeHStoreValueArray(List *list) {
 			if (v->size > HENTRY_POSMASK)
 				elog(ERROR, "array is too long");
 		}
-	} else {
+	}
+	else
+	{
 		v->array.elems = NULL;
 	}
 
@@ -99,20 +105,23 @@ makeHStoreValueArray(List *list) {
 }
 
 static HStoreValue*
-makeHStoreValuePairs(List *list) {
+makeHStoreValuePairs(List *list)
+{
 	HStoreValue	*v = palloc(sizeof(*v));
 
 	v->type = hsvPairs;
 	v->hstore.npairs = list_length(list);
 	v->size = sizeof(uint32) /* header */ + sizeof(HEntry) /* parent's entry */ + sizeof(HEntry) - 1 /*alignment*/;
 
-	if (v->hstore.npairs > 0) {
+	if (v->hstore.npairs > 0)
+	{
 		ListCell	*cell;
 		int			i = 0;
 
 		v->hstore.pairs = palloc(sizeof(HStorePair) * v->hstore.npairs);
 
-		foreach(cell, list) {
+		foreach(cell, list)
+		{
 			HStorePair	*s = (HStorePair*)lfirst(cell);
 
 			v->size += s->key.size + s->value.size; 
@@ -123,7 +132,9 @@ makeHStoreValuePairs(List *list) {
 		}
 
 		ORDER_PAIRS(v->hstore.pairs, v->hstore.npairs, v->size -= ptr->key.size + ptr->value.size);
-	} else {
+	}
+	else
+	{
 		v->hstore.pairs = NULL;
 	}
 
@@ -188,7 +199,7 @@ makeHStoreValueFinalArray(List *l)
 
 %type	<pair>			pair
 
-%type	<elems>			array_list
+%type	<elems>			value_list
 %type 	<pairs>			pair_list
 
 /* Grammar follows */
@@ -202,14 +213,14 @@ result:
 	 * To make it we just remove root array if it contains only one non-scalar element, see 
 	 * makeHStoreValueFinalArray() definition. 
 	 */
-	| array_list					{ *((HStoreValue**)result) = makeHStoreValueFinalArray($1); }
+	| value_list					{ *((HStoreValue**)result) = makeHStoreValueFinalArray($1); }
 	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
 
 hstore:
 	'{' pair_list '}'				{ $$ = makeHStoreValuePairs($2); }
-	| '{' array_list '}'			{ $$ = makeHStoreValueArray($2); }
-	| '[' array_list ']'			{ $$ = makeHStoreValueArray($2); }
+	| '{' value_list '}'			{ $$ = makeHStoreValueArray($2); }
+	| '[' value_list ']'			{ $$ = makeHStoreValueArray($2); }
 	| '{' '}'						{ $$ = makeHStoreValueString(NULL, NULL); }
 	| '[' ']'						{ $$ = makeHStoreValueString(NULL, NULL); }
 	;
@@ -220,9 +231,9 @@ value:
 	| hstore						{ $$ = $1; } 
 	;
 
-array_list:
+value_list:
 	value							{ $$ = lappend(NIL, $1); } 
-	| array_list ',' value			{ $$ = lappend($1, $3); } 
+	| value_list ',' value			{ $$ = lappend($1, $3); } 
 	;
 
 key:

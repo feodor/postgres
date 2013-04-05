@@ -112,7 +112,7 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 				{
 					r.type = hsvDumped;
 					r.dump.data = data + INTALIGN(HSE_OFF(*v));
-					r.dump.len = HSE_LEN(*v);		
+					r.dump.len = HSE_LEN(*v) - (INTALIGN(HSE_OFF(*v)) - HSE_OFF(*v));
 				}
 
 				return &r;
