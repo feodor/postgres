@@ -69,7 +69,7 @@ hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen)
 	return -1;
 }
 
-Pairs *
+static Pairs *
 hstoreArrayToPairs(ArrayType *a, int *npairs)
 {
 	Datum	   *key_datums;
@@ -111,6 +111,46 @@ hstoreArrayToPairs(ArrayType *a, int *npairs)
 	return key_pairs;
 }
 
+static HStoreValue*
+hstoreArrayToHStoreValue(ArrayType *a)
+{
+	Datum	 		*key_datums;
+	bool	 		*key_nulls;
+	int				key_count;
+	HStoreValue		*v;
+	int				i,
+					j;
+
+	deconstruct_array(a,
+					  TEXTOID, -1, false, 'i',
+					  &key_datums, &key_nulls, &key_count);
+
+	if (key_count == 0)
+		return NULL;
+
+	v = palloc(sizeof(*v));
+	v->type = hsvPairs;
+
+	v->hstore.pairs = palloc(sizeof(*v->hstore.pairs) * key_count);
+
+	for (i = 0, j = 0; i < key_count; i++)
+	{
+		if (!key_nulls[i])
+		{
+			v->hstore.pairs[j].key.type = hsvString;
+			v->hstore.pairs[j].key.string.val = VARDATA(key_datums[i]);
+			v->hstore.pairs[j].key.string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+			v->hstore.pairs[j].value.type = hsvNullString;
+			j++;
+		}
+	}
+	v->hstore.npairs = j;
+
+	ORDER_PAIRS(v->hstore.pairs, v->hstore.npairs, (void)0);
+
+	return v;
+
+}
 
 PG_FUNCTION_INFO_V1(hstore_fetchval);
 Datum		hstore_fetchval(PG_FUNCTION_ARGS);
@@ -176,13 +216,15 @@ Datum		hstore_exists_any(PG_FUNCTION_ARGS);
 Datum
 hstore_exists_any(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	ArrayType  *keys = PG_GETARG_ARRAYTYPE_P(1);
-	int			nkeys;
-	Pairs	   *key_pairs = hstoreArrayToPairs(keys, &nkeys);
-	int			i;
-	int			lowbound = 0;
-	bool		res = false;
+	HStore		   	*hs = PG_GETARG_HS(0);
+	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
+	HStoreValue		*v = hstoreArrayToHStoreValue(keys);
+	int				i;
+	uint32			lowbound = 0;
+	bool			res = false;
+
+	if (HS_ISEMPTY(hs) || v == NULL || v->hstore.npairs == 0)
+		PG_RETURN_BOOL(false);
 
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
@@ -190,12 +232,11 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	 * start one entry past the previous "found" entry, or at the lower bound
 	 * of the last search.
 	 */
-	for (i = 0; i < nkeys; i++)
+	for (i = 0; i < v->hstore.npairs; i++)
 	{
-		int			idx = hstoreFindKey(hs, &lowbound,
-									  key_pairs[i].key, key_pairs[i].keylen);
-
-		if (idx >= 0)
+		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, &lowbound,
+										v->hstore.pairs[i].key.string.val, 
+										v->hstore.pairs[i].key.string.len) != NULL)
 		{
 			res = true;
 			break;
@@ -211,13 +252,21 @@ Datum		hstore_exists_all(PG_FUNCTION_ARGS);
 Datum
 hstore_exists_all(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	ArrayType  *keys = PG_GETARG_ARRAYTYPE_P(1);
-	int			nkeys;
-	Pairs	   *key_pairs = hstoreArrayToPairs(keys, &nkeys);
-	int			i;
-	int			lowbound = 0;
-	bool		res = true;
+	HStore		   	*hs = PG_GETARG_HS(0);
+	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
+	HStoreValue		*v = hstoreArrayToHStoreValue(keys);
+	int				i;
+	uint32			lowbound = 0;
+	bool			res = true;
+
+	if (HS_ISEMPTY(hs) || v == NULL || v->hstore.npairs == 0)
+	{
+
+		if (v == NULL || v->hstore.npairs == 0)
+			PG_RETURN_BOOL(true); /* compatibility */
+		else
+			PG_RETURN_BOOL(false);
+	}
 
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
@@ -225,12 +274,11 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	 * start one entry past the previous "found" entry, or at the lower bound
 	 * of the last search.
 	 */
-	for (i = 0; i < nkeys; i++)
+	for (i = 0; i < v->hstore.npairs; i++)
 	{
-		int			idx = hstoreFindKey(hs, &lowbound,
-									  key_pairs[i].key, key_pairs[i].keylen);
-
-		if (idx < 0)
+		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, &lowbound,
+										v->hstore.pairs[i].key.string.val, 
+										v->hstore.pairs[i].key.string.len) == NULL)
 		{
 			res = false;
 			break;

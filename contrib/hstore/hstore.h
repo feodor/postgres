@@ -336,7 +336,6 @@ extern size_t hstoreCheckKeyLen(size_t len);
 extern size_t hstoreCheckValLen(size_t len);
 
 extern int	hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen);
-extern Pairs *hstoreArrayToPairs(ArrayType *a, int *npairs);
 
 #define HStoreContainsStrategyNumber	7
 #define HStoreExistsStrategyNumber		9
