@@ -119,10 +119,11 @@ hstore_fetchval(PG_FUNCTION_ARGS)
 {
 	HStore	   	*hs = PG_GETARG_HS(0);
 	text	   	*key = PG_GETARG_TEXT_PP(1);
-	HStoreValue	*v;
+	HStoreValue	*v = NULL;
 
-	v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
-									NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+	if (!HS_ISEMPTY(hs))
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
 	if (v == NULL || v->type == hsvNullString)
 	{
@@ -158,12 +159,15 @@ Datum		hstore_exists(PG_FUNCTION_ARGS);
 Datum
 hstore_exists(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	text	   *key = PG_GETARG_TEXT_PP(1);
-	int			idx = hstoreFindKey(hs, NULL,
-									VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+	HStore	   	*hs = PG_GETARG_HS(0);
+	text		*key = PG_GETARG_TEXT_PP(1);
+	HStoreValue	*v = NULL;
 
-	PG_RETURN_BOOL(idx >= 0);
+	if (!HS_ISEMPTY(hs))
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+
+	PG_RETURN_BOOL(v != NULL);
 }
 
 

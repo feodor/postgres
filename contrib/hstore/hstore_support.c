@@ -34,6 +34,8 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 	uint32				header = *(uint32*)buffer;
 	static HStoreValue 	r;
 
+	Assert((header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE)) != (HS_FLAG_ARRAY | HS_FLAG_HSTORE));
+
 	if (flags & HS_FLAG_ARRAY & header)
 	{
 		HEntry	*array = (HEntry*)(buffer + sizeof(header));
