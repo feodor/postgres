@@ -117,20 +117,39 @@ Datum		hstore_fetchval(PG_FUNCTION_ARGS);
 Datum
 hstore_fetchval(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	text	   *key = PG_GETARG_TEXT_PP(1);
-	HEntry	   *entries = ARRPTR(hs);
-	text	   *out;
-	int			idx = hstoreFindKey(hs, NULL,
-									VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+	HStore	   	*hs = PG_GETARG_HS(0);
+	text	   	*key = PG_GETARG_TEXT_PP(1);
+	HStoreValue	*v;
 
-	if (idx < 0 || HS_VALISNULL(entries, idx))
+	v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+									NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+
+	if (v == NULL || v->type == hsvNullString)
+	{
 		PG_RETURN_NULL();
+	}
+	else if (v->type == hsvString)
+	{
+		PG_RETURN_TEXT_P(cstring_to_text_with_len(v->string.val, v->string.len));
+	}
+	else
+	{
+		text	   	*out;
+		StringInfo	str;
 
-	out = cstring_to_text_with_len(HS_VAL(entries, STRPTR(hs), idx),
-								   HS_VALLEN(entries, idx));
+		Assert(v->type == hsvDumped);
 
-	PG_RETURN_TEXT_P(out);
+		str = makeStringInfo();
+		appendBinaryStringInfo(str, "    ", 4);
+
+		if (!HS_ISEMPTY(v->dump.data))
+			hstoreToCString(str, v->dump.data, v->dump.len);
+
+		out = (text*)str->data;
+		SET_VARSIZE(out, str->len /* included VARHDRSZ */);
+
+		PG_RETURN_TEXT_P(out);
+	}
 }
 
 

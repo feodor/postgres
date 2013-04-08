@@ -5,8 +5,8 @@
 #define __HSTORE_H__
 
 #include "fmgr.h"
+#include "lib/stringinfo.h"
 #include "utils/array.h"
-
 
 /*
  * HEntry: there is one of these for each key _and_ value in an hstore
@@ -292,6 +292,8 @@ extern int compareHStorePair(const void *a, const void *b, void *arg);
 
 extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
 												uint32 *lowbound, char *key, uint32 keylen);
+
+extern char*  hstoreToCString(StringInfo str, char *v, int len /* estimation */);
 
 /* be aware: size effects for n argument */
 #define ORDER_PAIRS(a, n, delaction)												\

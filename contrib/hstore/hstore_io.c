@@ -8,7 +8,6 @@
 #include "access/htup_details.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
-#include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
@@ -23,7 +22,6 @@ PG_MODULE_MAGIC;
 /* old names for C functions */
 HSTORE_POLLUTE(hstore_from_text, tconvert);
 
-static char* hstoreToCString(char *v, int len);
 static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
 
 
@@ -988,7 +986,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			if (v->type == hsvString)
 				s = pnstrdup(v->string.val, v->string.len);
 			else if (v->type == hsvDumped)
-				s = hstoreToCString(v->dump.data, v->dump.len);
+				s = hstoreToCString(NULL, v->dump.data, v->dump.len);
 			else
 				elog(PANIC, "Wrong hstore");
 
@@ -1158,25 +1156,26 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 	}
 }
 
-static char*
-hstoreToCString(char *v, int len /* estimation */)
+char* 
+hstoreToCString(StringInfo str, char *v, int len /* estimation */)
 {
 	OutState	state;
 
+	state.str = (str == NULL) ? makeStringInfo() : str;
+
 	if (v == NULL)
 	{
-		char *out = palloc(1);
-		*out = '\0';
-		return out;
+		appendBinaryStringInfo(state.str, "\0", 1);
 	}
+	else
+	{
+		enlargeStringInfo(state.str, len);
 
-	state.str = makeStringInfo();
-	enlargeStringInfo(state.str, len);
+		state.first = true;
+		state.kind = HStoreOutput;
 
-	state.first = true;
-	state.kind = HStoreOutput;
-
-	walkCompressedHStore(v, outCallback, &state); 
+		walkCompressedHStore(v, outCallback, &state);
+	}
 
 	return state.str->data;
 }
@@ -1189,7 +1188,7 @@ hstore_out(PG_FUNCTION_ARGS)
 	HStore	*hs = PG_GETARG_HS(0);
 	char 	*out;
 
-	out = hstoreToCString((HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs));
+	out = hstoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs));
 
 	PG_RETURN_CSTRING(out);
 }

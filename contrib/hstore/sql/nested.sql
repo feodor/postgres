@@ -68,6 +68,14 @@ select hstore_to_json('"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{
 
 --
 
+SELECT 'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'ff', 
+	   'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'qq', 
+	   ('ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'Y') IS NULL AS t, 
+	   'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'x'; 
+
+SELECT '[ a, b, c, d]'::hstore -> 'a';
+--
+
 CREATE TABLE testtype (i int, h hstore, a int[]);
 INSERT INTO testtype VALUES (1, 'a=>1', '{1,2,3}');
 
