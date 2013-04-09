@@ -1161,71 +1161,71 @@ Datum		hstore_cmp(PG_FUNCTION_ARGS);
 Datum
 hstore_cmp(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs1 = PG_GETARG_HS(0);
-	HStore	   *hs2 = PG_GETARG_HS(1);
-	int			hcount1 = HS_COUNT(hs1);
-	int			hcount2 = HS_COUNT(hs2);
-	int			res = 0;
+	HStore	   		*hs1 = PG_GETARG_HS(0);
+	HStore	   		*hs2 = PG_GETARG_HS(1);
+	HStoreIterator	*it1, *it2;
+	int				res = 0;
 
-	if (hcount1 == 0 || hcount2 == 0)
+	if (HS_ISEMPTY(hs1) || HS_ISEMPTY(hs2))
 	{
-		/*
-		 * if either operand is empty, and the other is nonempty, the nonempty
-		 * one is larger. If both are empty they are equal.
-		 */
-		if (hcount1 > 0)
-			res = 1;
-		else if (hcount2 > 0)
-			res = -1;
-	}
-	else
-	{
-		/* here we know both operands are nonempty */
-		char	   *str1 = STRPTR(hs1);
-		char	   *str2 = STRPTR(hs2);
-		HEntry	   *ent1 = ARRPTR(hs1);
-		HEntry	   *ent2 = ARRPTR(hs2);
-		size_t		len1 = HSE_ENDPOS(ent1[2 * hcount1 - 1]);
-		size_t		len2 = HSE_ENDPOS(ent2[2 * hcount2 - 1]);
-
-		res = memcmp(str1, str2, Min(len1, len2));
-
-		if (res == 0)
+		if (HS_ISEMPTY(hs1))
 		{
-			if (len1 > len2)
-				res = 1;
-			else if (len1 < len2)
-				res = -1;
-			else if (hcount1 > hcount2)
-				res = 1;
-			else if (hcount2 > hcount1)
-				res = -1;
+			if (HS_ISEMPTY(hs2))
+				return 0;
+			else
+				return -1;
+		}
+		else
+		{
+			return 1;
+		}
+	}
+
+	it1 = HStoreIteratorInit(VARDATA(hs1));
+	it2 = HStoreIteratorInit(VARDATA(hs2));
+
+	while(res == 0)	
+	{
+		HStoreValue		v1, v2;
+		int				r1, r2;
+
+		r1 = HStoreIteratorGet(&it1, &v1);	
+		r2 = HStoreIteratorGet(&it2, &v2);
+
+		if (r1 == r2)
+		{
+			if (r1 == 0)
+				break; /* equal */
+
+			if (v1.type == v2.type)
+			{
+				switch(v1.type)
+				{
+					case hsvString:
+						res = compareHStoreStringValue(&v1, &v2);
+						break;
+					case hsvArray:
+						if (v1.array.nelems != v2.array.nelems)
+							res = (v1.array.nelems > v2.array.nelems) ? 1 : -1;
+						break;
+					case hsvPairs:
+						if (v1.hstore.npairs != v2.hstore.npairs)
+							res = (v1.hstore.npairs > v2.hstore.npairs) ? 1 : -1;
+						break;
+					default:
+						break;
+				}
+			}
 			else
 			{
-				int			count = hcount1 * 2;
-				int			i;
-
-				for (i = 0; i < count; ++i)
-					if (HSE_ENDPOS(ent1[i]) != HSE_ENDPOS(ent2[i]) ||
-						HSE_ISNULL(ent1[i]) != HSE_ISNULL(ent2[i]))
-						break;
-				if (i < count)
-				{
-					if (HSE_ENDPOS(ent1[i]) < HSE_ENDPOS(ent2[i]))
-						res = -1;
-					else if (HSE_ENDPOS(ent1[i]) > HSE_ENDPOS(ent2[i]))
-						res = 1;
-					else if (HSE_ISNULL(ent1[i]))
-						res = 1;
-					else if (HSE_ISNULL(ent2[i]))
-						res = -1;
-				}
+				res = (v1.type > v2.type) ?  1 : -1; /* dummy order */
 			}
 		}
 		else
 		{
-			res = (res > 0) ? 1 : -1;
+			res = (r1 > r2) ? 1 : -1; /* dummy order */
 		}
+
 	}
 
 	/*

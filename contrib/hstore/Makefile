@@ -2,7 +2,7 @@
 
 MODULE_big = hstore
 OBJS = hstore_io.o hstore_op.o hstore_gist.o hstore_gin.o hstore_compat.o \
-	crc32.o hstore_gram.o hstore_support.o
+	crc32.o hstore_gram.o hstore_support.o hstore_it.o
 
 EXTENSION = hstore
 DATA = hstore--1.1.sql hstore--1.0--1.1.sql hstore--unpackaged--1.0.sql

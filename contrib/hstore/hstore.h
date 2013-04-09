@@ -288,6 +288,7 @@ extern void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_a
 
 extern void walkCompressedHStore(char *buffer, walk_hstore_cb cb, void *cb_arg);
 
+extern int compareHStoreStringValue(const HStoreValue *va, const HStoreValue *vb);
 extern int compareHStorePair(const void *a, const void *b, void *arg);
 
 extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
@@ -331,6 +332,28 @@ extern char*  hstoreToCString(StringInfo str, char *v, int len /* estimation */)
 
 uint32 compressHStore(HStoreValue *v, char *buffer);
 
+
+typedef struct HStoreIterator
+{
+	uint32					type;
+	uint32					nelems;
+	HEntry					*array;
+	char					*data;
+
+	int						i;
+
+	enum {
+		hsi_start 	= 0x00,
+		hsi_key		= 0x01,
+		hsi_value	= 0x02,
+		hsi_elem	= 0x04
+	} state;
+
+	struct HStoreIterator	*next;
+} HStoreIterator;
+
+extern 	HStoreIterator*	HStoreIteratorInit(char *buffer);
+extern	int /* WHS_* */	HStoreIteratorGet(HStoreIterator **it, HStoreValue *v);
 
 extern size_t hstoreCheckKeyLen(size_t len);
 extern size_t hstoreCheckValLen(size_t len);

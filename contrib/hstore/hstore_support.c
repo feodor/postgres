@@ -2,8 +2,8 @@
 
 #include "hstore.h"
 
-static int
-compareHStoreValue(const HStoreValue *va, const HStoreValue *vb)
+int
+compareHStoreStringValue(const HStoreValue *va, const HStoreValue *vb)
 {
 	Assert(va->type == hsvString);
 	Assert(vb->type == hsvString);
@@ -20,7 +20,7 @@ compareHStorePair(const void *a, const void *b, void *arg)
 	const HStorePair *pa = a;
 	const HStorePair *pb = b;
 
-	int res = compareHStoreValue(&pa->key, &pb->key);
+	int res = compareHStoreStringValue(&pa->key, &pb->key);
 
 	if (res == 0)
 		*(bool*)arg = true;
