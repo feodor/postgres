@@ -12,6 +12,7 @@
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/json.h"
+#include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/typcache.h"
 
@@ -21,6 +22,11 @@ PG_MODULE_MAGIC;
 
 /* old names for C functions */
 HSTORE_POLLUTE(hstore_from_text, tconvert);
+
+/* GUC variables */
+static bool array_square_brackets = false;
+static bool	root_array_decorated = true;
+static bool	root_hash_decorated = false;
 
 static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
 
@@ -1099,15 +1105,17 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 			if (state->first == false)
 				appendBinaryStringInfo(state->str, ", ", 2);
 			state->first = true;
-	
-			appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '{' : '[' /* XXX */);
+
+			if (!(state->kind == HStoreOutput && level == 0 && root_array_decorated == false))
+				appendStringInfoCharMacro(state->str, 
+									  (state->kind == HStoreOutput && array_square_brackets == false) ? '{' : '[');
 			break;
 		case WHS_BEGIN_HSTORE:
 			if (state->first == false)
 				appendBinaryStringInfo(state->str, ", ", 2);
 			state->first = true;
 
-			if (level > 0 || state->kind != HStoreOutput )
+			if (!(state->kind == HStoreOutput && level == 0 && root_hash_decorated == false))
 				appendStringInfoCharMacro(state->str, '{');
 			break;
 		case WHS_KEY:
@@ -1143,11 +1151,13 @@ outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 			putEscapedString(state, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
 			break;
 		case WHS_END_ARRAY:
-			appendStringInfoCharMacro(state->str, (state->kind == HStoreOutput) ? '}' : ']' /* XXX */);
+			if (!(state->kind == HStoreOutput && level == 0 && root_array_decorated == false))
+				appendStringInfoCharMacro(state->str, 
+									 (state->kind == HStoreOutput && array_square_brackets == false) ? '}' : ']');
 			state->first = false;
 			break;
 		case WHS_END_HSTORE:
-			if (level > 0 || state->kind != HStoreOutput)
+			if (!(state->kind == HStoreOutput && level == 0 && root_hash_decorated == false))
 				appendStringInfoCharMacro(state->str, '}');
 			state->first = false;
 			break;
@@ -1330,4 +1340,49 @@ hstore_to_json(PG_FUNCTION_ARGS)
 	SET_VARSIZE(out, VARHDRSZ + state.str->len);
 
 	PG_RETURN_TEXT_P(out);
+}
+
+void _PG_init(void);
+void
+_PG_init(void)
+{
+	DefineCustomBoolVariable(
+		"hstore.array_square_brackets",
+		"[] brackets for array",
+		"Use [] brackets for array's decoration",
+		&array_square_brackets,
+		array_square_brackets,
+		PGC_USERSET,
+		GUC_NOT_IN_SAMPLE,
+		NULL,
+		NULL,
+		NULL
+	);
+
+	DefineCustomBoolVariable(
+		"hstore.root_array_decorated",
+		"Enables brackets decoration for root array",
+		"Enables brackets decoration for root array",
+		&root_array_decorated,
+		root_array_decorated,
+		PGC_USERSET,
+		GUC_NOT_IN_SAMPLE,
+		NULL,
+		NULL,
+		NULL
+	);
+
+	DefineCustomBoolVariable(
+		"hstore.root_hash_decorated",
+		"Enables brackets decoration for root hash (hstore)",
+		"Enables brackets decoration for root hash (hstore)",
+		&root_hash_decorated,
+		root_hash_decorated,
+		PGC_USERSET,
+		GUC_NOT_IN_SAMPLE,
+		NULL,
+		NULL,
+		NULL
+	);
+
 }

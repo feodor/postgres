@@ -83,3 +83,48 @@ SELECT populate_record(v, 'i=>2'::hstore) FROM testtype v;
 SELECT populate_record(v, 'i=>2, a=>{7,8,9}'::hstore) FROM testtype v;
 SELECT populate_record(v, 'i=>2, h=>{b=>3}, a=>{7,8,9}'::hstore) FROM testtype v;
 
+--decoration
+
+SET hstore.array_square_brackets=false;
+SET hstore.root_array_decorated=false;
+SET hstore.root_hash_decorated=false;
+SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
+
+SET hstore.array_square_brackets=false;
+SET hstore.root_array_decorated=false;
+SET hstore.root_hash_decorated=true;
+SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
+
+SET hstore.array_square_brackets=false;
+SET hstore.root_array_decorated=true;
+SET hstore.root_hash_decorated=false;
+SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
+
+SET hstore.array_square_brackets=false;
+SET hstore.root_array_decorated=true;
+SET hstore.root_hash_decorated=true;
+SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
+
+SET hstore.array_square_brackets=true;
+SET hstore.root_array_decorated=false;
+SET hstore.root_hash_decorated=false;
+SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
+
+SET hstore.array_square_brackets=true;
+SET hstore.root_array_decorated=false;
+SET hstore.root_hash_decorated=true;
+SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
+
+SET hstore.array_square_brackets=true;
+SET hstore.root_array_decorated=true;
+SET hstore.root_hash_decorated=false;
+SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
+
+SET hstore.array_square_brackets=true;
+SET hstore.root_array_decorated=true;
+SET hstore.root_hash_decorated=true;
+SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
+
+RESET hstore.array_square_brackets;
+RESET hstore.root_array_decorated;
+RESET hstore.root_hash_decorated;
