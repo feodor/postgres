@@ -300,6 +300,15 @@ typedef enum HStoreOutputKind {
 extern char* hstoreToCString(StringInfo out, char *in,
 							 int len /* just estimation */, HStoreOutputKind kind);
 
+typedef struct ToHStoreState
+{
+	HStoreValue             v;
+	uint32                  size;
+	struct ToHStoreState    *next;
+} ToHStoreState;
+
+extern HStoreValue* pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v);
+
 /* be aware: size effects for n argument */
 #define ORDER_PAIRS(a, n, delaction)												\
 	do {																			\
@@ -357,7 +366,7 @@ typedef struct HStoreIterator
 } HStoreIterator;
 
 extern 	HStoreIterator*	HStoreIteratorInit(char *buffer);
-extern	int /* WHS_* */	HStoreIteratorGet(HStoreIterator **it, HStoreValue *v);
+extern	int /* WHS_* */	HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested);
 
 extern size_t hstoreCheckKeyLen(size_t len);
 extern size_t hstoreCheckValLen(size_t len);

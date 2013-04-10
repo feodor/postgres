@@ -367,6 +367,67 @@ SELECT populate_record(v, 'i=>2, h=>{b=>3}, a=>{7,8,9}'::hstore) FROM testtype v
  (2,"""b""=>""3""","{7,8,9}")
 (1 row)
 
+--complex delete
+select 'b=>{a,c}'::hstore - 'a'::text;
+    ?column?     
+-----------------
+ "b"=>{"a", "c"}
+(1 row)
+
+select 'b=>{a,c}, a=>1'::hstore - 'a'::text;
+    ?column?     
+-----------------
+ "b"=>{"a", "c"}
+(1 row)
+
+select 'b=>{a,c}, a=>[2,3]'::hstore - 'a'::text;
+    ?column?     
+-----------------
+ "b"=>{"a", "c"}
+(1 row)
+
+select 'b=>{a,c}, a=>[2,3]'::hstore - 'a'::text;
+    ?column?     
+-----------------
+ "b"=>{"a", "c"}
+(1 row)
+
+select '[2,3,a]'::hstore - 'a'::text;
+  ?column?  
+------------
+ {"2", "3"}
+(1 row)
+
+select '[a,2,3,a]'::hstore - 'a'::text;
+  ?column?  
+------------
+ {"2", "3"}
+(1 row)
+
+select '[a,a]'::hstore - 'a'::text;
+ ?column? 
+----------
+ 
+(1 row)
+
+select '[a]'::hstore - 'a'::text;
+ ?column? 
+----------
+ 
+(1 row)
+
+select 'a=>1'::hstore - 'a'::text;
+ ?column? 
+----------
+ 
+(1 row)
+
+select ''::hstore - 'a'::text;
+ ?column? 
+----------
+ 
+(1 row)
+
 --decoration
 SET hstore.array_square_brackets=false;
 SET hstore.root_array_decorated=false;

@@ -83,6 +83,19 @@ SELECT populate_record(v, 'i=>2'::hstore) FROM testtype v;
 SELECT populate_record(v, 'i=>2, a=>{7,8,9}'::hstore) FROM testtype v;
 SELECT populate_record(v, 'i=>2, h=>{b=>3}, a=>{7,8,9}'::hstore) FROM testtype v;
 
+--complex delete
+
+select 'b=>{a,c}'::hstore - 'a'::text;
+select 'b=>{a,c}, a=>1'::hstore - 'a'::text;
+select 'b=>{a,c}, a=>[2,3]'::hstore - 'a'::text;
+select 'b=>{a,c}, a=>[2,3]'::hstore - 'a'::text;
+select '[2,3,a]'::hstore - 'a'::text;
+select '[a,2,3,a]'::hstore - 'a'::text;
+select '[a,a]'::hstore - 'a'::text;
+select '[a]'::hstore - 'a'::text;
+select 'a=>1'::hstore - 'a'::text;
+select ''::hstore - 'a'::text;
+
 --decoration
 
 SET hstore.array_square_brackets=false;

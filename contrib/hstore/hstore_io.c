@@ -1115,7 +1115,7 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 
 	it = HStoreIteratorInit(in);
 
-	while((type = HStoreIteratorGet(&it, &v)) != 0)
+	while((type = HStoreIteratorGet(&it, &v, false)) != 0)
 	{
 		switch(type)
 		{
@@ -1228,7 +1228,7 @@ hstore_send(PG_FUNCTION_ARGS)
 
 		it = HStoreIteratorInit(VARDATA_ANY(in));
 	
-		while((type = HStoreIteratorGet(&it, &v)) != 0)
+		while((type = HStoreIteratorGet(&it, &v, false)) != 0)
 		{
 			switch(type)
 			{

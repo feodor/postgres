@@ -311,44 +311,52 @@ Datum		hstore_delete(PG_FUNCTION_ARGS);
 Datum
 hstore_delete(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	text	   *key = PG_GETARG_TEXT_PP(1);
-	char	   *keyptr = VARDATA_ANY(key);
-	int			keylen = VARSIZE_ANY_EXHDR(key);
-	HStore	   *out = palloc(VARSIZE(hs));
-	char	   *bufs,
-			   *bufd,
-			   *ptrd;
-	HEntry	   *es,
-			   *ed;
-	int			i;
-	int			count = HS_COUNT(hs);
-	int			outcount = 0;
+	HStore	   		*in = PG_GETARG_HS(0);
+	text	   		*key = PG_GETARG_TEXT_PP(1);
+	char	   		*keyptr = VARDATA_ANY(key);
+	int				keylen = VARSIZE_ANY_EXHDR(key);
+	HStore	   		*out = palloc(VARSIZE(in));
+	ToHStoreState	*toState = NULL;
+	HStoreIterator	*it;
+	uint32			r;
+	HStoreValue		v, *res;
+	bool			skipNested = false;
 
-	SET_VARSIZE(out, VARSIZE(hs));
-	HS_SETCOUNT(out, count);	/* temporary! */
+	SET_VARSIZE(out, VARSIZE(in));
 
-	bufs = STRPTR(hs);
-	es = ARRPTR(hs);
-	bufd = ptrd = STRPTR(out);
-	ed = ARRPTR(out);
+	if (HS_ISEMPTY(in))
+		PG_RETURN_POINTER(out);
 
-	for (i = 0; i < count; ++i)
+	it = HStoreIteratorInit(VARDATA(in));
+
+	while((r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
 	{
-		int			len = HS_KEYLEN(es, i);
-		char	   *ptrs = HS_KEY(es, bufs, i);
+		skipNested = true;
 
-		if (!(len == keylen && memcmp(ptrs, keyptr, keylen) == 0))
+		if ((r == WHS_ELEM || r == WHS_KEY) &&
+			(v.type == hsvString && keylen == v.string.len && memcmp(keyptr, v.string.val, keylen) == 0))
 		{
-			int			vallen = HS_VALLEN(es, i);
-
-			HS_COPYITEM(ed, bufd, ptrd, ptrs, len, vallen, HS_VALISNULL(es, i));
-			++outcount;
+			if (r == WHS_KEY)
+			{
+				/* skip corresponding value */
+				HStoreIteratorGet(&it, &v, true);
+			}
+			continue;
 		}
+
+		res = pushHStoreValue(&toState, r, &v);
 	}
 
-	out->size_ = hs->size_ & (HS_FLAG_ARRAY | HS_FLAG_HSTORE); 
-	HS_FINALIZE(out, outcount, bufd, ptrd);
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+					   (res->type == hsvPairs && res->hstore.npairs == 0) )
+	{
+		SET_VARSIZE(out, VARHDRSZ);
+	}
+	else
+	{
+		r = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, r + VARHDRSZ);
+	}
 
 	PG_RETURN_POINTER(out);
 }
@@ -1189,8 +1197,8 @@ hstore_cmp(PG_FUNCTION_ARGS)
 		HStoreValue		v1, v2;
 		int				r1, r2;
 
-		r1 = HStoreIteratorGet(&it1, &v1);	
-		r2 = HStoreIteratorGet(&it2, &v2);
+		r1 = HStoreIteratorGet(&it1, &v1, false);	
+		r2 = HStoreIteratorGet(&it2, &v2, false);
 
 		if (r1 == r2)
 		{
