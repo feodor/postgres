@@ -30,7 +30,6 @@ static bool	root_hash_decorated = false;
 
 static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
 
-
 static int
 comparePairs(const void *a, const void *b)
 {
@@ -333,6 +332,14 @@ recvHStore(StringInfo buf, HStoreValue *v, uint32 level)
 {
 	uint32	header = pq_getmsgint(buf, 4);
 	uint32	i;
+
+	if (level == 0 && (header & HS_COUNT_MASK) == 0)
+	{
+		/* empty value */
+		v->type = hsvPairs;
+		v->hstore.npairs = 0;
+		return;
+	}
 
 	if (level == 0 && (header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE)) == 0)
 		header |= HS_FLAG_HSTORE; /* old version */
@@ -992,7 +999,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			if (v->type == hsvString)
 				s = pnstrdup(v->string.val, v->string.len);
 			else if (v->type == hsvDumped)
-				s = hstoreToCString(NULL, v->dump.data, v->dump.len);
+				s = hstoreToCString(NULL, v->dump.data, v->dump.len, HStoreOutput);
 			else
 				elog(PANIC, "Wrong hstore");
 
@@ -1009,16 +1016,6 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(rettuple));
 }
-
-typedef struct OutState {
-	StringInfo	str;
-	bool first;
-	enum {
-		HStoreOutput,
-		JsonOutput,
-		JsonLooseOutput
-	} kind;
-} OutState;
 
 static bool
 stringIsNumber(char *string, int len) {
@@ -1044,30 +1041,30 @@ stringIsNumber(char *string, int len) {
 }
 
 static void
-putEscapedString(OutState *state, char *string, uint32 len)
+putEscapedString(StringInfo out, HStoreOutputKind kind, char *string, uint32 len)
 {
 	if (string)
 	{
-		switch(state->kind)
+		switch(kind)
 		{
 			case HStoreOutput:
 				do
 				{
 					char       *ptr = string;
 
-					appendStringInfoCharMacro(state->str, '"');
+					appendStringInfoCharMacro(out, '"');
 					while (ptr - string < len)
 					{
 						if (*ptr == '"' || *ptr == '\\')
-							appendStringInfoCharMacro(state->str, '\\');
-						appendStringInfoCharMacro(state->str, *ptr);
+							appendStringInfoCharMacro(out, '\\');
+						appendStringInfoCharMacro(out, *ptr);
 						ptr++;
 					}
-					appendStringInfoCharMacro(state->str, '"');
+					appendStringInfoCharMacro(out, '"');
 				} while(0);
 				break;
 			case JsonOutput:
-				escape_json(state->str, pnstrdup(string, len));
+				escape_json(out, pnstrdup(string, len));
 				break;
 			case JsonLooseOutput:
 				do 
@@ -1075,13 +1072,13 @@ putEscapedString(OutState *state, char *string, uint32 len)
 					char *s = pnstrdup(string, len);
 
 					if (len == 1 && *string == 't')
-						appendStringInfoString(state->str, "true");
+						appendStringInfoString(out, "true");
 					else if (len == 1 && *string == 'f')
-						appendStringInfoString(state->str, "false");
+						appendStringInfoString(out, "false");
 					else if (len > 0 && stringIsNumber(s, len))
-						appendBinaryStringInfo(state->str, string, len);
+						appendBinaryStringInfo(out, string, len);
 					else
-						escape_json(state->str, s);
+						escape_json(out, s);
 				} while(0);
 				break;
 			default:
@@ -1090,104 +1087,108 @@ putEscapedString(OutState *state, char *string, uint32 len)
 	}
 	else
 	{
-		appendBinaryStringInfo(state->str, (state->kind == HStoreOutput) ? "NULL" : "null", 4);
+		appendBinaryStringInfo(out, (kind == HStoreOutput) ? "NULL" : "null", 4);
 	}
 }
 
-static void
-outCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
+char*
+hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
+		  HStoreOutputKind kind)
 {
-	OutState	*state = arg;
+	bool			first = true;
+	HStoreIterator	*it;
+	int				type;
+	HStoreValue		v;
+	int				level = 0;
 
-	switch(flags & ~(WHS_BEFORE | WHS_AFTER))
+
+	if (out == NULL)
+		out = makeStringInfo();
+
+	if (in == NULL)
 	{
-		case WHS_BEGIN_ARRAY:
-			if (state->first == false)
-				appendBinaryStringInfo(state->str, ", ", 2);
-			state->first = true;
+		appendStringInfoString(out, "");
+		return out->data;
+	}
 
-			if (!(state->kind == HStoreOutput && level == 0 && root_array_decorated == false))
-				appendStringInfoCharMacro(state->str, 
-									  (state->kind == HStoreOutput && array_square_brackets == false) ? '{' : '[');
-			break;
-		case WHS_BEGIN_HSTORE:
-			if (state->first == false)
-				appendBinaryStringInfo(state->str, ", ", 2);
-			state->first = true;
+	enlargeStringInfo(out, (len >= 0) ? len : 64);
 
-			if (!(state->kind == HStoreOutput && level == 0 && root_hash_decorated == false))
-				appendStringInfoCharMacro(state->str, '{');
-			break;
-		case WHS_KEY:
-			if (flags & WHS_AFTER)
+	it = HStoreIteratorInit(in);
+
+	while((type = HStoreIteratorGet(&it, &v)) != 0)
+	{
+		switch(type)
+		{
+			case WHS_BEGIN_ARRAY:
+				if (first == false)
+					appendBinaryStringInfo(out, ", ", 2);
+				first = true;
+
+				if (!(kind == HStoreOutput && level == 0 && root_array_decorated == false))
+					appendStringInfoCharMacro(out, 
+										  (kind == HStoreOutput && array_square_brackets == false) ? '{' : '[');
+				level++;
 				break;
+			case WHS_BEGIN_HSTORE:
+				if (first == false)
+					appendBinaryStringInfo(out, ", ", 2);
+				first = true;
 
-			if (state->first == false)
-				appendBinaryStringInfo(state->str, ", ", 2);
-			state->first = true;
+				if (!(kind == HStoreOutput && level == 0 && root_hash_decorated == false))
+					appendStringInfoCharMacro(out, '{');
 
-			if (state->kind == JsonLooseOutput)
-			{
-				state->kind = JsonOutput;
-				putEscapedString(state, value->string.val,  value->string.len);
-				state->kind = JsonLooseOutput;
-			}
-			else
-			{
-				putEscapedString(state, value->string.val,  value->string.len);
-			}
-			appendBinaryStringInfo(state->str, (state->kind == HStoreOutput) ? "=>" : ": ", 2);
-			break;
-		case WHS_ELEM:
-			if (state->first == false)
-				appendBinaryStringInfo(state->str, ", ", 2);
-			else
-				state->first = false;
+				level++;
+				break;
+			case WHS_KEY:
+				if (first == false)
+					appendBinaryStringInfo(out, ", ", 2);
+				first = true;
 
-			putEscapedString(state, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
-			break;
-		case WHS_VALUE:
-			state->first = false;
-			putEscapedString(state, (value->type == hsvNullString) ? NULL : value->string.val,  value->string.len);
-			break;
-		case WHS_END_ARRAY:
-			if (!(state->kind == HStoreOutput && level == 0 && root_array_decorated == false))
-				appendStringInfoCharMacro(state->str, 
-									 (state->kind == HStoreOutput && array_square_brackets == false) ? '}' : ']');
-			state->first = false;
-			break;
-		case WHS_END_HSTORE:
-			if (!(state->kind == HStoreOutput && level == 0 && root_hash_decorated == false))
-				appendStringInfoCharMacro(state->str, '}');
-			state->first = false;
-			break;
-		default:
-			elog(PANIC, "Wrong flags");
-	}
-}
+				if (kind == JsonLooseOutput)
+				{
+					kind = JsonOutput;
+					putEscapedString(out, kind, v.string.val,  v.string.len);
+					kind = JsonLooseOutput;
+				}
+				else
+				{
+					putEscapedString(out, kind, v.string.val,  v.string.len);
+				}
+				appendBinaryStringInfo(out, (kind == HStoreOutput) ? "=>" : ": ", 2);
+				break;
+			case WHS_ELEM:
+				if (first == false)
+					appendBinaryStringInfo(out, ", ", 2);
+				else
+					first = false;
 
-char* 
-hstoreToCString(StringInfo str, char *v, int len /* estimation */)
-{
-	OutState	state;
-
-	state.str = (str == NULL) ? makeStringInfo() : str;
-
-	if (v == NULL)
-	{
-		appendBinaryStringInfo(state.str, "\0", 1);
-	}
-	else
-	{
-		enlargeStringInfo(state.str, len);
-
-		state.first = true;
-		state.kind = HStoreOutput;
-
-		walkCompressedHStore(v, outCallback, &state);
+				putEscapedString(out, kind, (v.type == hsvNullString) ? NULL : v.string.val,  v.string.len);
+				break;
+			case WHS_VALUE:
+				first = false;
+				putEscapedString(out, kind, (v.type == hsvNullString) ? NULL : v.string.val,  v.string.len);
+				break;
+			case WHS_END_ARRAY:
+				level--;
+				if (!(kind == HStoreOutput && level == 0 && root_array_decorated == false))
+					appendStringInfoCharMacro(out, 
+										 (kind == HStoreOutput && array_square_brackets == false) ? '}' : ']');
+				first = false;
+				break;
+			case WHS_END_HSTORE:
+				level--;
+				if (!(kind == HStoreOutput && level == 0 && root_hash_decorated == false))
+					appendStringInfoCharMacro(out, '}');
+				first = false;
+				break;
+			default:
+				elog(PANIC, "Wrong flags");
+		}
 	}
 
-	return state.str->data;
+	Assert(level == 0);
+
+	return out->data;
 }
 
 PG_FUNCTION_INFO_V1(hstore_out);
@@ -1198,49 +1199,9 @@ hstore_out(PG_FUNCTION_ARGS)
 	HStore	*hs = PG_GETARG_HS(0);
 	char 	*out;
 
-	out = hstoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs));
+	out = hstoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), HStoreOutput);
 
 	PG_RETURN_CSTRING(out);
-}
-
-static void
-sendCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
-{
-	OutState	*state = arg;
-
-	switch(flags & ~(WHS_BEFORE | WHS_AFTER))
-	{
-		case WHS_BEGIN_ARRAY:
-			pq_sendint(state->str, value->array.nelems | HS_FLAG_ARRAY, 4);
-			break;
-		case WHS_BEGIN_HSTORE:
-			pq_sendint(state->str, value->hstore.npairs | HS_FLAG_HSTORE, 4);
-			break;
-		case WHS_KEY:
-			if (flags & WHS_AFTER)
-				break;
-
-			pq_sendint(state->str, value->string.len, 4);
-			pq_sendtext(state->str, value->string.val, value->string.len);
-			break;
-		case WHS_ELEM:
-		case WHS_VALUE:
-			if (value->type == hsvNullString)
-			{
-				pq_sendint(state->str, -1, 4);
-			}
-			else
-			{
-				pq_sendint(state->str, value->string.len, 4);
-				pq_sendtext(state->str, value->string.val, value->string.len);
-			}
-			break;
-		case WHS_END_ARRAY:
-		case WHS_END_HSTORE:
-			break;
-		default:
-			elog(PANIC, "Wrong flags");
-	}
 }
 
 PG_FUNCTION_INFO_V1(hstore_send);
@@ -1249,18 +1210,60 @@ Datum
 hstore_send(PG_FUNCTION_ARGS)
 {
 	HStore	   		*in = PG_GETARG_HS(0);
-	OutState		state;
 	StringInfoData	buf;
 
 	pq_begintypsend(&buf);
-	state.str = &buf;
 
-	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
+	if (HS_ISEMPTY(in))
+	{
+		pq_sendint(&buf, 0, 4);
+	}
+	else
+	{
+		HStoreIterator	*it;
+		int				type;
+		HStoreValue		v;
 
-	if (!HS_ISEMPTY(in))
-		walkCompressedHStore(VARDATA_ANY(in), sendCallback, &state);
+		enlargeStringInfo(&buf, VARSIZE_ANY(in) /* just estimation */);
 
-	PG_RETURN_BYTEA_P(pq_endtypsend(state.str));
+		it = HStoreIteratorInit(VARDATA_ANY(in));
+	
+		while((type = HStoreIteratorGet(&it, &v)) != 0)
+		{
+			switch(type)
+			{
+				case WHS_BEGIN_ARRAY:
+					pq_sendint(&buf, v.array.nelems | HS_FLAG_ARRAY, 4);
+					break;
+				case WHS_BEGIN_HSTORE:
+					pq_sendint(&buf, v.hstore.npairs | HS_FLAG_HSTORE, 4);
+					break;
+				case WHS_KEY:
+					pq_sendint(&buf, v.string.len, 4);
+					pq_sendtext(&buf, v.string.val, v.string.len);
+					break;
+				case WHS_ELEM:
+				case WHS_VALUE:
+					if (v.type == hsvNullString)
+					{
+						pq_sendint(&buf, -1, 4);
+					}
+					else
+					{
+						pq_sendint(&buf, v.string.len, 4);
+						pq_sendtext(&buf, v.string.val, v.string.len);
+					}
+					break;
+				case WHS_END_ARRAY:
+				case WHS_END_HSTORE:
+					break;
+				default:
+					elog(PANIC, "Wrong flags");
+			}
+		}
+	}
+
+	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
 
 
@@ -1278,31 +1281,17 @@ Datum
 hstore_to_json_loose(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	OutState	state;
+	StringInfo	str;
 	text		*out;
 
-	if (HS_ISEMPTY(in))
-		PG_RETURN_CSTRING(cstring_to_text(""));
-/*
-	Assert(VARSIZE(in) ==
-			    (HS_COUNT(in) != 0 ?
-				CALCDATASIZE(HS_COUNT(in),
-				HSE_ENDPOS(ARRPTR(in)[2 * HS_COUNT(in) - 1])) :
-				VARHDRSZ));
-*/
-	state.str = makeStringInfo();
-	appendBinaryStringInfo(state.str, "    ", 4); /* VARHDRSZ */
+	str = makeStringInfo();
+	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
+	hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonLooseOutput);
 
-	state.first = true;
-	state.kind = JsonLooseOutput;
+	out = (text*)str->data;
 
-	walkCompressedHStore(VARDATA_ANY(in), outCallback, &state); 
-
-	out = (text*)state.str->data;
-
-	SET_VARSIZE(out, VARHDRSZ + state.str->len);
+	SET_VARSIZE(out, str->len);
 
 	PG_RETURN_TEXT_P(out);
 }
@@ -1313,31 +1302,17 @@ Datum
 hstore_to_json(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	OutState	state;
+	StringInfo	str;
 	text		*out;
 
-	if (HS_ISEMPTY(in))
-		PG_RETURN_CSTRING(cstring_to_text(""));
-/*
-	Assert(VARSIZE(in) ==
-			    (HS_COUNT(in) != 0 ?
-				CALCDATASIZE(HS_COUNT(in),
-				HSE_ENDPOS(ARRPTR(in)[2 * HS_COUNT(in) - 1])) :
-				VARHDRSZ));
-*/
-	state.str = makeStringInfo();
-	appendBinaryStringInfo(state.str, "    ", 4); /* VARHDRSZ */
+	str = makeStringInfo();
+	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-	enlargeStringInfo(state.str, VARSIZE_ANY(in) /* just estimation */);
+	hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonOutput);
 
-	state.first = true;
-	state.kind = JsonOutput;
+	out = (text*)str->data;
 
-	walkCompressedHStore(VARDATA_ANY(in), outCallback, &state); 
-
-	out = (text*)state.str->data;
-
-	SET_VARSIZE(out, VARHDRSZ + state.str->len);
+	SET_VARSIZE(out, str->len);
 
 	PG_RETURN_TEXT_P(out);
 }

@@ -156,14 +156,12 @@ walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32
 
 			for(i=0; i<v->hstore.npairs; i++)
 			{
-				cb(cb_arg, &v->hstore.pairs[i].key, WHS_KEY | WHS_BEFORE, level);
+				cb(cb_arg, &v->hstore.pairs[i].key, WHS_KEY, level);
 				
 				if (v->hstore.pairs[i].value.type == hsvNullString || v->hstore.pairs[i].value.type == hsvString)
 					cb(cb_arg, &v->hstore.pairs[i].value, WHS_VALUE, level);
 				else 
 					walkUncompressedHStoreDo(&v->hstore.pairs[i].value, cb, cb_arg, level + 1);
-
-				cb(cb_arg, &v->hstore.pairs[i].key, WHS_KEY | WHS_AFTER, level);
 			}
 
 			cb(cb_arg, v, WHS_END_HSTORE, level);
@@ -181,117 +179,146 @@ walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg)
 }
 
 static void
-walkCompressedHStoreDo(char *buffer, walk_hstore_cb cb, void *cb_arg, uint32 level)
+parseBuffer(HStoreIterator *it, char *buffer)
 {
-	uint32				type = *(uint32*)buffer,
-						nelem,
-						i;
-	HStoreValue			k, v;
-	HEntry				*array;
-	char				*data;
-
-	nelem = type & HS_COUNT_MASK;
-	type &= (HS_FLAG_ARRAY | HS_FLAG_HSTORE);
+	it->type = (*(uint32*)buffer) & (HS_FLAG_ARRAY | HS_FLAG_HSTORE);
+	it->nelems = (*(uint32*)buffer) & HS_COUNT_MASK;
 
 	buffer += sizeof(uint32);
 
-	array = (HEntry*)buffer;
+	it->array = (HEntry*)buffer;
 
-	switch(type) 
+	it->state = hsi_start;
+
+	switch(it->type)
 	{
 		case HS_FLAG_ARRAY:
-			data = buffer + nelem * sizeof(HEntry);
-
-			k.type = hsvArray;
-			k.array.nelems = nelem;
-
-			cb(cb_arg, &k, WHS_BEGIN_ARRAY, level);
-
-			for(i=0; i<nelem; i++)
-			{
-				if (HSE_ISSTRING(array[i])) 
-				{
-
-					if (HSE_ISNULL(array[i]))
-					{
-						v.type = hsvNullString;
-					}
-					else
-					{
-						v.type = hsvString;
-						v.string.val = data + HSE_OFF(array[i]);
-						v.string.len = HSE_LEN(array[i]);
-					}
-					cb(cb_arg, &v, WHS_ELEM, level);
-				}
-				else
-				{
-					walkCompressedHStoreDo(data + INTALIGN(HSE_OFF(array[i])), cb, cb_arg, level + 1);
-				}
-			}
-
-			cb(cb_arg, &k, WHS_END_ARRAY, level);
-
+			it->data = buffer + it->nelems * sizeof(HEntry);
 			break;
 		case HS_FLAG_HSTORE:
-			data = buffer + nelem * sizeof(HEntry) * 2;
-
-			v.type = hsvPairs;
-			v.hstore.npairs = nelem;
-
-			cb(cb_arg, &v, WHS_BEGIN_HSTORE, level);
-
-			k.type = v.type = hsvString;
-
-			for(i=0; i<nelem; i++)
-			{
-				k.string.val = HS_KEY(array, data, i);
-				k.string.len = HS_KEYLEN(array, i);
-
-				cb(cb_arg, &k, WHS_KEY | WHS_BEFORE, level);
-
-				if (HS_VALISSTRING(array, i))
-				{
-					if (HS_VALISNULL(array, i))
-					{
-						v.type = hsvNullString;
-					}
-					else
-					{
-						v.type = hsvString;
-						v.string.val = HS_VAL(array, data, i);
-						v.string.len = HS_VALLEN(array, i);
-					}
-					cb(cb_arg, &v, WHS_VALUE, level);
-				}
-				else
-				{
-					walkCompressedHStoreDo(data + INTALIGN(HSE_OFF(array[2*i + 1])), cb, cb_arg, level + 1);
-				}
-
-
-				cb(cb_arg, &k, WHS_KEY | WHS_AFTER, level);
-			}
-
-			v.type = hsvPairs;
-			v.hstore.npairs = nelem;
-
-			cb(cb_arg, &v, WHS_END_HSTORE, level);
-
+			it->data = buffer + it->nelems * sizeof(HEntry) * 2;
 			break;
 		default:
-			elog(PANIC, "impossible type: %08x", type);
+			elog(PANIC, "impossible type: %08x", it->type);
+	}
+}
+
+HStoreIterator*
+HStoreIteratorInit(char *buffer)
+{
+	HStoreIterator	*it = palloc(sizeof(*it));
+
+	parseBuffer(it, buffer);
+	it->next = NULL;
+
+	return it;
+}
+
+static bool
+formAnswer(HStoreIterator **it, HStoreValue *v, HEntry *e)
+{
+	if (HSE_ISSTRING(*e))
+	{
+		if (HSE_ISNULL(*e))
+		{
+			v->type = hsvNullString;
+		}
+		else
+		{
+			v->type = hsvString;
+			v->string.val = (*it)->data + HSE_OFF(*e);
+			v->string.len = HSE_LEN(*e);
+		}
+
+		return false;
+	} 
+	else
+	{
+		HStoreIterator *nit = palloc(sizeof(*nit));
+
+		parseBuffer(nit, (*it)->data + INTALIGN(HSE_OFF(*e)));
+		nit->next = *it;
+		*it = nit;
+
+		return true;
+	}
+}
+
+static HStoreIterator*
+up(HStoreIterator *it)
+{
+	HStoreIterator *v = it->next;
+
+	pfree(it);
+
+	return v;
+}
+
+int
+HStoreIteratorGet(HStoreIterator **it, HStoreValue *v)
+{
+	int res;
+
+	if (*it == NULL)
+		return 0;
+
+	switch((*it)->type | (*it)->state)
+	{
+		case HS_FLAG_ARRAY | hsi_start:
+			(*it)->state = hsi_elem;
+			(*it)->i = 0;
+			v->type = hsvArray;
+			v->array.nelems = (*it)->nelems;
+			res = WHS_BEGIN_ARRAY;
+			break;
+		case HS_FLAG_ARRAY | hsi_elem:
+			if ((*it)->i >= (*it)->nelems)
+			{
+				*it = up(*it);
+				res = WHS_END_ARRAY;
+			}
+			else if (formAnswer(it, v, &(*it)->array[ (*it)->i++ ]))
+			{
+				res = HStoreIteratorGet(it, v);
+			}
+			else
+			{
+				res = WHS_ELEM;
+			}
+			break;
+		case HS_FLAG_HSTORE | hsi_start:
+			(*it)->state = hsi_key;
+			(*it)->i = 0;
+			v->type = hsvPairs;
+			v->hstore.npairs = (*it)->nelems;
+			res = WHS_BEGIN_HSTORE;
+			break;
+		case HS_FLAG_HSTORE | hsi_key:
+			if ((*it)->i >= (*it)->nelems)
+			{
+				*it = up(*it);
+				res = WHS_END_HSTORE;
+			}
+			else
+			{
+				formAnswer(it, v, &(*it)->array[ (*it)->i * 2 ]);
+				(*it)->state = hsi_value;
+				res = WHS_KEY;
+			}
+			break;
+		case HS_FLAG_HSTORE | hsi_value:
+			(*it)->state = hsi_key;
+			if (formAnswer(it, v, &(*it)->array[ ((*it)->i++) * 2 + 1]))
+				res = HStoreIteratorGet(it, v);
+			else
+				res = WHS_VALUE;
+			break;
+		default:
+			elog(PANIC,"unknown state %08x", (*it)->type & (*it)->state);
 	}
 
+	return res;
 }
-
-void
-walkCompressedHStore(char *buffer, walk_hstore_cb cb, void *cb_arg) 
-{
-	if (buffer)
-		walkCompressedHStoreDo(buffer, cb, cb_arg, 0);
-}
-
 
 typedef struct CompressState
 {
@@ -403,10 +430,7 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 	}
 	else if (flags & WHS_KEY)
 	{
-		if (flags & WHS_AFTER)
-			return;
 		Assert(value->type == hsvString);
-		Assert(flags & WHS_BEFORE);
 
 		putHEntryString(state, value, level, curLevelState->i * 2); 
 	}
@@ -478,3 +502,4 @@ compressHStore(HStoreValue *v, char *buffer) {
 
 	return l;
 }
+

@@ -279,14 +279,10 @@ extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
 #define WHS_END_ARRAY   	(0x010)
 #define WHS_BEGIN_HSTORE    (0x020)
 #define WHS_END_HSTORE      (0x040)
-#define WHS_BEFORE      	(0x080)
-#define WHS_AFTER       	(0x100)
 
 typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, 
 											uint32 /* flags */, uint32 /* level */);
 extern void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
-
-extern void walkCompressedHStore(char *buffer, walk_hstore_cb cb, void *cb_arg);
 
 extern int compareHStoreStringValue(const HStoreValue *va, const HStoreValue *vb);
 extern int compareHStorePair(const void *a, const void *b, void *arg);
@@ -294,7 +290,15 @@ extern int compareHStorePair(const void *a, const void *b, void *arg);
 extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
 												uint32 *lowbound, char *key, uint32 keylen);
 
-extern char*  hstoreToCString(StringInfo str, char *v, int len /* estimation */);
+
+typedef enum HStoreOutputKind {
+	HStoreOutput,
+	JsonOutput,
+	JsonLooseOutput
+} HStoreOutputKind;
+
+extern char* hstoreToCString(StringInfo out, char *in,
+							 int len /* just estimation */, HStoreOutputKind kind);
 
 /* be aware: size effects for n argument */
 #define ORDER_PAIRS(a, n, delaction)												\
