@@ -428,6 +428,12 @@ select ''::hstore - 'a'::text;
  
 (1 row)
 
+select 'a, 1 , b,2, c,3'::hstore - ARRAY['d','b'];
+         ?column?          
+---------------------------
+ {"a", "1", "2", "c", "3"}
+(1 row)
+
 --decoration
 SET hstore.array_square_brackets=false;
 SET hstore.root_array_decorated=false;

@@ -96,6 +96,8 @@ select '[a]'::hstore - 'a'::text;
 select 'a=>1'::hstore - 'a'::text;
 select ''::hstore - 'a'::text;
 
+select 'a, 1 , b,2, c,3'::hstore - ARRAY['d','b'];
+
 --decoration
 
 SET hstore.array_square_brackets=false;

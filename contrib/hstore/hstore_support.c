@@ -136,6 +136,9 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 				stopHigh = stopMiddle;
 			}
 		}
+
+		if (lowbound)
+			*lowbound = stopLow;
 	}
 
 	return NULL;

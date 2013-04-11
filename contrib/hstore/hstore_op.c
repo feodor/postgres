@@ -171,7 +171,46 @@ arrayToHStoreSortedArray(ArrayType *a)
 	}
 
 	return v;
+}
 
+static HStoreValue*
+findInHStoreSortedArray(HStoreValue *a, uint32 *lowbound, char *key, uint32 keylen)
+{
+	HStoreValue		*stopLow = a->array.elems + ((lowbound) ? *lowbound : 0),
+					*stopHigh = a->array.elems + a->array.nelems,
+					*stopMiddle;
+
+	while (stopLow < stopHigh)
+	{
+		int diff;
+
+		stopMiddle = stopLow + (stopHigh - stopLow) / 2;
+
+		if (keylen == stopMiddle->string.len)
+			diff = memcmp(stopMiddle->string.val, key, keylen);
+		else
+			diff = (stopMiddle->string.len > keylen) ? 1 : -1;
+
+		if (diff == 0)
+		{
+			if (lowbound)
+				*lowbound = (stopMiddle - a->array.elems) + 1;
+			return stopMiddle;
+		}
+		else if (diff < 0)
+		{
+			stopLow = stopMiddle + 1;
+		}
+		else
+		{
+			stopHigh = stopMiddle;
+		}
+	}
+
+	if (lowbound)
+		*lowbound = (stopLow - a->array.elems) + 1;
+
+	return NULL;
 }
 
 PG_FUNCTION_INFO_V1(hstore_fetchval);
@@ -393,9 +432,10 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 	HStoreValue 	*a = arrayToHStoreSortedArray(PG_GETARG_ARRAYTYPE_P(1)); 
 	HStoreIterator	*it;
 	ToHStoreState	*toState = NULL;
-	uint32			r, i = 0;
+	uint32			r, i = 0, n = 0;
 	HStoreValue		v, *res;
 	bool			skipNested = false;
+	bool			isHash = false;
 	
 
 	if (HS_ISEMPTY(in))
@@ -414,18 +454,33 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 
 	while((r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
 	{
-		skipNested = true;
 
-		if ((r == WHS_ELEM || r == WHS_KEY) && v.type == hsvString && i < a->array.nelems)
+		if (skipNested == false)
+		{
+			Assert(v.type == hsvArray || v.type == hsvHash);
+			isHash = (v.type == hsvArray) ? false : true;
+			skipNested = true;
+		}
+
+		if ((r == WHS_ELEM || r == WHS_KEY) && v.type == hsvString && n < a->array.nelems)
 		{
 			int diff = 1;
 
-			do {
-				diff = compareHStoreStringValue(&v, a->array.elems + i, NULL);
+			if (isHash)
+			{
+				do {
+					diff = compareHStoreStringValue(&v, a->array.elems + i, NULL);
 
-				if (diff >= 0)
-					i++;
-			} while(diff > 0 && i < a->array.nelems);
+					if (diff >= 0)
+						i++;
+				} while(diff > 0 && i < a->array.nelems);
+				n = i;
+			}
+			else
+			{
+				if (findInHStoreSortedArray(a, NULL, v.string.val, v.string.len) != NULL)
+					diff = 0;
+			}
 
 			if (diff == 0)
 			{
