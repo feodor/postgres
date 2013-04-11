@@ -54,39 +54,6 @@ comparePairs(const void *a, const void *b)
 	return (pa->keylen > pb->keylen) ? 1 : -1;
 }
 
-static void
-freePair(Pairs *ptr)
-{
-	int	i;
-
-	pfree(ptr->key);
-
-	switch(ptr->valtype) 
-	{
-		case valText:
-			pfree(ptr->val.text.val);
-			break;
-		case valArray:
-			for(i=0; i<ptr->val.array.nelems; i++)
-				if (ptr->val.array.elems[i])
-					pfree(ptr->val.array.elems[i]);
-			pfree(ptr->val.array.elems);
-			break;
-		case valHstore:
-			for(i=0; i<ptr->val.hash.npairs; i++)
-				freePair(ptr->val.hash.pairs + i);
-			pfree(ptr->val.hash.pairs);
-			break;
-		case valFormedArray:
-			pfree(ptr->val.formedArray);
-			break;
-		case valFormedHstore:
-			pfree(ptr->val.formedHStore);
-			break;
-		default:
-			Assert(ptr->valtype == valNull);
-	}
-}
 
 static void
 countPairValueSize(Pairs *ptr)
@@ -98,58 +65,6 @@ countPairValueSize(Pairs *ptr)
 		case valText:
 			ptr->anyvallen = ptr->val.text.vallen;
 			break;
-		case valArray:
-			{
-				int i;
-				Datum		*datums = palloc(sizeof(Datum) * ptr->val.array.nelems);
-				bool		*nulls = palloc(sizeof(bool) * ptr->val.array.nelems);
-				int			dims[1];
-				int			lbs[1];
-
-				for(i=0; i<ptr->val.array.nelems; i++)
-				{
-					if (ptr->val.array.elems[i]) 
-					{
-						datums[i] = PointerGetDatum(
-									cstring_to_text_with_len(ptr->val.array.elems[i], ptr->val.array.elens[i]));
-						nulls[i] = false;
-					}
-					else
-					{
-						datums[i] = (Datum)0;
-						nulls[i] = true;
-					}
-				}
-
-				dims[0] = ptr->val.array.nelems;
-				lbs[0] = 1;
-					
-				 ptr->val.formedArray = construct_md_array(datums, nulls, 1, dims, lbs, 
-														   TEXTOID, -1, false, 'i');
-				 ptr->valtype = valFormedArray;
-			}
-			/* continue */
-		case valFormedArray:
-			ptr->anyvallen = VARSIZE_ANY(ptr->val.formedArray);
-			break;
-		case valHstore:
-			{
-				int32	buflen;
-
-				ptr->val.hash.npairs = hstoreUniquePairs(ptr->val.hash.pairs, 
-															ptr->val.hash.npairs, 
-															&buflen);
-
-				ptr->val.formedHStore = hstorePairs(ptr->val.hash.pairs, 
-													ptr->val.hash.npairs, 
-													buflen);
-
-				ptr->valtype = valFormedHstore;
-			}
-			/* continue */
-		case valFormedHstore:
-			ptr->anyvallen = VARSIZE_ANY(ptr->val.formedHStore);
-			break;
 		default:
 			elog(ERROR,"Unknown pair type: %d", ptr->valtype);
 	}
@@ -158,9 +73,6 @@ countPairValueSize(Pairs *ptr)
 static int32
 align_buflen(Pairs *a, int32 buflen) {
 	buflen += a->keylen;
-
-	if (a->valtype == valFormedArray || a->valtype == valFormedHstore)
-		buflen = INTALIGN(buflen);
 
 	return buflen + a->anyvallen;
 }
@@ -197,8 +109,6 @@ hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen)
 		if (ptr->keylen == res->keylen &&
 			memcmp(ptr->key, res->key, res->keylen) == 0)
 		{
-			if (ptr->needfree)
-				freePair(ptr);
 		}
 		else
 		{

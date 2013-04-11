@@ -45,7 +45,7 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 		for(i=(lowbound) ? *lowbound : 0; i<(header & HS_COUNT_MASK); i++) {
 			HEntry	*e = array + i;
 
-			if ((e->entry & HENTRY_ISNULL) && key == NULL) 
+			if (HSE_ISNULL(*e) && key == NULL) 
 			{
 				r.type = hsvNullString;
 				if (lowbound)
@@ -53,7 +53,7 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 
 				return &r;
 			} 
-			else if ((e->entry & (HENTRY_ISARRAY | HENTRY_ISHSTORE)) == 0 && key != NULL)
+			else if (HSE_ISSTRING(*e) && key != NULL)
 			{
 				if (keylen == HSE_LEN(*e) && memcmp(key, data + HSE_OFF(*e), keylen) == 0)
 				{
@@ -402,7 +402,7 @@ putHEntryString(CompressState *state, HStoreValue* value, uint32 level, uint32 i
 				memcpy(state->ptr, value->dump.data, value->dump.len);
 				state->ptr += value->dump.len;
 
-				curLevelState->array[i].entry |= (*(uint32*)value->dump.data) & (HS_FLAG_ARRAY | HS_FLAG_HSTORE);
+				curLevelState->array[i].entry |= HENTRY_ISNEST;
 
 				if (i == 0)
 					curLevelState->array[i].entry |= addlen + value->dump.len;
@@ -456,13 +456,13 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 
 		if (value->type == hsvArray)
 		{
+			*curLevelState->header = value->array.nelems | HS_FLAG_ARRAY ;
 			state->ptr += sizeof(HEntry) * value->array.nelems;
-			*curLevelState->header = value->array.nelems | HENTRY_ISARRAY;
 		}
 		else
 		{
+			*curLevelState->header = value->hash.npairs | HS_FLAG_HSTORE ;
 			state->ptr += sizeof(HEntry) * value->hash.npairs * 2;
-			*curLevelState->header = value->hash.npairs | HENTRY_ISHSTORE;
 		}
 
 		if (level == 0)
@@ -500,7 +500,7 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 		if (*prevLevelState->header & HS_FLAG_ARRAY) {
 			i = prevLevelState->i;
 
-			prevLevelState->array[i].entry = *curLevelState->header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE);
+			prevLevelState->array[i].entry = HENTRY_ISNEST;
 
 			if (i == 0)
 				prevLevelState->array[0].entry |= HENTRY_ISFIRST | len;
@@ -508,11 +508,11 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 				prevLevelState->array[i].entry |=
 					(prevLevelState->array[i - 1].entry & HENTRY_POSMASK) + len;
 		}
-		else if (*prevLevelState->header & HENTRY_ISHSTORE)
+		else if (*prevLevelState->header & HS_FLAG_HSTORE)
 		{
 			i = 2 * prevLevelState->i + 1; /* VALUE, not a KEY */
 
-			prevLevelState->array[i].entry = *curLevelState->header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE);
+			prevLevelState->array[i].entry = HENTRY_ISNEST;
 
 			prevLevelState->array[i].entry |=
 				(prevLevelState->array[i - 1].entry & HENTRY_POSMASK) + len;
@@ -568,7 +568,7 @@ appendArray(ToHStoreState *state, HStoreValue *v)
 	{
 		state->size *= 2;
 		a->array.elems = repalloc(a->array.elems,
-										   sizeof(*a->array.elems) * state->size);
+								   sizeof(*a->array.elems) * state->size);
 	}
 
 	a->array.elems[a->array.nelems ++] = *v;
@@ -587,7 +587,7 @@ appendKey(ToHStoreState *state, HStoreValue *v)
 	{
 		state->size *= 2;
 		h->hash.pairs = repalloc(h->hash.pairs,
-											sizeof(*h->hash.pairs) * state->size);
+									sizeof(*h->hash.pairs) * state->size);
 	}
 
 	h->hash.pairs[h->hash.npairs].key = *v;

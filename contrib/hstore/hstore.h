@@ -22,16 +22,14 @@ typedef struct
 
 #define HENTRY_ISFIRST	0x80000000
 #define HENTRY_ISNULL	0x40000000
-#define HENTRY_ISARRAY	0x20000000
-#define HENTRY_ISHSTORE	0x10000000
-#define HENTRY_POSMASK 	0x0FFFFFFF
+#define HENTRY_ISNEST	0x20000000
+#define HENTRY_POSMASK 	0x1FFFFFFF
 
 /* note possible multiple evaluations, also access to prior array element */
 #define HSE_ISFIRST(he_) (((he_).entry & HENTRY_ISFIRST) != 0)
 #define HSE_ISNULL(he_) (((he_).entry & HENTRY_ISNULL) != 0)
-#define HSE_ISARRAY(he_) (((he_).entry & HENTRY_ISARRAY) != 0)
-#define HSE_ISHSTORE(he_) (((he_).entry & HENTRY_ISHSTORE) != 0)
-#define HSE_ISSTRING(he_) (((he_).entry & (HENTRY_ISHSTORE | HENTRY_ISARRAY)) == 0)
+#define HSE_ISNEST(he_) (((he_).entry & HENTRY_ISNEST) != 0)
+#define HSE_ISSTRING(he_) (((he_).entry & HENTRY_ISNEST) == 0)
 #define HSE_ENDPOS(he_) ((he_).entry & HENTRY_POSMASK)
 #define HSE_OFF(he_) (HSE_ISFIRST(he_) ? 0 : HSE_ENDPOS((&(he_))[-1]))
 #define HSE_LEN(he_) (HSE_ISFIRST(he_)	\
@@ -58,10 +56,10 @@ typedef struct
  * for one reason why.	Some bits are left for future use here.
  */
 #define HS_FLAG_NEWVERSION 		0x80000000
-#define HS_FLAG_ARRAY			HENTRY_ISARRAY
-#define HS_FLAG_HSTORE			HENTRY_ISHSTORE
+#define HS_FLAG_ARRAY			0x40000000
+#define HS_FLAG_HSTORE			0x20000000
 
-#define HS_COUNT_MASK			0x0FFFFFFF
+#define HS_COUNT_MASK			0x1FFFFFFF
 
 #define HS_ISEMPTY(hsp_)		(VARSIZE(hsp_) <= VARHDRSZ)
 #define HS_COUNT(hsp_) 			(HS_ISEMPTY(hsp_) ? 0 : (hsp_)->size_ & 0x0FFFFFFF)		/* XXX */
@@ -82,8 +80,7 @@ typedef struct
 #define HS_VALLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)+1]))
 #define HS_VALISNULL(arr_,i_) (HSE_ISNULL((arr_)[2*(i_)+1]))
 #define HS_VALISSTRING(arr_,i_) (HSE_ISSTRING((arr_)[2*(i_)+1]))
-#define HS_VALISARRAY(arr_,i_) (HSE_ISARRAY((arr_)[2*(i_)+1]))
-#define HS_VALISHSTORE(arr_,i_) (HSE_ISHSTORE((arr_)[2*(i_)+1]))
+#define HS_VALISNEST(arr_,i_) (HSE_ISNEST((arr_)[2*(i_)+1]))
 
 /*
  * currently, these following macros are the _only_ places that rely
@@ -126,28 +123,6 @@ typedef struct
 				memcpy((dptr_), (pair_).val.text.val, (pair_).val.text.vallen);		\
 				(dptr_) += (pair_).val.text.vallen;									\
 				(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;			\
-				break;																\
-			case valFormedArray:													\
-				while (INTALIGN((dptr_) - (dbuf_)) != ((dptr_) - (dbuf_))) 			\
-				{																	\
-					*(dptr_) = '\0';												\
-					(dptr_)++;														\
-				}																	\
-				memcpy((dptr_), (pair_).val.formedArray, (pair_).anyvallen);		\
-				(dptr_) += (pair_).anyvallen;										\
-				(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)			\
-									 | HENTRY_ISARRAY);								\
-				break;																\
-			case valFormedHstore:													\
-				while (INTALIGN((dptr_) - (dbuf_)) != ((dptr_) - (dbuf_))) 			\
-				{																	\
-					*(dptr_) = '\0';												\
-					(dptr_)++;														\
-				}																	\
-				memcpy((dptr_), (pair_).val.formedHStore, (pair_).anyvallen);		\
-				(dptr_) += (pair_).anyvallen;										\
-				(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)			\
-									 | HENTRY_ISHSTORE);							\
 				break;																\
 			default:																\
 				elog(ERROR,"HS_ADDITEM fails for pair type: %d", (pair_).valtype);	\
@@ -193,28 +168,13 @@ typedef struct Pairs
 	size_t		keylen;
 	enum		{
 		valText 			= 0,
-		valArray 			= ~HENTRY_ISARRAY,
-		valHstore 			= ~HENTRY_ISHSTORE,
-		valNull				= HENTRY_ISNULL,
-		valFormedArray 		= HENTRY_ISARRAY,
-		valFormedHstore 	= HENTRY_ISHSTORE
+		valNull
 	}	valtype;
 	union {
 		struct {
 			char	   		*val;
 			size_t			vallen;
 		} text;
-		struct {
-			char			**elems;
-			int				*elens;
-			int				nelems;
-		} array;
-		struct {
-			struct Pairs* 	pairs;
-			int				npairs;
-		} hash;
-		ArrayType			*formedArray;
-		HStore				*formedHStore;
 	} val;
 	int32		anyvallen;
 	bool		needfree;		/* need to pfree the value? */
