@@ -112,7 +112,7 @@ hstoreArrayToPairs(ArrayType *a, int *npairs)
 }
 
 static HStoreValue*
-hstoreArrayToHStoreValue(ArrayType *a)
+hstoreArrayToHStoreSortedArray(ArrayType *a)
 {
 	Datum	 		*key_datums;
 	bool	 		*key_nulls;
@@ -120,6 +120,7 @@ hstoreArrayToHStoreValue(ArrayType *a)
 	HStoreValue		*v;
 	int				i,
 					j;
+	bool			hasNonUniq = false;
 
 	deconstruct_array(a,
 					  TEXTOID, -1, false, 'i',
@@ -129,24 +130,45 @@ hstoreArrayToHStoreValue(ArrayType *a)
 		return NULL;
 
 	v = palloc(sizeof(*v));
-	v->type = hsvHash;
+	v->type = hsvArray;
 
-	v->hash.pairs = palloc(sizeof(*v->hash.pairs) * key_count);
+	v->array.elems = palloc(sizeof(*v->hash.pairs) * key_count);
 
 	for (i = 0, j = 0; i < key_count; i++)
 	{
 		if (!key_nulls[i])
 		{
-			v->hash.pairs[j].key.type = hsvString;
-			v->hash.pairs[j].key.string.val = VARDATA(key_datums[i]);
-			v->hash.pairs[j].key.string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
-			v->hash.pairs[j].value.type = hsvNullString;
+			v->array.elems[j].type = hsvString;
+			v->array.elems[j].string.val = VARDATA(key_datums[i]);
+			v->array.elems[j].string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
 			j++;
 		}
 	}
-	v->hash.npairs = j;
+	v->array.nelems = j;
 
-	ORDER_PAIRS(v->hash.pairs, v->hash.npairs, (void)0);
+	if (v->array.nelems > 1)
+		qsort_arg(v->array.elems, v->array.nelems, sizeof(*v->array.elems),
+				  compareHStoreStringValue, &hasNonUniq);
+
+	if (hasNonUniq)
+	{
+		HStoreValue	*ptr = v->array.elems + 1,
+					*res = v->array.elems;
+
+		while (ptr - v->array.elems < v->array.nelems)
+		{
+			if (!(ptr->string.len == res->string.len &&
+				  memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
+			{
+				res++;
+				*res = *ptr;
+			}
+
+			ptr++;
+		}
+
+		v->array.nelems = res + 1 - v->array.elems;
+	}
 
 	return v;
 
@@ -218,7 +240,7 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 {
 	HStore		   	*hs = PG_GETARG_HS(0);
 	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
-	HStoreValue		*v = hstoreArrayToHStoreValue(keys);
+	HStoreValue		*v = hstoreArrayToHStoreSortedArray(keys);
 	int				i;
 	uint32			lowbound = 0;
 	bool			res = false;
@@ -232,11 +254,11 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	 * start one entry past the previous "found" entry, or at the lower bound
 	 * of the last search.
 	 */
-	for (i = 0; i < v->hash.npairs; i++)
+	for (i = 0; i < v->array.nelems; i++)
 	{
 		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, &lowbound,
-										v->hash.pairs[i].key.string.val, 
-										v->hash.pairs[i].key.string.len) != NULL)
+										v->array.elems[i].string.val, 
+										v->array.elems[i].string.len) != NULL)
 		{
 			res = true;
 			break;
@@ -254,12 +276,12 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 {
 	HStore		   	*hs = PG_GETARG_HS(0);
 	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
-	HStoreValue		*v = hstoreArrayToHStoreValue(keys);
+	HStoreValue		*v = hstoreArrayToHStoreSortedArray(keys);
 	int				i;
 	uint32			lowbound = 0;
 	bool			res = true;
 
-	if (HS_ISEMPTY(hs) || v == NULL || v->hash.npairs == 0)
+	if (HS_ISEMPTY(hs) || v == NULL || v->array.nelems == 0)
 	{
 
 		if (v == NULL || v->hash.npairs == 0)
@@ -274,11 +296,11 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	 * start one entry past the previous "found" entry, or at the lower bound
 	 * of the last search.
 	 */
-	for (i = 0; i < v->hash.npairs; i++)
+	for (i = 0; i < v->array.nelems; i++)
 	{
 		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, &lowbound,
-										v->hash.pairs[i].key.string.val, 
-										v->hash.pairs[i].key.string.len) == NULL)
+										v->array.elems[i].string.val, 
+										v->array.elems[i].string.len) == NULL)
 		{
 			res = false;
 			break;
@@ -1210,7 +1232,7 @@ hstore_cmp(PG_FUNCTION_ARGS)
 				switch(v1.type)
 				{
 					case hsvString:
-						res = compareHStoreStringValue(&v1, &v2);
+						res = compareHStoreStringValue(&v1, &v2, NULL);
 						break;
 					case hsvArray:
 						if (v1.array.nelems != v2.array.nelems)

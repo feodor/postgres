@@ -3,15 +3,27 @@
 #include "hstore.h"
 
 int
-compareHStoreStringValue(const HStoreValue *va, const HStoreValue *vb)
+compareHStoreStringValue(const void *a, const void *b, void *arg)
 {
+	const HStoreValue  *va = a;
+	const HStoreValue  *vb = b;
+	int					res;
+
 	Assert(va->type == hsvString);
 	Assert(vb->type == hsvString);
 
 	if (va->string.len == vb->string.len)
-		return memcmp(va->string.val, vb->string.val, va->string.len);
+	{
+		res = memcmp(va->string.val, vb->string.val, va->string.len);
+		if (res == 0 && arg)
+			*(bool*)arg = true;
+	}
+	else
+	{
+		res = (va->string.len > vb->string.len) ? 1 : -1;
+	}
 
-	return (va->string.len > vb->string.len) ? 1 : -1;
+	return res;
 }
 
 int
@@ -20,12 +32,7 @@ compareHStorePair(const void *a, const void *b, void *arg)
 	const HStorePair *pa = a;
 	const HStorePair *pb = b;
 
-	int res = compareHStoreStringValue(&pa->key, &pb->key);
-
-	if (res == 0)
-		*(bool*)arg = true;
-
-	return res;
+	return compareHStoreStringValue(&pa->key, &pb->key, arg);
 }
 
 HStoreValue*

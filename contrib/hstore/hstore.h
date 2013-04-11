@@ -244,7 +244,7 @@ typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */,
 											uint32 /* flags */, uint32 /* level */);
 extern void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
 
-extern int compareHStoreStringValue(const HStoreValue *va, const HStoreValue *vb);
+extern int compareHStoreStringValue(const void *a, const void *b, void *arg);
 extern int compareHStorePair(const void *a, const void *b, void *arg);
 
 extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
@@ -299,7 +299,7 @@ extern HStoreValue* pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HS
 				ptr++;																\
 			}																		\
 																					\
-			(n) = res + 1 - a;														\
+			(n) = res + 1 - (a);													\
 		}																			\
 	} while(0)																		
 
