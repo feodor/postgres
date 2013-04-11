@@ -111,6 +111,59 @@ hstoreArrayToPairs(ArrayType *a, int *npairs)
 	return key_pairs;
 }
 
+static int compareHStoreBinaryValue(char *a, char *b);
+
+static int
+compareHStoreValue(HStoreValue *a, HStoreValue *b)
+{
+	if (a->type == b->type)
+	{
+		switch(a->type)
+		{
+			case hsvNullString:
+				return 0;
+			case hsvString:
+				return compareHStoreStringValue(a, b, NULL);
+			case hsvArray:
+				if (a->array.nelems == b->array.nelems)
+				{
+					int i, r;
+
+					for(i=0; i<a->array.nelems; i++)
+						if ((r = compareHStoreValue(a->array.elems + i, b->array.elems + i)) != 0)
+							return r;
+
+					return 0;
+				}
+
+				return (a->array.nelems > b->array.nelems) ? 1 : -1;
+			case hsvHash:
+				if (a->hash.npairs == b->hash.npairs)
+				{
+					int i, r;
+
+					for(i=0; i<a->hash.npairs; i++)
+					{
+						if ((r = compareHStoreStringValue(&a->hash.pairs[i].key, &b->hash.pairs[i].key, NULL)) != 0)
+							return r;
+						if ((r = compareHStoreValue(&a->hash.pairs[i].value, &b->hash.pairs[i].value)) != 0)
+							return r;
+					}
+
+					return 0;
+				}
+
+				return (a->hash.npairs > b->hash.npairs) ? 1 : -1;
+			case hsvBinary:
+				return compareHStoreBinaryValue(a->dump.data, b->dump.data);
+			default:
+				elog(PANIC, "unknown HStoreValue->type: %d", a->type);
+		}
+	}
+
+	return (a->type > b->type) ? 1 : -1;
+}
+
 static HStoreValue*
 arrayToHStoreSortedArray(ArrayType *a)
 {
@@ -380,7 +433,7 @@ hstore_delete(PG_FUNCTION_ARGS)
 	ToHStoreState	*toState = NULL;
 	HStoreIterator	*it;
 	uint32			r;
-	HStoreValue		v, *res;
+	HStoreValue		v, *res = NULL;
 	bool			skipNested = false;
 
 	SET_VARSIZE(out, VARSIZE(in));
@@ -433,18 +486,12 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 	HStoreIterator	*it;
 	ToHStoreState	*toState = NULL;
 	uint32			r, i = 0;
-	HStoreValue		v, *res;
+	HStoreValue		v, *res = NULL;
 	bool			skipNested = false;
 	bool			isHash = false;
 	
 
-	if (HS_ISEMPTY(in))
-	{
-		SET_VARSIZE(out, VARHDRSZ);
-		PG_RETURN_POINTER(out);
-	}
-
-	if (a == NULL || a->array.nelems == 0)
+	if (HS_ISEMPTY(in) || a == NULL || a->array.nelems == 0)
 	{
 		memcpy(out, in, VARSIZE(in));
 		PG_RETURN_POINTER(out);
@@ -513,97 +560,129 @@ Datum		hstore_delete_hstore(PG_FUNCTION_ARGS);
 Datum
 hstore_delete_hstore(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	HStore	   *hs2 = PG_GETARG_HS(1);
-	HStore	   *out = palloc(VARSIZE(hs));
-	int			hs_count = HS_COUNT(hs);
-	int			hs2_count = HS_COUNT(hs2);
-	char	   *ps,
-			   *ps2,
-			   *bufd,
-			   *pd;
-	HEntry	   *es,
-			   *es2,
-			   *ed;
-	int			i,
-				j;
-	int			outcount = 0;
+	HStore	   		*hs1 = PG_GETARG_HS(0);
+	HStore	   		*hs2 = PG_GETARG_HS(1);
+	HStore	   		*out = palloc(VARSIZE(hs1));
+	HStoreIterator	*it1, *it2;
+	ToHStoreState	*toState = NULL;
+	uint32			r1, r2;
+	HStoreValue		v1, v2, *res = NULL;
+	bool			isHash1, isHash2;
 
-	SET_VARSIZE(out, VARSIZE(hs));
-	HS_SETCOUNT(out, hs_count); /* temporary! */
-
-	ps = STRPTR(hs);
-	es = ARRPTR(hs);
-	ps2 = STRPTR(hs2);
-	es2 = ARRPTR(hs2);
-	bufd = pd = STRPTR(out);
-	ed = ARRPTR(out);
-
-	if (hs2_count == 0)
+	if (HS_ISEMPTY(hs1) || HS_ISEMPTY(hs2))
 	{
-		/* return a copy of the input, unchanged */
-		memcpy(out, hs, VARSIZE(hs));
-		HS_FIXSIZE(out, hs_count);
-		HS_SETCOUNT(out, hs_count);
+		memcpy(out, hs1, VARSIZE(hs1));
 		PG_RETURN_POINTER(out);
 	}
 
-	/*
-	 * this is in effect a merge between hs and hs2, both of which are already
-	 * sorted by (keylen,key); we take keys from hs only; for equal keys, we
-	 * take the value from hs unless the values are equal
-	 */
+	it1 = HStoreIteratorInit(VARDATA(hs1));
+	r1 = HStoreIteratorGet(&it1, &v1, false);
+	isHash1 = (v1.type == hsvArray) ? false : true;
 
-	for (i = j = 0; i < hs_count;)
+	it2 = HStoreIteratorInit(VARDATA(hs2));
+	r2 = HStoreIteratorGet(&it2, &v2, false);
+	isHash2 = (v2.type == hsvArray) ? false : true;
+
+	res = pushHStoreValue(&toState, r1, &v1);
+
+	if (isHash1 == true && isHash2 == true)
 	{
-		int			difference;
+		bool			fin2 = false,
+						keyIsDef = false;
 
-		if (j >= hs2_count)
-			difference = -1;
-		else
+		while((r1 = HStoreIteratorGet(&it1, &v1, true)) != 0)
 		{
-			int			skeylen = HS_KEYLEN(es, i);
-			int			s2keylen = HS_KEYLEN(es2, j);
-
-			if (skeylen == s2keylen)
-				difference = memcmp(HS_KEY(es, ps, i),
-									HS_KEY(es2, ps2, j),
-									skeylen);
-			else
-				difference = (skeylen > s2keylen) ? 1 : -1;
-		}
-
-		if (difference > 0)
-			++j;
-		else if (difference == 0)
-		{
-			int			svallen = HS_VALLEN(es, i);
-			int			snullval = HS_VALISNULL(es, i);
-
-			if (snullval != HS_VALISNULL(es2, j)
-				|| (!snullval
-					&& (svallen != HS_VALLEN(es2, j)
-			|| memcmp(HS_VAL(es, ps, i), HS_VAL(es2, ps2, j), svallen) != 0)))
+			if (r1 == WHS_KEY && fin2 == false)
 			{
-				HS_COPYITEM(ed, bufd, pd,
-							HS_KEY(es, ps, i), HS_KEYLEN(es, i),
-							svallen, snullval);
-				++outcount;
+				int diff  = 1;
+
+				if (keyIsDef)
+					r2 = WHS_KEY;
+
+				while(keyIsDef || (r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+				{
+					if (r2 != WHS_KEY)
+						continue;
+
+					diff = compareHStoreStringValue(&v1, &v2, NULL);
+
+					if (diff <= 0)
+						break;
+				}
+
+				if (r2 == 0)
+				{
+					fin2 = true;
+				}
+				else if (diff == 0)
+				{
+					HStoreValue		vk;
+
+					keyIsDef = false;
+
+					r1 = HStoreIteratorGet(&it1, &vk, true);
+					r2 = HStoreIteratorGet(&it2, &v2, true);
+
+					Assert(r1 == WHS_VALUE && r2 == WHS_VALUE);
+
+					if (compareHStoreValue(&vk, &v2) != 0)
+					{
+						res = pushHStoreValue(&toState, WHS_KEY, &v1);
+						res = pushHStoreValue(&toState, WHS_VALUE, &vk);
+					}
+
+					continue;
+				}
+				else
+				{
+					keyIsDef = true;
+				}
 			}
-			++i, ++j;
+
+			res = pushHStoreValue(&toState, r1, &v1);
 		}
-		else
+	}
+	else
+	{
+		while((r1 = HStoreIteratorGet(&it1, &v1, true)) != 0)
 		{
-			HS_COPYITEM(ed, bufd, pd,
-						HS_KEY(es, ps, i), HS_KEYLEN(es, i),
-						HS_VALLEN(es, i), HS_VALISNULL(es, i));
-			++outcount;
-			++i;
+
+			if (r1 == WHS_ELEM || r1 == WHS_KEY)
+			{
+				int diff = 1;
+
+				it2 = HStoreIteratorInit(VARDATA(hs2));
+
+				r2 = HStoreIteratorGet(&it2, &v2, false);
+
+				while(diff && (r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+				{
+					if (r2 == WHS_KEY || r2 == WHS_VALUE || r2 == WHS_ELEM)
+						diff = compareHStoreValue(&v1, &v2);
+				}
+
+				if (diff == 0)
+				{
+					if (r1 == WHS_KEY)
+						HStoreIteratorGet(&it1, &v1, true);
+					continue;
+				}
+			}
+
+			res = pushHStoreValue(&toState, r1, &v1);
 		}
 	}
 
-	out->size_ = hs->size_ & (HS_FLAG_ARRAY | HS_FLAG_HSTORE); 
-	HS_FINALIZE(out, outcount, bufd, pd);
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+					   (res->type == hsvHash && res->hash.npairs == 0) )
+	{
+		SET_VARSIZE(out, VARHDRSZ);
+	}
+	else
+	{
+		int r = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, r + VARHDRSZ);
+	}
 
 	PG_RETURN_POINTER(out);
 }
@@ -1222,40 +1301,14 @@ hstore_each(PG_FUNCTION_ARGS)
 	SRF_RETURN_DONE(funcctx);
 }
 
-
-/*
- * btree sort order for hstores isn't intended to be useful; we really only
- * care about equality versus non-equality.  we compare the entire string
- * buffer first, then the entry pos array.
- */
-
-PG_FUNCTION_INFO_V1(hstore_cmp);
-Datum		hstore_cmp(PG_FUNCTION_ARGS);
-Datum
-hstore_cmp(PG_FUNCTION_ARGS)
+static int
+compareHStoreBinaryValue(char *a, char *b)
 {
-	HStore	   		*hs1 = PG_GETARG_HS(0);
-	HStore	   		*hs2 = PG_GETARG_HS(1);
 	HStoreIterator	*it1, *it2;
 	int				res = 0;
 
-	if (HS_ISEMPTY(hs1) || HS_ISEMPTY(hs2))
-	{
-		if (HS_ISEMPTY(hs1))
-		{
-			if (HS_ISEMPTY(hs2))
-				return 0;
-			else
-				return -1;
-		}
-		else
-		{
-			return 1;
-		}
-	}
-
-	it1 = HStoreIteratorInit(VARDATA(hs1));
-	it2 = HStoreIteratorInit(VARDATA(hs2));
+	it1 = HStoreIteratorInit(a);
+	it2 = HStoreIteratorInit(b);
 
 	while(res == 0)	
 	{
@@ -1298,7 +1351,44 @@ hstore_cmp(PG_FUNCTION_ARGS)
 		{
 			res = (r1 > r2) ? 1 : -1; /* dummy order */
 		}
+	}
 
+	return res;
+}
+
+
+/*
+ * btree sort order for hstores isn't intended to be useful; we really only
+ * care about equality versus non-equality.  we compare the entire string
+ * buffer first, then the entry pos array.
+ */
+
+PG_FUNCTION_INFO_V1(hstore_cmp);
+Datum		hstore_cmp(PG_FUNCTION_ARGS);
+Datum
+hstore_cmp(PG_FUNCTION_ARGS)
+{
+	HStore	   		*hs1 = PG_GETARG_HS(0);
+	HStore	   		*hs2 = PG_GETARG_HS(1);
+	int				res;
+
+	if (HS_ISEMPTY(hs1) || HS_ISEMPTY(hs2))
+	{
+		if (HS_ISEMPTY(hs1))
+		{
+			if (HS_ISEMPTY(hs2))
+				res = 0;
+			else
+				res = -1;
+		}
+		else
+		{
+			res = 1;
+		}
+	}
+	else
+	{
+		res = compareHStoreBinaryValue(VARDATA(hs1), VARDATA(hs2));
 	}
 
 	/*

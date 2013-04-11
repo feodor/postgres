@@ -434,6 +434,54 @@ select 'a, 1 , b,2, c,3'::hstore - ARRAY['d','b'];
  {"a", "1", "2", "c", "3"}
 (1 row)
 
+select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v'::hstore;
+         ?column?          
+---------------------------
+ "a"=>{"1", "2"}, "b"=>"c"
+(1 row)
+
+select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v=>23'::hstore;
+         ?column?          
+---------------------------
+ "a"=>{"1", "2"}, "b"=>"c"
+(1 row)
+
+select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v=>{1,2}'::hstore;
+               ?column?               
+--------------------------------------
+ "a"=>{"1", "2"}, "b"=>"c", "v"=>"23"
+(1 row)
+
+select 'a=>{1,2}, v=>23, b=>c'::hstore - 'a=>{1,2}'::hstore;
+      ?column?       
+---------------------
+ "b"=>"c", "v"=>"23"
+(1 row)
+
+select 'a, {1,2}, v, 23, b, c'::hstore - 'v'::hstore;
+             ?column?              
+-----------------------------------
+ {"a", {"1", "2"}, "23", "b", "c"}
+(1 row)
+
+select 'a, {1,2}, v, 23, b, c'::hstore - 'v=>23'::hstore;
+          ?column?           
+-----------------------------
+ {"a", {"1", "2"}, "b", "c"}
+(1 row)
+
+select 'a, {1,2}, v, 23, b, c'::hstore - 'v,23'::hstore;
+          ?column?           
+-----------------------------
+ {"a", {"1", "2"}, "b", "c"}
+(1 row)
+
+select 'a, {1,2}, v, 23, b, c'::hstore - 'v,{1,2}'::hstore;
+       ?column?        
+-----------------------
+ {"a", "23", "b", "c"}
+(1 row)
+
 --decoration
 SET hstore.array_square_brackets=false;
 SET hstore.root_array_decorated=false;

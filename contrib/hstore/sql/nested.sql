@@ -98,6 +98,15 @@ select ''::hstore - 'a'::text;
 
 select 'a, 1 , b,2, c,3'::hstore - ARRAY['d','b'];
 
+select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v'::hstore;
+select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v=>23'::hstore;
+select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v=>{1,2}'::hstore;
+select 'a=>{1,2}, v=>23, b=>c'::hstore - 'a=>{1,2}'::hstore;
+select 'a, {1,2}, v, 23, b, c'::hstore - 'v'::hstore;
+select 'a, {1,2}, v, 23, b, c'::hstore - 'v=>23'::hstore;
+select 'a, {1,2}, v, 23, b, c'::hstore - 'v,23'::hstore;
+select 'a, {1,2}, v, 23, b, c'::hstore - 'v,{1,2}'::hstore;
+
 --decoration
 
 SET hstore.array_square_brackets=false;
