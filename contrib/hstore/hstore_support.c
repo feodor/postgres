@@ -112,7 +112,7 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 				}
 				else
 				{
-					r.type = hsvDumped;
+					r.type = hsvBinary;
 					r.dump.data = data + INTALIGN(HSE_OFF(*v));
 					r.dump.len = HSE_LEN(*v) - (INTALIGN(HSE_OFF(*v)) - HSE_OFF(*v));
 					r.size = r.dump.len + sizeof(HEntry);
@@ -146,25 +146,25 @@ walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32
 			for(i=0; i<v->array.nelems; i++)
 			{
 				if (v->array.elems[i].type == hsvNullString || v->array.elems[i].type == hsvString ||
-					v->array.elems[i].type == hsvDumped)
+					v->array.elems[i].type == hsvBinary)
 					cb(cb_arg, v->array.elems + i, WHS_ELEM, level);
 				else
 					walkUncompressedHStoreDo(v->array.elems + i, cb, cb_arg, level + 1);
 			}
 			cb(cb_arg, v, WHS_END_ARRAY, level);
 			break;
-		case hsvPairs:
+		case hsvHash:
 			cb(cb_arg, v, WHS_BEGIN_HSTORE, level);
 
-			for(i=0; i<v->hstore.npairs; i++)
+			for(i=0; i<v->hash.npairs; i++)
 			{
-				cb(cb_arg, &v->hstore.pairs[i].key, WHS_KEY, level);
+				cb(cb_arg, &v->hash.pairs[i].key, WHS_KEY, level);
 				
-				if (v->hstore.pairs[i].value.type == hsvNullString || v->hstore.pairs[i].value.type == hsvString ||
-					v->hstore.pairs[i].value.type == hsvDumped)
-					cb(cb_arg, &v->hstore.pairs[i].value, WHS_VALUE, level);
+				if (v->hash.pairs[i].value.type == hsvNullString || v->hash.pairs[i].value.type == hsvString ||
+					v->hash.pairs[i].value.type == hsvBinary)
+					cb(cb_arg, &v->hash.pairs[i].value, WHS_VALUE, level);
 				else 
-					walkUncompressedHStoreDo(&v->hstore.pairs[i].value, cb, cb_arg, level + 1);
+					walkUncompressedHStoreDo(&v->hash.pairs[i].value, cb, cb_arg, level + 1);
 			}
 
 			cb(cb_arg, v, WHS_END_HSTORE, level);
@@ -239,7 +239,7 @@ formAnswer(HStoreIterator **it, HStoreValue *v, HEntry *e, bool skipNested)
 	} 
 	else if (skipNested)
 	{
-		v->type = hsvDumped;
+		v->type = hsvBinary;
 		v->dump.data = (*it)->data + INTALIGN(HSE_OFF(*e));
 		v->dump.len = HSE_LEN(*e) - (INTALIGN(HSE_OFF(*e)) - HSE_OFF(*e));
 		v->size = v->dump.len + sizeof(HEntry);
@@ -303,8 +303,8 @@ HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested)
 		case HS_FLAG_HSTORE | hsi_start:
 			(*it)->state = hsi_key;
 			(*it)->i = 0;
-			v->type = hsvPairs;
-			v->hstore.npairs = (*it)->nelems;
+			v->type = hsvHash;
+			v->hash.npairs = (*it)->nelems;
 			res = WHS_BEGIN_HSTORE;
 			break;
 		case HS_FLAG_HSTORE | hsi_key:
@@ -382,7 +382,7 @@ putHEntryString(CompressState *state, HStoreValue* value, uint32 level, uint32 i
 				curLevelState->array[i].entry |= 
 					(curLevelState->array[i - 1].entry & HENTRY_POSMASK) + value->string.len;
 			break;
-		case hsvDumped:
+		case hsvBinary:
 			{
 				int addlen = INTALIGN(state->ptr - state->begin) - (state->ptr - state->begin);
 
@@ -431,7 +431,7 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 	if (flags & (WHS_BEGIN_ARRAY | WHS_BEGIN_HSTORE))
 	{
 		Assert(((flags & WHS_BEGIN_ARRAY) && value->type == hsvArray) ||
-			   ((flags & WHS_BEGIN_HSTORE) && value->type == hsvPairs));
+			   ((flags & WHS_BEGIN_HSTORE) && value->type == hsvHash));
 
 		curLevelState->begin = state->ptr;
 
@@ -461,8 +461,8 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 		}
 		else
 		{
-			state->ptr += sizeof(HEntry) * value->hstore.npairs * 2;
-			*curLevelState->header = value->hstore.npairs | HENTRY_ISHSTORE;
+			state->ptr += sizeof(HEntry) * value->hash.npairs * 2;
+			*curLevelState->header = value->hash.npairs | HENTRY_ISHSTORE;
 		}
 
 		if (level == 0)
@@ -489,7 +489,7 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 		uint32	len, i;
 
 		Assert(((flags & WHS_END_ARRAY) && value->type == hsvArray) ||
-			   ((flags & WHS_END_HSTORE) && value->type == hsvPairs));
+			   ((flags & WHS_END_HSTORE) && value->type == hsvHash));
 		if (level == 0)
 			return;
 
@@ -581,16 +581,16 @@ appendKey(ToHStoreState *state, HStoreValue *v)
 {
 	HStoreValue	*h = &state->v;
 
-	Assert(h->type == hsvPairs);
+	Assert(h->type == hsvHash);
 
-	if (h->hstore.npairs >= state->size)
+	if (h->hash.npairs >= state->size)
 	{
 		state->size *= 2;
-		h->hstore.pairs = repalloc(h->hstore.pairs,
-											sizeof(*h->hstore.pairs) * state->size);
+		h->hash.pairs = repalloc(h->hash.pairs,
+											sizeof(*h->hash.pairs) * state->size);
 	}
 
-	h->hstore.pairs[h->hstore.npairs].key = *v;
+	h->hash.pairs[h->hash.npairs].key = *v;
 
 	h->size += v->size;
 }
@@ -601,9 +601,9 @@ appendValue(ToHStoreState *state, HStoreValue *v)
 
 	HStoreValue	*h = &state->v;
 
-	Assert(h->type == hsvPairs);
+	Assert(h->type == hsvHash);
 
-	h->hstore.pairs[h->hstore.npairs++].value = *v;
+	h->hash.pairs[h->hash.npairs++].value = *v;
 
 	h->size += v->size;
 }
@@ -627,14 +627,14 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 		case WHS_BEGIN_HSTORE:
 			*state = pushState(state);
 			h = &(*state)->v;
-			(*state)->v.type = hsvPairs;
+			(*state)->v.type = hsvHash;
 			(*state)->v.size = 3*sizeof(HEntry);
-			(*state)->v.hstore.npairs = 0;
-			(*state)->size = (v && v->type == hsvPairs) ? v->hstore.npairs : 4;
-			(*state)->v.hstore.pairs = palloc(sizeof(*(*state)->v.hstore.pairs) * (*state)->size);
+			(*state)->v.hash.npairs = 0;
+			(*state)->size = (v && v->type == hsvHash) ? v->hash.npairs : 4;
+			(*state)->v.hash.pairs = palloc(sizeof(*(*state)->v.hash.pairs) * (*state)->size);
 			break;
 		case WHS_ELEM:
-			Assert(v->type == hsvNullString || v->type == hsvString || v->type == hsvDumped);
+			Assert(v->type == hsvNullString || v->type == hsvString || v->type == hsvBinary);
 			appendArray(*state, v);
 			break;
 		case WHS_KEY:
@@ -642,7 +642,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			appendKey(*state, v);
 			break;
 		case WHS_VALUE:
-			Assert(v->type == hsvNullString || v->type == hsvString || v->type == hsvDumped);
+			Assert(v->type == hsvNullString || v->type == hsvString || v->type == hsvBinary);
 			appendValue(*state, v);
 			break;
 		case WHS_END_ARRAY:
@@ -656,7 +656,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 					case hsvArray:
 						appendArray(*state, h);
 						break;
-					case hsvPairs:
+					case hsvHash:
 						appendValue(*state, h);
 						break;
 					default:

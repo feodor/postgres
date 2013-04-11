@@ -73,9 +73,9 @@ freePair(Pairs *ptr)
 			pfree(ptr->val.array.elems);
 			break;
 		case valHstore:
-			for(i=0; i<ptr->val.hstore.npairs; i++)
-				freePair(ptr->val.hstore.pairs + i);
-			pfree(ptr->val.hstore.pairs);
+			for(i=0; i<ptr->val.hash.npairs; i++)
+				freePair(ptr->val.hash.pairs + i);
+			pfree(ptr->val.hash.pairs);
 			break;
 		case valFormedArray:
 			pfree(ptr->val.formedArray);
@@ -136,12 +136,12 @@ countPairValueSize(Pairs *ptr)
 			{
 				int32	buflen;
 
-				ptr->val.hstore.npairs = hstoreUniquePairs(ptr->val.hstore.pairs, 
-															ptr->val.hstore.npairs, 
+				ptr->val.hash.npairs = hstoreUniquePairs(ptr->val.hash.pairs, 
+															ptr->val.hash.npairs, 
 															&buflen);
 
-				ptr->val.formedHStore = hstorePairs(ptr->val.hstore.pairs, 
-													ptr->val.hstore.npairs, 
+				ptr->val.formedHStore = hstorePairs(ptr->val.hash.pairs, 
+													ptr->val.hash.npairs, 
 													buflen);
 
 				ptr->valtype = valFormedHstore;
@@ -277,7 +277,7 @@ hstoreDump(HStoreValue *p)
 	uint32			buflen;
 	HStore	 	   *out;
 
-	if (p == NULL || (p->type == hsvArray && p->array.nelems == 0) || (p->type == hsvPairs && p->hstore.npairs == 0))
+	if (p == NULL || (p->type == hsvArray && p->array.nelems == 0) || (p->type == hsvHash && p->hash.npairs == 0))
 	{
 		buflen = 0;
 		out = palloc(VARHDRSZ);
@@ -336,8 +336,8 @@ recvHStore(StringInfo buf, HStoreValue *v, uint32 level)
 	if (level == 0 && (header & HS_COUNT_MASK) == 0)
 	{
 		/* empty value */
-		v->type = hsvPairs;
-		v->hstore.npairs = 0;
+		v->type = hsvHash;
+		v->hash.npairs = 0;
 		return;
 	}
 
@@ -347,24 +347,24 @@ recvHStore(StringInfo buf, HStoreValue *v, uint32 level)
 	v->size = 3 * sizeof(HEntry);
 	if (header & HS_FLAG_HSTORE)
 	{
-		v->type = hsvPairs;
-		v->hstore.npairs = header & HS_COUNT_MASK;
-		if (v->hstore.npairs > 0)
+		v->type = hsvHash;
+		v->hash.npairs = header & HS_COUNT_MASK;
+		if (v->hash.npairs > 0)
 		{
-			v->hstore.pairs = palloc(sizeof(*v->hstore.pairs) * v->hstore.npairs);
+			v->hash.pairs = palloc(sizeof(*v->hash.pairs) * v->hash.npairs);
 	
-			for(i=0; i<v->hstore.npairs; i++)
+			for(i=0; i<v->hash.npairs; i++)
 			{
-				recvHStoreValue(buf, &v->hstore.pairs[i].key, level, pq_getmsgint(buf, 4));
-				if (v->hstore.pairs[i].key.type != hsvString)
+				recvHStoreValue(buf, &v->hash.pairs[i].key, level, pq_getmsgint(buf, 4));
+				if (v->hash.pairs[i].key.type != hsvString)
 					elog(ERROR, "hstore's key could be only a string");
 
-				recvHStoreValue(buf, &v->hstore.pairs[i].value, level, pq_getmsgint(buf, 4));
+				recvHStoreValue(buf, &v->hash.pairs[i].value, level, pq_getmsgint(buf, 4));
 
-				v->size += v->hstore.pairs[i].key.size + v->hstore.pairs[i].value.size;
+				v->size += v->hash.pairs[i].key.size + v->hash.pairs[i].value.size;
 			}
 
-			ORDER_PAIRS(v->hstore.pairs, v->hstore.npairs, v->size -= ptr->key.size + ptr->value.size);
+			ORDER_PAIRS(v->hash.pairs, v->hash.npairs, v->size -= ptr->key.size + ptr->value.size);
 		}
 	}
 	else if (header & HS_FLAG_ARRAY)
@@ -434,10 +434,10 @@ hstore_from_text(PG_FUNCTION_ARGS)
 		pair.value.size = pair.value.string.len + sizeof(HEntry);
 	}
 
-	v.type = hsvPairs;
+	v.type = hsvHash;
 	v.size = sizeof(HEntry) + pair.key.size + pair.value.size; 
-	v.hstore.npairs = 1;
-	v.hstore.pairs = &pair;
+	v.hash.npairs = 1;
+	v.hash.pairs = &pair;
 
 	PG_RETURN_POINTER(hstoreDump(&v));
 }
@@ -515,10 +515,10 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 		Assert(key_count == value_count);
 	}
 
-	v.type = hsvPairs;
+	v.type = hsvHash;
 	v.size = 2 * sizeof(HEntry);
-	v.hstore.pairs = palloc(key_count * sizeof(*v.hstore.pairs));
-	v.hstore.npairs = key_count;
+	v.hash.pairs = palloc(key_count * sizeof(*v.hash.pairs));
+	v.hash.npairs = key_count;
 
 	for (i = 0; i < key_count; ++i)
 	{
@@ -527,29 +527,29 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 					 errmsg("null value not allowed for hstore key")));
 
-		v.hstore.pairs[i].key.type = hsvString;
-		v.hstore.pairs[i].key.string.val = VARDATA_ANY(key_datums[i]);
-		v.hstore.pairs[i].key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key_datums[i]));
-		v.hstore.pairs[i].key.size = sizeof(HEntry) + v.hstore.pairs[i].key.string.len; 
+		v.hash.pairs[i].key.type = hsvString;
+		v.hash.pairs[i].key.string.val = VARDATA_ANY(key_datums[i]);
+		v.hash.pairs[i].key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key_datums[i]));
+		v.hash.pairs[i].key.size = sizeof(HEntry) + v.hash.pairs[i].key.string.len; 
 
 		if (!value_nulls || value_nulls[i])
 		{
-			v.hstore.pairs[i].value.type = hsvNullString;
-			v.hstore.pairs[i].value.size = sizeof(HEntry);
+			v.hash.pairs[i].value.type = hsvNullString;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
 		{
-			v.hstore.pairs[i].value.type = hsvString;
-			v.hstore.pairs[i].value.size = sizeof(HEntry);
-			v.hstore.pairs[i].value.string.val = VARDATA_ANY(value_datums[i]);
-			v.hstore.pairs[i].value.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(value_datums[i]));
-			v.hstore.pairs[i].value.size = sizeof(HEntry) + v.hstore.pairs[i].value.string.len;
+			v.hash.pairs[i].value.type = hsvString;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
+			v.hash.pairs[i].value.string.val = VARDATA_ANY(value_datums[i]);
+			v.hash.pairs[i].value.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(value_datums[i]));
+			v.hash.pairs[i].value.size = sizeof(HEntry) + v.hash.pairs[i].value.string.len;
 		}
 
-		v.size += v.hstore.pairs[i].key.size + v.hstore.pairs[i].value.size;
+		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	ORDER_PAIRS(v.hstore.pairs, v.hstore.npairs, v.size -= ptr->key.size + ptr->value.size);
+	ORDER_PAIRS(v.hash.pairs, v.hash.npairs, v.size -= ptr->key.size + ptr->value.size);
 
 	PG_RETURN_POINTER(hstoreDump(&v));
 }
@@ -602,10 +602,10 @@ hstore_from_array(PG_FUNCTION_ARGS)
 
 	count = in_count / 2;
 
-	v.type = hsvPairs;
+	v.type = hsvHash;
 	v.size = 2*sizeof(HEntry);
-	v.hstore.npairs = count;
-	v.hstore.pairs = palloc(count * sizeof(Pairs));
+	v.hash.npairs = count;
+	v.hash.pairs = palloc(count * sizeof(Pairs));
 
 	for (i = 0; i < count; ++i)
 	{
@@ -614,29 +614,29 @@ hstore_from_array(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 					 errmsg("null value not allowed for hstore key")));
 
-		v.hstore.pairs[i].key.type = hsvString;
-		v.hstore.pairs[i].key.string.val = VARDATA_ANY(in_datums[i * 2]);
-		v.hstore.pairs[i].key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
-		v.hstore.pairs[i].key.size = sizeof(HEntry) + v.hstore.pairs[i].key.string.len; 
+		v.hash.pairs[i].key.type = hsvString;
+		v.hash.pairs[i].key.string.val = VARDATA_ANY(in_datums[i * 2]);
+		v.hash.pairs[i].key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
+		v.hash.pairs[i].key.size = sizeof(HEntry) + v.hash.pairs[i].key.string.len; 
 
 		if (in_nulls[i * 2 + 1])
 		{
-			v.hstore.pairs[i].value.type = hsvNullString;
-			v.hstore.pairs[i].value.size = sizeof(HEntry);
+			v.hash.pairs[i].value.type = hsvNullString;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
 		{
-			v.hstore.pairs[i].value.type = hsvString;
-			v.hstore.pairs[i].value.size = sizeof(HEntry);
-			v.hstore.pairs[i].value.string.val = VARDATA_ANY(in_datums[i * 2 + 1]);
-			v.hstore.pairs[i].value.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2 + 1]));
-			v.hstore.pairs[i].value.size = sizeof(HEntry) + v.hstore.pairs[i].value.string.len;
+			v.hash.pairs[i].value.type = hsvString;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
+			v.hash.pairs[i].value.string.val = VARDATA_ANY(in_datums[i * 2 + 1]);
+			v.hash.pairs[i].value.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2 + 1]));
+			v.hash.pairs[i].value.size = sizeof(HEntry) + v.hash.pairs[i].value.string.len;
 		}
 
-		v.size += v.hstore.pairs[i].key.size + v.hstore.pairs[i].value.size;
+		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	ORDER_PAIRS(v.hstore.pairs, v.hstore.npairs, v.size -= ptr->key.size + ptr->value.size);
+	ORDER_PAIRS(v.hash.pairs, v.hash.npairs, v.size -= ptr->key.size + ptr->value.size);
 
 	PG_RETURN_POINTER(hstoreDump(&v));
 }
@@ -734,10 +734,10 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		my_extra->ncolumns = ncolumns;
 	}
 
-	v.type = hsvPairs;
+	v.type = hsvHash;
 	v.size = 2*sizeof(HEntry);
-	v.hstore.npairs = ncolumns;
-	v.hstore.pairs = palloc(ncolumns * sizeof(Pairs));
+	v.hash.npairs = ncolumns;
+	v.hash.pairs = palloc(ncolumns * sizeof(Pairs));
 
 	if (rec)
 	{
@@ -769,15 +769,15 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		if (tupdesc->attrs[i]->attisdropped)
 			continue;
 
-		v.hstore.pairs[i].key.type = hsvString;
-		v.hstore.pairs[i].key.string.val = NameStr(tupdesc->attrs[i]->attname);
-		v.hstore.pairs[i].key.string.len = hstoreCheckKeyLen(strlen(v.hstore.pairs[i].key.string.val));
-		v.hstore.pairs[i].key.size = sizeof(HEntry) + v.hstore.pairs[i].key.string.len; 
+		v.hash.pairs[i].key.type = hsvString;
+		v.hash.pairs[i].key.string.val = NameStr(tupdesc->attrs[i]->attname);
+		v.hash.pairs[i].key.string.len = hstoreCheckKeyLen(strlen(v.hash.pairs[i].key.string.val));
+		v.hash.pairs[i].key.size = sizeof(HEntry) + v.hash.pairs[i].key.string.len; 
 
 		if (!nulls || nulls[i])
 		{
-			v.hstore.pairs[i].value.type = hsvNullString;
-			v.hstore.pairs[i].value.size = sizeof(HEntry);
+			v.hash.pairs[i].value.type = hsvNullString;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
 		{
@@ -798,17 +798,17 @@ hstore_from_record(PG_FUNCTION_ARGS)
 
 			value = OutputFunctionCall(&column_info->proc, values[i]);
 
-			v.hstore.pairs[i].value.type = hsvString;
-			v.hstore.pairs[i].value.size = sizeof(HEntry);
-			v.hstore.pairs[i].value.string.val = value;
-			v.hstore.pairs[i].value.string.len = hstoreCheckValLen(strlen(value));
-			v.hstore.pairs[i].value.size = sizeof(HEntry) + v.hstore.pairs[i].value.string.len;
+			v.hash.pairs[i].value.type = hsvString;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
+			v.hash.pairs[i].value.string.val = value;
+			v.hash.pairs[i].value.string.len = hstoreCheckValLen(strlen(value));
+			v.hash.pairs[i].value.size = sizeof(HEntry) + v.hash.pairs[i].value.string.len;
 		}
 
-		v.size += v.hstore.pairs[i].key.size + v.hstore.pairs[i].value.size;
+		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	ORDER_PAIRS(v.hstore.pairs, v.hstore.npairs, v.size -= ptr->key.size + ptr->value.size);
+	ORDER_PAIRS(v.hash.pairs, v.hash.npairs, v.size -= ptr->key.size + ptr->value.size);
 
 	out = hstoreDump(&v);
 
@@ -998,7 +998,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 
 			if (v->type == hsvString)
 				s = pnstrdup(v->string.val, v->string.len);
-			else if (v->type == hsvDumped)
+			else if (v->type == hsvBinary)
 				s = hstoreToCString(NULL, v->dump.data, v->dump.len, HStoreOutput);
 			else
 				elog(PANIC, "Wrong hstore");
@@ -1236,7 +1236,7 @@ hstore_send(PG_FUNCTION_ARGS)
 					pq_sendint(&buf, v.array.nelems | HS_FLAG_ARRAY, 4);
 					break;
 				case WHS_BEGIN_HSTORE:
-					pq_sendint(&buf, v.hstore.npairs | HS_FLAG_HSTORE, 4);
+					pq_sendint(&buf, v.hash.npairs | HS_FLAG_HSTORE, 4);
 					break;
 				case WHS_KEY:
 					pq_sendint(&buf, v.string.len, 4);

@@ -129,24 +129,24 @@ hstoreArrayToHStoreValue(ArrayType *a)
 		return NULL;
 
 	v = palloc(sizeof(*v));
-	v->type = hsvPairs;
+	v->type = hsvHash;
 
-	v->hstore.pairs = palloc(sizeof(*v->hstore.pairs) * key_count);
+	v->hash.pairs = palloc(sizeof(*v->hash.pairs) * key_count);
 
 	for (i = 0, j = 0; i < key_count; i++)
 	{
 		if (!key_nulls[i])
 		{
-			v->hstore.pairs[j].key.type = hsvString;
-			v->hstore.pairs[j].key.string.val = VARDATA(key_datums[i]);
-			v->hstore.pairs[j].key.string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
-			v->hstore.pairs[j].value.type = hsvNullString;
+			v->hash.pairs[j].key.type = hsvString;
+			v->hash.pairs[j].key.string.val = VARDATA(key_datums[i]);
+			v->hash.pairs[j].key.string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+			v->hash.pairs[j].value.type = hsvNullString;
 			j++;
 		}
 	}
-	v->hstore.npairs = j;
+	v->hash.npairs = j;
 
-	ORDER_PAIRS(v->hstore.pairs, v->hstore.npairs, (void)0);
+	ORDER_PAIRS(v->hash.pairs, v->hash.npairs, (void)0);
 
 	return v;
 
@@ -178,7 +178,7 @@ hstore_fetchval(PG_FUNCTION_ARGS)
 		text	   	*out;
 		StringInfo	str;
 
-		Assert(v->type == hsvDumped);
+		Assert(v->type == hsvBinary);
 
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4);
@@ -223,7 +223,7 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	uint32			lowbound = 0;
 	bool			res = false;
 
-	if (HS_ISEMPTY(hs) || v == NULL || v->hstore.npairs == 0)
+	if (HS_ISEMPTY(hs) || v == NULL || v->hash.npairs == 0)
 		PG_RETURN_BOOL(false);
 
 	/*
@@ -232,11 +232,11 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	 * start one entry past the previous "found" entry, or at the lower bound
 	 * of the last search.
 	 */
-	for (i = 0; i < v->hstore.npairs; i++)
+	for (i = 0; i < v->hash.npairs; i++)
 	{
 		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, &lowbound,
-										v->hstore.pairs[i].key.string.val, 
-										v->hstore.pairs[i].key.string.len) != NULL)
+										v->hash.pairs[i].key.string.val, 
+										v->hash.pairs[i].key.string.len) != NULL)
 		{
 			res = true;
 			break;
@@ -259,10 +259,10 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	uint32			lowbound = 0;
 	bool			res = true;
 
-	if (HS_ISEMPTY(hs) || v == NULL || v->hstore.npairs == 0)
+	if (HS_ISEMPTY(hs) || v == NULL || v->hash.npairs == 0)
 	{
 
-		if (v == NULL || v->hstore.npairs == 0)
+		if (v == NULL || v->hash.npairs == 0)
 			PG_RETURN_BOOL(true); /* compatibility */
 		else
 			PG_RETURN_BOOL(false);
@@ -274,11 +274,11 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	 * start one entry past the previous "found" entry, or at the lower bound
 	 * of the last search.
 	 */
-	for (i = 0; i < v->hstore.npairs; i++)
+	for (i = 0; i < v->hash.npairs; i++)
 	{
 		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, &lowbound,
-										v->hstore.pairs[i].key.string.val, 
-										v->hstore.pairs[i].key.string.len) == NULL)
+										v->hash.pairs[i].key.string.val, 
+										v->hash.pairs[i].key.string.len) == NULL)
 		{
 			res = false;
 			break;
@@ -348,7 +348,7 @@ hstore_delete(PG_FUNCTION_ARGS)
 	}
 
 	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
-					   (res->type == hsvPairs && res->hstore.npairs == 0) )
+					   (res->type == hsvHash && res->hash.npairs == 0) )
 	{
 		SET_VARSIZE(out, VARHDRSZ);
 	}
@@ -1216,9 +1216,9 @@ hstore_cmp(PG_FUNCTION_ARGS)
 						if (v1.array.nelems != v2.array.nelems)
 							res = (v1.array.nelems > v2.array.nelems) ? 1 : -1;
 						break;
-					case hsvPairs:
-						if (v1.hstore.npairs != v2.hstore.npairs)
-							res = (v1.hstore.npairs > v2.hstore.npairs) ? 1 : -1;
+					case hsvHash:
+						if (v1.hash.npairs != v2.hash.npairs)
+							res = (v1.hash.npairs > v2.hash.npairs) ? 1 : -1;
 						break;
 					default:
 						break;

@@ -212,7 +212,7 @@ typedef struct Pairs
 		struct {
 			struct Pairs* 	pairs;
 			int				npairs;
-		} hstore;
+		} hash;
 		ArrayType			*formedArray;
 		HStore				*formedHStore;
 	} val;
@@ -228,8 +228,8 @@ struct HStoreValue {
 		hsvNullString,
 		hsvString,
 		hsvArray,
-		hsvPairs,
-		hsvDumped
+		hsvHash,
+		hsvBinary  /* binary form of hsvArray/hsvHash */
 	} type;
 
 	uint32		size; /* size of node (including subnodes) */
@@ -248,7 +248,7 @@ struct HStoreValue {
 		struct {
 			int			npairs;
 			HStorePair 	*pairs;
-		} hstore;
+		} hash;
 
 		struct {
 			uint32		len;

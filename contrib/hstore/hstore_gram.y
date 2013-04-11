@@ -109,33 +109,33 @@ makeHStoreValuePairs(List *list)
 {
 	HStoreValue	*v = palloc(sizeof(*v));
 
-	v->type = hsvPairs;
-	v->hstore.npairs = list_length(list);
+	v->type = hsvHash;
+	v->hash.npairs = list_length(list);
 	v->size = sizeof(uint32) /* header */ + sizeof(HEntry) /* parent's entry */ + sizeof(HEntry) - 1 /*alignment*/;
 
-	if (v->hstore.npairs > 0)
+	if (v->hash.npairs > 0)
 	{
 		ListCell	*cell;
 		int			i = 0;
 
-		v->hstore.pairs = palloc(sizeof(HStorePair) * v->hstore.npairs);
+		v->hash.pairs = palloc(sizeof(HStorePair) * v->hash.npairs);
 
 		foreach(cell, list)
 		{
 			HStorePair	*s = (HStorePair*)lfirst(cell);
 
 			v->size += s->key.size + s->value.size; 
-			v->hstore.pairs[i++] = *s;
+			v->hash.pairs[i++] = *s;
 
 			if (v->size > HENTRY_POSMASK)
 				elog(ERROR, "hstore is too long");
 		}
 
-		ORDER_PAIRS(v->hstore.pairs, v->hstore.npairs, v->size -= ptr->key.size + ptr->value.size);
+		ORDER_PAIRS(v->hash.pairs, v->hash.npairs, v->size -= ptr->key.size + ptr->value.size);
 	}
 	else
 	{
-		v->hstore.pairs = NULL;
+		v->hash.pairs = NULL;
 	}
 
 	return v;
