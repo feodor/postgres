@@ -244,8 +244,7 @@ hstore_fetchval(PG_FUNCTION_ARGS)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4);
 
-		if (!HS_ISEMPTY(v->dump.data))
-			hstoreToCString(str, v->dump.data, v->dump.len, HStoreOutput);
+		hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
 
 		out = (text*)str->data;
 		SET_VARSIZE(out, str->len /* included VARHDRSZ */);

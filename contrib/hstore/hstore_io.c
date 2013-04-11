@@ -909,7 +909,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			if (v->type == hsvString)
 				s = pnstrdup(v->string.val, v->string.len);
 			else if (v->type == hsvBinary)
-				s = hstoreToCString(NULL, v->dump.data, v->dump.len, HStoreOutput);
+				s = hstoreToCString(NULL, v->binary.data, v->binary.len, HStoreOutput);
 			else
 				elog(PANIC, "Wrong hstore");
 
@@ -1039,7 +1039,7 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 										  (kind == HStoreOutput && array_square_brackets == false) ? '{' : '[');
 				level++;
 				break;
-			case WHS_BEGIN_HSTORE:
+			case WHS_BEGIN_HASH:
 				if (first == false)
 					appendBinaryStringInfo(out, ", ", 2);
 				first = true;
@@ -1085,7 +1085,7 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 										 (kind == HStoreOutput && array_square_brackets == false) ? '}' : ']');
 				first = false;
 				break;
-			case WHS_END_HSTORE:
+			case WHS_END_HASH:
 				level--;
 				if (!(kind == HStoreOutput && level == 0 && root_hash_decorated == false))
 					appendStringInfoCharMacro(out, '}');
@@ -1145,7 +1145,7 @@ hstore_send(PG_FUNCTION_ARGS)
 				case WHS_BEGIN_ARRAY:
 					pq_sendint(&buf, v.array.nelems | HS_FLAG_ARRAY, 4);
 					break;
-				case WHS_BEGIN_HSTORE:
+				case WHS_BEGIN_HASH:
 					pq_sendint(&buf, v.hash.npairs | HS_FLAG_HSTORE, 4);
 					break;
 				case WHS_KEY:
@@ -1165,7 +1165,7 @@ hstore_send(PG_FUNCTION_ARGS)
 					}
 					break;
 				case WHS_END_ARRAY:
-				case WHS_END_HSTORE:
+				case WHS_END_HASH:
 					break;
 				default:
 					elog(PANIC, "Wrong flags");

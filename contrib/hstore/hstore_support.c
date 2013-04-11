@@ -80,7 +80,7 @@ compareHStoreValue(HStoreValue *a, HStoreValue *b)
 
 				return (a->hash.npairs > b->hash.npairs) ? 1 : -1;
 			case hsvBinary:
-				return compareHStoreBinaryValue(a->dump.data, b->dump.data);
+				return compareHStoreBinaryValue(a->binary.data, b->binary.data);
 			default:
 				elog(PANIC, "unknown HStoreValue->type: %d", a->type);
 		}
@@ -232,9 +232,9 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 				else
 				{
 					r.type = hsvBinary;
-					r.dump.data = data + INTALIGN(HSE_OFF(*v));
-					r.dump.len = HSE_LEN(*v) - (INTALIGN(HSE_OFF(*v)) - HSE_OFF(*v));
-					r.size = r.dump.len + sizeof(HEntry);
+					r.binary.data = data + INTALIGN(HSE_OFF(*v));
+					r.binary.len = HSE_LEN(*v) - (INTALIGN(HSE_OFF(*v)) - HSE_OFF(*v));
+					r.size = r.binary.len + sizeof(HEntry);
 				}
 
 				return &r;
@@ -279,7 +279,7 @@ walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32
 			cb(cb_arg, v, WHS_END_ARRAY, level);
 			break;
 		case hsvHash:
-			cb(cb_arg, v, WHS_BEGIN_HSTORE, level);
+			cb(cb_arg, v, WHS_BEGIN_HASH, level);
 
 			for(i=0; i<v->hash.npairs; i++)
 			{
@@ -292,7 +292,7 @@ walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32
 					walkUncompressedHStoreDo(&v->hash.pairs[i].value, cb, cb_arg, level + 1);
 			}
 
-			cb(cb_arg, v, WHS_END_HSTORE, level);
+			cb(cb_arg, v, WHS_END_HASH, level);
 			break;
 		default:
 			elog(PANIC, "impossible HStoreValue->type: %d", v->type);
@@ -368,9 +368,9 @@ formAnswer(HStoreIterator **it, HStoreValue *v, HEntry *e, bool skipNested)
 	else if (skipNested)
 	{
 		v->type = hsvBinary;
-		v->dump.data = (*it)->data + INTALIGN(HSE_OFF(*e));
-		v->dump.len = HSE_LEN(*e) - (INTALIGN(HSE_OFF(*e)) - HSE_OFF(*e));
-		v->size = v->dump.len + sizeof(HEntry);
+		v->binary.data = (*it)->data + INTALIGN(HSE_OFF(*e));
+		v->binary.len = HSE_LEN(*e) - (INTALIGN(HSE_OFF(*e)) - HSE_OFF(*e));
+		v->size = v->binary.len + sizeof(HEntry);
 
 		return false;
 	}
@@ -433,13 +433,13 @@ HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested)
 			(*it)->i = 0;
 			v->type = hsvHash;
 			v->hash.npairs = (*it)->nelems;
-			res = WHS_BEGIN_HSTORE;
+			res = WHS_BEGIN_HASH;
 			break;
 		case HS_FLAG_HSTORE | hsi_key:
 			if ((*it)->i >= (*it)->nelems)
 			{
 				*it = up(*it);
-				res = WHS_END_HSTORE;
+				res = WHS_END_HASH;
 			}
 			else
 			{
@@ -530,16 +530,16 @@ putHEntryString(CompressState *state, HStoreValue* value, uint32 level, uint32 i
 						break;
 				}
 
-				memcpy(state->ptr, value->dump.data, value->dump.len);
-				state->ptr += value->dump.len;
+				memcpy(state->ptr, value->binary.data, value->binary.len);
+				state->ptr += value->binary.len;
 
 				curLevelState->array[i].entry |= HENTRY_ISNEST;
 
 				if (i == 0)
-					curLevelState->array[i].entry |= addlen + value->dump.len;
+					curLevelState->array[i].entry |= addlen + value->binary.len;
 				else
 					curLevelState->array[i].entry |=
-						(curLevelState->array[i - 1].entry & HENTRY_POSMASK) + addlen + value->dump.len;
+						(curLevelState->array[i - 1].entry & HENTRY_POSMASK) + addlen + value->binary.len;
 			}
 			break;
 		default:
@@ -559,10 +559,10 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 
 	curLevelState = state->levelstate + level;
 
-	if (flags & (WHS_BEGIN_ARRAY | WHS_BEGIN_HSTORE))
+	if (flags & (WHS_BEGIN_ARRAY | WHS_BEGIN_HASH))
 	{
 		Assert(((flags & WHS_BEGIN_ARRAY) && value->type == hsvArray) ||
-			   ((flags & WHS_BEGIN_HSTORE) && value->type == hsvHash));
+			   ((flags & WHS_BEGIN_HASH) && value->type == hsvHash));
 
 		curLevelState->begin = state->ptr;
 
@@ -615,12 +615,12 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 		putHEntryString(state, value, level, curLevelState->i * 2 + 1);
 		curLevelState->i++;
 	}
-	else if (flags & (WHS_END_ARRAY | WHS_END_HSTORE))
+	else if (flags & (WHS_END_ARRAY | WHS_END_HASH))
 	{
 		uint32	len, i;
 
 		Assert(((flags & WHS_END_ARRAY) && value->type == hsvArray) ||
-			   ((flags & WHS_END_HSTORE) && value->type == hsvHash));
+			   ((flags & WHS_END_HASH) && value->type == hsvHash));
 		if (level == 0)
 			return;
 
@@ -682,7 +682,7 @@ compressHStore(HStoreValue *v, char *buffer) {
 /****************************************************************************
  *                  Iteration-like forming hstore                           * 
  *       Note: it believ by default in already sorted keys in hash,         *
- *   although with r == WHS_END_HSTORE and v == NULL  it will sort itself   * 
+ *     although with r == WHS_END_HASH and v == NULL  it will sort itself   * 
  ****************************************************************************/
 static ToHStoreState*
 pushState(ToHStoreState **state)
@@ -760,7 +760,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			(*state)->size = (v && v->type == hsvArray) ? v->array.nelems : 4;
 			(*state)->v.array.elems = palloc(sizeof(*(*state)->v.array.elems) * (*state)->size);
 			break;
-		case WHS_BEGIN_HSTORE:
+		case WHS_BEGIN_HASH:
 			*state = pushState(state);
 			h = &(*state)->v;
 			(*state)->v.type = hsvHash;
@@ -781,7 +781,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			Assert(v->type == hsvNullString || v->type == hsvString || v->type == hsvBinary);
 			appendValue(*state, v);
 			break;
-		case WHS_END_HSTORE:
+		case WHS_END_HASH:
 			h = &(*state)->v;
 			if (v == NULL)
 				ORDER_PAIRS(h->hash.pairs, h->hash.npairs, (void)0);

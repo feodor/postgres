@@ -213,7 +213,7 @@ struct HStoreValue {
 		struct {
 			uint32		len;
 			char		*data;
-		} dump;
+		} binary;
 	};
 
 }; 
@@ -237,8 +237,8 @@ extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
 #define WHS_ELEM       		(0x004)
 #define WHS_BEGIN_ARRAY 	(0x008)
 #define WHS_END_ARRAY   	(0x010)
-#define WHS_BEGIN_HSTORE    (0x020)
-#define WHS_END_HSTORE      (0x040)
+#define WHS_BEGIN_HASH	    (0x020)
+#define WHS_END_HASH        (0x040)
 
 typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, 
 											uint32 /* flags */, uint32 /* level */);
