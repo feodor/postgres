@@ -432,7 +432,7 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 	HStoreValue 	*a = arrayToHStoreSortedArray(PG_GETARG_ARRAYTYPE_P(1)); 
 	HStoreIterator	*it;
 	ToHStoreState	*toState = NULL;
-	uint32			r, i = 0, n = 0;
+	uint32			r, i = 0;
 	HStoreValue		v, *res;
 	bool			skipNested = false;
 	bool			isHash = false;
@@ -462,7 +462,7 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 			skipNested = true;
 		}
 
-		if ((r == WHS_ELEM || r == WHS_KEY) && v.type == hsvString && n < a->array.nelems)
+		if ((r == WHS_ELEM || r == WHS_KEY) && v.type == hsvString && i < a->array.nelems)
 		{
 			int diff;
 
@@ -474,7 +474,6 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 					if (diff >= 0)
 						i++;
 				} while(diff > 0 && i < a->array.nelems);
-				n = i;
 			}
 			else
 			{
