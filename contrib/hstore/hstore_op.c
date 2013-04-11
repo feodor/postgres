@@ -111,59 +111,6 @@ hstoreArrayToPairs(ArrayType *a, int *npairs)
 	return key_pairs;
 }
 
-static int compareHStoreBinaryValue(char *a, char *b);
-
-static int
-compareHStoreValue(HStoreValue *a, HStoreValue *b)
-{
-	if (a->type == b->type)
-	{
-		switch(a->type)
-		{
-			case hsvNullString:
-				return 0;
-			case hsvString:
-				return compareHStoreStringValue(a, b, NULL);
-			case hsvArray:
-				if (a->array.nelems == b->array.nelems)
-				{
-					int i, r;
-
-					for(i=0; i<a->array.nelems; i++)
-						if ((r = compareHStoreValue(a->array.elems + i, b->array.elems + i)) != 0)
-							return r;
-
-					return 0;
-				}
-
-				return (a->array.nelems > b->array.nelems) ? 1 : -1;
-			case hsvHash:
-				if (a->hash.npairs == b->hash.npairs)
-				{
-					int i, r;
-
-					for(i=0; i<a->hash.npairs; i++)
-					{
-						if ((r = compareHStoreStringValue(&a->hash.pairs[i].key, &b->hash.pairs[i].key, NULL)) != 0)
-							return r;
-						if ((r = compareHStoreValue(&a->hash.pairs[i].value, &b->hash.pairs[i].value)) != 0)
-							return r;
-					}
-
-					return 0;
-				}
-
-				return (a->hash.npairs > b->hash.npairs) ? 1 : -1;
-			case hsvBinary:
-				return compareHStoreBinaryValue(a->dump.data, b->dump.data);
-			default:
-				elog(PANIC, "unknown HStoreValue->type: %d", a->type);
-		}
-	}
-
-	return (a->type > b->type) ? 1 : -1;
-}
-
 static HStoreValue*
 arrayToHStoreSortedArray(ArrayType *a)
 {
@@ -1300,62 +1247,6 @@ hstore_each(PG_FUNCTION_ARGS)
 
 	SRF_RETURN_DONE(funcctx);
 }
-
-static int
-compareHStoreBinaryValue(char *a, char *b)
-{
-	HStoreIterator	*it1, *it2;
-	int				res = 0;
-
-	it1 = HStoreIteratorInit(a);
-	it2 = HStoreIteratorInit(b);
-
-	while(res == 0)	
-	{
-		HStoreValue		v1, v2;
-		int				r1, r2;
-
-		r1 = HStoreIteratorGet(&it1, &v1, false);	
-		r2 = HStoreIteratorGet(&it2, &v2, false);
-
-		if (r1 == r2)
-		{
-			if (r1 == 0)
-				break; /* equal */
-
-			if (v1.type == v2.type)
-			{
-				switch(v1.type)
-				{
-					case hsvString:
-						res = compareHStoreStringValue(&v1, &v2, NULL);
-						break;
-					case hsvArray:
-						if (v1.array.nelems != v2.array.nelems)
-							res = (v1.array.nelems > v2.array.nelems) ? 1 : -1;
-						break;
-					case hsvHash:
-						if (v1.hash.npairs != v2.hash.npairs)
-							res = (v1.hash.npairs > v2.hash.npairs) ? 1 : -1;
-						break;
-					default:
-						break;
-				}
-			}
-			else
-			{
-				res = (v1.type > v2.type) ?  1 : -1; /* dummy order */
-			}
-		}
-		else
-		{
-			res = (r1 > r2) ? 1 : -1; /* dummy order */
-		}
-	}
-
-	return res;
-}
-
 
 /*
  * btree sort order for hstores isn't intended to be useful; we really only

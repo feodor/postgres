@@ -2,6 +2,9 @@
 
 #include "hstore.h"
 
+/****************************************************************************
+ *                         Compare Functions                                * 
+ ****************************************************************************/
 int
 compareHStoreStringValue(const void *a, const void *b, void *arg)
 {
@@ -35,6 +38,115 @@ compareHStorePair(const void *a, const void *b, void *arg)
 	return compareHStoreStringValue(&pa->key, &pb->key, arg);
 }
 
+int
+compareHStoreValue(HStoreValue *a, HStoreValue *b)
+{
+	if (a->type == b->type)
+	{
+		switch(a->type)
+		{
+			case hsvNullString:
+				return 0;
+			case hsvString:
+				return compareHStoreStringValue(a, b, NULL);
+			case hsvArray:
+				if (a->array.nelems == b->array.nelems)
+				{
+					int i, r;
+
+					for(i=0; i<a->array.nelems; i++)
+						if ((r = compareHStoreValue(a->array.elems + i, b->array.elems + i)) != 0)
+							return r;
+
+					return 0;
+				}
+
+				return (a->array.nelems > b->array.nelems) ? 1 : -1;
+			case hsvHash:
+				if (a->hash.npairs == b->hash.npairs)
+				{
+					int i, r;
+
+					for(i=0; i<a->hash.npairs; i++)
+					{
+						if ((r = compareHStoreStringValue(&a->hash.pairs[i].key, &b->hash.pairs[i].key, NULL)) != 0)
+							return r;
+						if ((r = compareHStoreValue(&a->hash.pairs[i].value, &b->hash.pairs[i].value)) != 0)
+							return r;
+					}
+
+					return 0;
+				}
+
+				return (a->hash.npairs > b->hash.npairs) ? 1 : -1;
+			case hsvBinary:
+				return compareHStoreBinaryValue(a->dump.data, b->dump.data);
+			default:
+				elog(PANIC, "unknown HStoreValue->type: %d", a->type);
+		}
+	}
+
+	return (a->type > b->type) ? 1 : -1;
+}
+
+int
+compareHStoreBinaryValue(char *a, char *b)
+{
+	HStoreIterator	*it1, *it2;
+	int				res = 0;
+
+	it1 = HStoreIteratorInit(a);
+	it2 = HStoreIteratorInit(b);
+
+	while(res == 0)	
+	{
+		HStoreValue		v1, v2;
+		int				r1, r2;
+
+		r1 = HStoreIteratorGet(&it1, &v1, false);	
+		r2 = HStoreIteratorGet(&it2, &v2, false);
+
+		if (r1 == r2)
+		{
+			if (r1 == 0)
+				break; /* equal */
+
+			if (v1.type == v2.type)
+			{
+				switch(v1.type)
+				{
+					case hsvString:
+						res = compareHStoreStringValue(&v1, &v2, NULL);
+						break;
+					case hsvArray:
+						if (v1.array.nelems != v2.array.nelems)
+							res = (v1.array.nelems > v2.array.nelems) ? 1 : -1;
+						break;
+					case hsvHash:
+						if (v1.hash.npairs != v2.hash.npairs)
+							res = (v1.hash.npairs > v2.hash.npairs) ? 1 : -1;
+						break;
+					default:
+						break;
+				}
+			}
+			else
+			{
+				res = (v1.type > v2.type) ?  1 : -1; /* dummy order */
+			}
+		}
+		else
+		{
+			res = (r1 > r2) ? 1 : -1; /* dummy order */
+		}
+	}
+
+	return res;
+}
+
+/****************************************************************************
+ *                         find string key in hash or array                 * 
+ ****************************************************************************/
 HStoreValue*
 findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *key, uint32 keylen)
 {
@@ -144,6 +256,9 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 	return NULL;
 }
 
+/****************************************************************************
+ *                         Walk on tree representation of hstore            * 
+ ****************************************************************************/
 static void
 walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32 level) 
 {
@@ -191,6 +306,9 @@ walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg)
 		walkUncompressedHStoreDo(v, cb, cb_arg, 0); 
 }
 
+/****************************************************************************
+ *                         Iteration over binary hstore                     * 
+ ****************************************************************************/
 static void
 parseBuffer(HStoreIterator *it, char *buffer)
 {
@@ -344,6 +462,9 @@ HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested)
 	return res;
 }
 
+/****************************************************************************
+ *        Transformation from tree to binary representation of hstore       * 
+ ****************************************************************************/
 typedef struct CompressState
 {
 	char	*begin;
@@ -558,6 +679,10 @@ compressHStore(HStoreValue *v, char *buffer) {
 	return l;
 }
 
+/****************************************************************************
+ *                  Iteration-like forming hstore                           * 
+ *                  Note: it believe in already sorted keys in hash         * 
+ ****************************************************************************/
 static ToHStoreState*
 pushState(ToHStoreState **state)
 {

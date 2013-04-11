@@ -247,6 +247,9 @@ extern void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_a
 extern int compareHStoreStringValue(const void *a, const void *b, void *arg);
 extern int compareHStorePair(const void *a, const void *b, void *arg);
 
+extern int compareHStoreBinaryValue(char *a, char *b);
+extern int compareHStoreValue(HStoreValue *a, HStoreValue *b);
+
 extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
 												uint32 *lowbound, char *key, uint32 keylen);
 
