@@ -681,7 +681,8 @@ compressHStore(HStoreValue *v, char *buffer) {
 
 /****************************************************************************
  *                  Iteration-like forming hstore                           * 
- *                  Note: it believe in already sorted keys in hash         * 
+ *       Note: it believ by default in already sorted keys in hash,         *
+ *   although with r == WHS_END_HSTORE and v == NULL  it will sort itself   * 
  ****************************************************************************/
 static ToHStoreState*
 pushState(ToHStoreState **state)
@@ -780,8 +781,11 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			Assert(v->type == hsvNullString || v->type == hsvString || v->type == hsvBinary);
 			appendValue(*state, v);
 			break;
-		case WHS_END_ARRAY:
 		case WHS_END_HSTORE:
+			h = &(*state)->v;
+			if (v == NULL)
+				ORDER_PAIRS(h->hash.pairs, h->hash.npairs, (void)0);
+		case WHS_END_ARRAY:
 			h = &(*state)->v;
 			*state = (*state)->next;
 			if (*state)
