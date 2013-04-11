@@ -464,7 +464,7 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 
 		if ((r == WHS_ELEM || r == WHS_KEY) && v.type == hsvString && n < a->array.nelems)
 		{
-			int diff = 1;
+			int diff;
 
 			if (isHash)
 			{
@@ -478,8 +478,7 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 			}
 			else
 			{
-				if (findInHStoreSortedArray(a, NULL, v.string.val, v.string.len) != NULL)
-					diff = 0;
+				diff = (findInHStoreSortedArray(a, NULL, v.string.val, v.string.len) == NULL) ? 1 : 0;
 			}
 
 			if (diff == 0)
