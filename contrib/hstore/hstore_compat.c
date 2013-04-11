@@ -245,7 +245,15 @@ hstoreUpgrade(Datum orig)
 		(hs->size_ & HS_FLAG_NEWVERSION) ||
 		hs->size_ == 0 ||
 		(VARSIZE(hs) < 32768 && HSE_ISFIRST((ARRPTR(hs)[0]))))
+	{
+		if (VARSIZE_ANY_EXHDR(hs) == sizeof(hs->size_))
+		{
+			/* 'new' format but not nested. And empty */
+			hs = palloc(sizeof(VARHDRSZ));
+			SET_VARSIZE(hs, VARHDRSZ);
+		}
 		return hs;
+	}
 
 	valid_new = hstoreValidNewFormat(hs);
 	valid_old = hstoreValidOldFormat(hs);
