@@ -32,10 +32,21 @@ compareHStoreStringValue(const void *a, const void *b, void *arg)
 int
 compareHStorePair(const void *a, const void *b, void *arg)
 {
-	const HStorePair *pa = a;
-	const HStorePair *pb = b;
+	const 	HStorePair *pa = a;
+	const 	HStorePair *pb = b;
+	int 	res;
 
-	return compareHStoreStringValue(&pa->key, &pb->key, arg);
+	res = compareHStoreStringValue(&pa->key, &pb->key, arg);
+
+	/*
+	 * guarantee keeping order of equal pair. Unique algorithm will
+	 * prefer first element as value
+	 */
+
+	if (res == 0)
+		res = (pa->order > pb->order) ? -1 : 1;
+
+	return res;
 }
 
 int
@@ -727,6 +738,7 @@ appendKey(ToHStoreState *state, HStoreValue *v)
 	}
 
 	h->hash.pairs[h->hash.npairs].key = *v;
+	h->hash.pairs[h->hash.npairs].order = h->hash.npairs;
 
 	h->size += v->size;
 }

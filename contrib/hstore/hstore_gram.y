@@ -125,6 +125,7 @@ makeHStoreValuePairs(List *list)
 			HStorePair	*s = (HStorePair*)lfirst(cell);
 
 			v->size += s->key.size + s->value.size; 
+			v->hash.pairs[i].order = i;
 			v->hash.pairs[i++] = *s;
 
 			if (v->size > HENTRY_POSMASK)

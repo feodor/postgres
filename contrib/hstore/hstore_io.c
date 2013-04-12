@@ -461,6 +461,7 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 
 	ORDER_PAIRS(v.hash.pairs, v.hash.npairs, v.size -= ptr->key.size + ptr->value.size);
 
+
 	PG_RETURN_POINTER(hstoreDump(&v));
 }
 
@@ -515,7 +516,7 @@ hstore_from_array(PG_FUNCTION_ARGS)
 	v.type = hsvHash;
 	v.size = 2*sizeof(HEntry);
 	v.hash.npairs = count;
-	v.hash.pairs = palloc(count * sizeof(Pairs));
+	v.hash.pairs = palloc(count * sizeof(HStorePair));
 
 	for (i = 0; i < count; ++i)
 	{
@@ -647,7 +648,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 	v.type = hsvHash;
 	v.size = 2*sizeof(HEntry);
 	v.hash.npairs = ncolumns;
-	v.hash.pairs = palloc(ncolumns * sizeof(Pairs));
+	v.hash.pairs = palloc(ncolumns * sizeof(HStorePair));
 
 	if (rec)
 	{

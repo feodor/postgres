@@ -107,6 +107,11 @@ select 'a, {1,2}, v, 23, b, c'::hstore - 'v=>23'::hstore;
 select 'a, {1,2}, v, 23, b, c'::hstore - 'v,23'::hstore;
 select 'a, {1,2}, v, 23, b, c'::hstore - 'v,{1,2}'::hstore;
 
+--joining
+
+select 'aa=>1 , b=>2, cq=>3'::hstore || 'cq,l, b,g, fg,f, 1,2'::hstore;
+select 'aa,1 , b,2, cq,3'::hstore || 'cq,l, b,g, fg,f, 1,2'::hstore;
+
 --decoration
 
 SET hstore.array_square_brackets=false;

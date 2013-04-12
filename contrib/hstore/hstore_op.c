@@ -552,6 +552,8 @@ hstore_delete_hstore(PG_FUNCTION_ARGS)
 
 					diff = compareHStoreStringValue(&v1, &v2, NULL);
 
+					if (diff > 0 && keyIsDef)
+						keyIsDef = false;
 					if (diff <= 0)
 						break;
 				}
@@ -639,92 +641,159 @@ Datum		hstore_concat(PG_FUNCTION_ARGS);
 Datum
 hstore_concat(PG_FUNCTION_ARGS)
 {
-	HStore	   *s1 = PG_GETARG_HS(0);
-	HStore	   *s2 = PG_GETARG_HS(1);
-	HStore	   *out = palloc(VARSIZE(s1) + VARSIZE(s2));
-	char	   *ps1,
-			   *ps2,
-			   *bufd,
-			   *pd;
-	HEntry	   *es1,
-			   *es2,
-			   *ed;
-	int			s1idx;
-	int			s2idx;
-	int			s1count = (VARSIZE(s1) <= VARHDRSZ) ? 0 : HS_COUNT(s1);
-	int			s2count = (VARSIZE(s2) <= VARHDRSZ) ? 0 : HS_COUNT(s2);
-	int			outcount = 0;
+	HStore	   		*hs1 = PG_GETARG_HS(0);
+	HStore	   		*hs2 = PG_GETARG_HS(1);
+	HStore	   		*out = palloc(VARSIZE(hs1) + VARSIZE(hs2));
+	HStoreIterator	*it1, *it2;
+	ToHStoreState	*toState = NULL;
+	uint32			r1, r2;
+	HStoreValue		v1, v2, *res = NULL;
+	bool			isHash1, isHash2;
 
-	SET_VARSIZE(out, VARSIZE(s1) + VARSIZE(s2) - HSHRDSIZE);
-	HS_SETCOUNT(out, s1count + s2count);
-
-	if (s1count == 0)
+	if (HS_ISEMPTY(hs1))
 	{
-		/* return a copy of the input, unchanged */
-		memcpy(out, s2, VARSIZE(s2));
+		memcpy(out, hs2, VARSIZE(hs2));
+		PG_RETURN_POINTER(out);
+	}
+	else if (HS_ISEMPTY(hs2))
+	{
+		memcpy(out, hs1, VARSIZE(hs1));
 		PG_RETURN_POINTER(out);
 	}
 
-	if (s2count == 0)
+	it1 = HStoreIteratorInit(VARDATA(hs1));
+	r1 = HStoreIteratorGet(&it1, &v1, false);
+	isHash1 = (v1.type == hsvArray) ? false : true;
+
+	it2 = HStoreIteratorInit(VARDATA(hs2));
+	r2 = HStoreIteratorGet(&it2, &v2, false);
+	isHash2 = (v2.type == hsvArray) ? false : true;
+
+	res = pushHStoreValue(&toState, r1, &v1);
+
+	if (isHash1 == true && isHash2 == true)
 	{
-		/* return a copy of the input, unchanged */
-		memcpy(out, s1, VARSIZE(s1));
-		PG_RETURN_POINTER(out);
+		bool			fin2 = false,
+						keyIsDef = false;
+
+		while((r1 = HStoreIteratorGet(&it1, &v1, true)) != 0)
+		{
+			if (r1 == WHS_KEY && fin2 == false)
+			{
+				int diff  = 1;
+
+				if (keyIsDef)
+					r2 = WHS_KEY;
+
+				while(keyIsDef || (r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+				{
+					if (r2 != WHS_KEY)
+						continue;
+
+					diff = compareHStoreStringValue(&v1, &v2, NULL);
+
+					if (diff > 0)
+					{	
+						if (keyIsDef)
+							keyIsDef = false;
+
+						pushHStoreValue(&toState, r2, &v2);
+						r2 = HStoreIteratorGet(&it2, &v2, true);
+						Assert(r2 == WHS_VALUE);
+						pushHStoreValue(&toState, r2, &v2);
+					}
+					else if (diff <= 0)
+					{
+						break;
+					}
+				}
+
+				if (r2 == 0)
+				{
+					fin2 = true;
+				}
+				else if (diff == 0)
+				{
+					keyIsDef = false;
+
+					pushHStoreValue(&toState, r1, &v1);
+
+					r1 = HStoreIteratorGet(&it1, &v1, true); /* ignore */
+					r2 = HStoreIteratorGet(&it2, &v2, true); /* new val */
+
+					Assert(r1 == WHS_VALUE && r2 == WHS_VALUE);
+					pushHStoreValue(&toState, r2, &v2);
+
+					continue;
+				}
+				else
+				{
+					keyIsDef = true;
+				}
+			}
+			else if (r1 == WHS_END_HASH && r2 != 0) 
+			{
+				if (keyIsDef)
+					r2 = WHS_KEY;
+
+				while(keyIsDef || (r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+				{
+					if (r2 != WHS_KEY)
+						continue;
+
+					pushHStoreValue(&toState, r2, &v2);
+					r2 = HStoreIteratorGet(&it2, &v2, true);
+					Assert(r2 == WHS_VALUE);
+					pushHStoreValue(&toState, r2, &v2);
+					keyIsDef = false;
+				}
+			}
+
+			res = pushHStoreValue(&toState, r1, &v1);
+		}
+	}
+	else
+	{
+		if (isHash1 && v2.array.nelems % 2 != 0)
+			elog(ERROR, "hstore's array must have even number of elements");
+
+		while((r1 = HStoreIteratorGet(&it1, &v1, true)) != 0)
+		{
+			if (!(r1 == WHS_END_HASH || r1 == WHS_END_ARRAY))
+				pushHStoreValue(&toState, r1, &v1);
+		}
+
+		while((r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+		{
+			if (!(r2 == WHS_END_HASH || r2 == WHS_END_ARRAY))
+			{
+				if (isHash1)
+				{
+					pushHStoreValue(&toState, WHS_KEY, &v2);
+					r2 = HStoreIteratorGet(&it2, &v2, true);
+					Assert(r2 == WHS_ELEM);
+					pushHStoreValue(&toState, WHS_VALUE, &v2);
+				}
+				else
+				{
+					pushHStoreValue(&toState, WHS_ELEM, &v2);
+				}
+			}
+		}
+
+		res = pushHStoreValue(&toState, isHash1 ? WHS_END_HASH : WHS_END_ARRAY, NULL/* signal to sort */);
 	}
 
-	ps1 = STRPTR(s1);
-	ps2 = STRPTR(s2);
-	bufd = pd = STRPTR(out);
-	es1 = ARRPTR(s1);
-	es2 = ARRPTR(s2);
-	ed = ARRPTR(out);
-
-	/*
-	 * this is in effect a merge between s1 and s2, both of which are already
-	 * sorted by (keylen,key); we take s2 for equal keys
-	 */
-
-	for (s1idx = s2idx = 0; s1idx < s1count || s2idx < s2count; ++outcount)
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+					   (res->type == hsvHash && res->hash.npairs == 0) )
 	{
-		int			difference;
-
-		if (s1idx >= s1count)
-			difference = 1;
-		else if (s2idx >= s2count)
-			difference = -1;
-		else
-		{
-			int			s1keylen = HS_KEYLEN(es1, s1idx);
-			int			s2keylen = HS_KEYLEN(es2, s2idx);
-
-			if (s1keylen == s2keylen)
-				difference = memcmp(HS_KEY(es1, ps1, s1idx),
-									HS_KEY(es2, ps2, s2idx),
-									s1keylen);
-			else
-				difference = (s1keylen > s2keylen) ? 1 : -1;
-		}
-
-		if (difference >= 0)
-		{
-			HS_COPYITEM(ed, bufd, pd,
-						HS_KEY(es2, ps2, s2idx), HS_KEYLEN(es2, s2idx),
-						HS_VALLEN(es2, s2idx), HS_VALISNULL(es2, s2idx));
-			++s2idx;
-			if (difference == 0)
-				++s1idx;
-		}
-		else
-		{
-			HS_COPYITEM(ed, bufd, pd,
-						HS_KEY(es1, ps1, s1idx), HS_KEYLEN(es1, s1idx),
-						HS_VALLEN(es1, s1idx), HS_VALISNULL(es1, s1idx));
-			++s1idx;
-		}
+		SET_VARSIZE(out, VARHDRSZ);
 	}
-
-	out->size_ = HS_FLAG_HSTORE; 
-	HS_FINALIZE(out, outcount, bufd, pd);
+	else
+	{
+		int r = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, r + VARHDRSZ);
+	}
 
 	PG_RETURN_POINTER(out);
 }

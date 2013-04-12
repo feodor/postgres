@@ -221,6 +221,7 @@ struct HStoreValue {
 struct HStorePair {
 	HStoreValue	key;
 	HStoreValue	value;
+	uint32		order; /* to keep order of pairs with equal key */ 
 }; 
 
 
