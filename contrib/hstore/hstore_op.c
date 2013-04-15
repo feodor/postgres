@@ -805,8 +805,6 @@ Datum
 hstore_slice_to_array(PG_FUNCTION_ARGS)
 {
 	HStore	   *hs = PG_GETARG_HS(0);
-	HEntry	   *entries = ARRPTR(hs);
-	char	   *ptr = STRPTR(hs);
 	ArrayType  *key_array = PG_GETARG_ARRAYTYPE_P(1);
 	ArrayType  *aout;
 	Datum	   *key_datums;
@@ -820,7 +818,7 @@ hstore_slice_to_array(PG_FUNCTION_ARGS)
 					  TEXTOID, -1, false, 'i',
 					  &key_datums, &key_nulls, &key_count);
 
-	if (key_count == 0)
+	if (key_count == 0 || HS_ISEMPTY(hs))
 	{
 		aout = construct_empty_array(TEXTOID);
 		PG_RETURN_POINTER(aout);
@@ -832,23 +830,34 @@ hstore_slice_to_array(PG_FUNCTION_ARGS)
 	for (i = 0; i < key_count; ++i)
 	{
 		text	   *key = (text *) DatumGetPointer(key_datums[i]);
-		int			idx;
+		HStoreValue	*v = NULL;
 
-		if (key_nulls[i])
-			idx = -1;
-		else
-			idx = hstoreFindKey(hs, NULL, VARDATA(key), VARSIZE(key) - VARHDRSZ);
+		if (key_nulls[i] == false)
+			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, NULL,
+											VARDATA(key), VARSIZE(key) - VARHDRSZ);
 
-		if (idx < 0 || HS_VALISNULL(entries, idx))
+		if (v == NULL || v->type == hsvNullString)
 		{
 			out_nulls[i] = true;
 			out_datums[i] = (Datum) 0;
 		}
+		else if (v->type == hsvString)
+		{
+			out_datums[i] = PointerGetDatum(cstring_to_text_with_len(v->string.val, v->string.len));
+			out_nulls[i] = false;
+		}
 		else
 		{
-			out_datums[i] = PointerGetDatum(
-						  cstring_to_text_with_len(HS_VAL(entries, ptr, idx),
-												   HS_VALLEN(entries, idx)));
+			StringInfo	 str = makeStringInfo();
+			text		*out;
+
+			Assert(v->type == hsvBinary);
+			appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+			hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
+			out = (text*)str->data;
+			SET_VARSIZE(out, str->len);
+
+			out_datums[i] = PointerGetDatum(out);
 			out_nulls[i] = false;
 		}
 	}

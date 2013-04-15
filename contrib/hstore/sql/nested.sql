@@ -112,6 +112,14 @@ select 'a, {1,2}, v, 23, b, c'::hstore - 'v,{1,2}'::hstore;
 select 'aa=>1 , b=>2, cq=>3'::hstore || 'cq,l, b,g, fg,f, 1,2'::hstore;
 select 'aa,1 , b,2, cq,3'::hstore || 'cq,l, b,g, fg,f, 1,2'::hstore;
 
+--slice
+select slice_array(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
+select slice_array(hstore 'aa,1, b,2, c,3', ARRAY['g','h','i']);
+select slice_array(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
+select slice_array(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
+select slice_array(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
+
+
 --decoration
 
 SET hstore.array_square_brackets=false;
