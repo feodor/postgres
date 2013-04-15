@@ -62,7 +62,7 @@ typedef struct
 #define HS_COUNT_MASK			0x1FFFFFFF
 
 #define HS_ISEMPTY(hsp_)		(VARSIZE(hsp_) <= VARHDRSZ)
-#define HS_COUNT(hsp_) 			(HS_ISEMPTY(hsp_) ? 0 : (hsp_)->size_ & 0x0FFFFFFF)		/* XXX */
+#define HS_COUNT(hsp_) 			(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))		/* XXX */
 #define HS_SETCOUNT(hsp_,c_) 	((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION | ((hsp_)->size_ & ~HS_COUNT_MASK))
 
 
@@ -81,67 +81,6 @@ typedef struct
 #define HS_VALISNULL(arr_,i_) (HSE_ISNULL((arr_)[2*(i_)+1]))
 #define HS_VALISSTRING(arr_,i_) (HSE_ISSTRING((arr_)[2*(i_)+1]))
 #define HS_VALISNEST(arr_,i_) (HSE_ISNEST((arr_)[2*(i_)+1]))
-
-/*
- * currently, these following macros are the _only_ places that rely
- * on internal knowledge of HEntry. Everything else should be using
- * the above macros. Exception: the in-place upgrade in hstore_compat.c
- * messes with entries directly.
- */
-
-/*
- * copy one key/value pair (which must be contiguous starting at
- * sptr_) into an under-construction hstore; dent_ is an HEntry*,
- * dbuf_ is the destination's string buffer, dptr_ is the current
- * position in the destination. lots of modification and multiple
- * evaluation here.
- */
-#define HS_COPYITEM(dent_,dbuf_,dptr_,sptr_,klen_,vlen_,vnull_)				\
-	do {																	\
-		memcpy((dptr_), (sptr_), (klen_)+(vlen_));							\
-		(dptr_) += (klen_)+(vlen_);											\
-		(dent_)++->entry = ((dptr_) - (dbuf_) - (vlen_)) & HENTRY_POSMASK; 	\
-		(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)			\
-							 | ((vnull_) ? HENTRY_ISNULL : 0));				\
-	} while(0)
-
-/*
- * add one key/item pair, from a Pairs structure, into an
- * under-construction hstore
- */
-#define HS_ADDITEM(dent_,dbuf_,dptr_,pair_)											\
-	do {																			\
-		memcpy((dptr_), (pair_).key, (pair_).keylen);								\
-		(dptr_) += (pair_).keylen;													\
-		(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;					\
-		switch((pair_).valtype) {													\
-			case valNull:															\
-				(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)			\
-									 | HENTRY_ISNULL);								\
-				break;																\
-			case valText:															\
-				memcpy((dptr_), (pair_).val.text.val, (pair_).val.text.vallen);		\
-				(dptr_) += (pair_).val.text.vallen;									\
-				(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;			\
-				break;																\
-			default:																\
-				elog(ERROR,"HS_ADDITEM fails for pair type: %d", (pair_).valtype);	\
-		}																			\
-	} while (0)
-
-/* finalize a newly-constructed hstore */
-#define HS_FINALIZE(hsp_,count_,buf_,ptr_)							\
-	do {															\
-		int buflen = (ptr_) - (buf_);								\
-		if ((count_))												\
-			ARRPTR(hsp_)[0].entry |= HENTRY_ISFIRST;				\
-		if ((count_) != HS_COUNT((hsp_)))							\
-		{															\
-			HS_SETCOUNT((hsp_),(count_));							\
-			memmove(STRPTR(hsp_), (buf_), buflen);					\
-		}															\
-		SET_VARSIZE((hsp_), CALCDATASIZE((count_), buflen));		\
-	} while (0)
 
 /* ensure the varlena size of an existing hstore is correct */
 #define HS_FIXSIZE(hsp_,count_)											\
@@ -226,8 +165,6 @@ struct HStorePair {
 
 
 extern HStoreValue* parseHStore(const char *str);
-extern int	hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen);
-extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
 
 /*
  * hstore support functios

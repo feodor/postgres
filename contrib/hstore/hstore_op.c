@@ -900,7 +900,7 @@ hstore_akeys(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(a);
 	}
 
-	d = (Datum *) palloc(sizeof(Datum) * ( *(uint32*)VARDATA(hs) & HS_COUNT_MASK ));
+	d = (Datum *) palloc(sizeof(Datum) * HS_COUNT(hs));
 
 	it = HStoreIteratorInit(VARDATA(hs));
 
@@ -940,8 +940,8 @@ hstore_avals(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(a);
 	}
 
-	d = (Datum *) palloc(sizeof(Datum) * ( *(uint32*)VARDATA(hs) & HS_COUNT_MASK ));
-	nulls = (bool *) palloc(sizeof(bool) * ( *(uint32*)VARDATA(hs) & HS_COUNT_MASK ));
+	d = (Datum *) palloc(sizeof(Datum) * HS_COUNT(hs));
+	nulls = (bool *) palloc(sizeof(bool) * HS_COUNT(hs));
 
 	it = HStoreIteratorInit(VARDATA(hs));
 
