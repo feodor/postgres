@@ -886,31 +886,33 @@ Datum		hstore_akeys(PG_FUNCTION_ARGS);
 Datum
 hstore_akeys(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	Datum	   *d;
-	ArrayType  *a;
-	HEntry	   *entries = ARRPTR(hs);
-	char	   *base = STRPTR(hs);
-	int			count = HS_COUNT(hs);
-	int			i;
+	HStore	   		*hs = PG_GETARG_HS(0);
+	Datum	   		*d;
+	ArrayType  		*a;
+	int				i = 0, r = 0;
+	HStoreIterator	*it;
+	HStoreValue		v;
+	bool			skipNested = false;
 
-	if (count == 0)
+	if (HS_ISEMPTY(hs))
 	{
 		a = construct_empty_array(TEXTOID);
 		PG_RETURN_POINTER(a);
 	}
 
-	d = (Datum *) palloc(sizeof(Datum) * count);
+	d = (Datum *) palloc(sizeof(Datum) * ( *(uint32*)VARDATA(hs) & HS_COUNT_MASK ));
 
-	for (i = 0; i < count; ++i)
+	it = HStoreIteratorInit(VARDATA(hs));
+
+	while((r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
 	{
-		text	   *item = cstring_to_text_with_len(HS_KEY(entries, base, i),
-													HS_KEYLEN(entries, i));
+		skipNested = true;
 
-		d[i] = PointerGetDatum(item);
+		if ((r == WHS_ELEM && v.type != hsvNullString) || r == WHS_KEY)
+			d[i++] = PointerGetDatum(HStoreValueToText(&v)); 
 	}
 
-	a = construct_array(d, count,
+	a = construct_array(d, i,
 						TEXTOID, -1, false, 'i');
 
 	PG_RETURN_POINTER(a);
