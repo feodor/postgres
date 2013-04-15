@@ -924,43 +924,40 @@ Datum		hstore_avals(PG_FUNCTION_ARGS);
 Datum
 hstore_avals(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	Datum	   *d;
-	bool	   *nulls;
-	ArrayType  *a;
-	HEntry	   *entries = ARRPTR(hs);
-	char	   *base = STRPTR(hs);
-	int			count = HS_COUNT(hs);
-	int			lb = 1;
-	int			i;
+	HStore	   		*hs = PG_GETARG_HS(0);
+	Datum	   		*d;
+	ArrayType  		*a;
+	int				i = 0, r = 0;
+	HStoreIterator	*it;
+	HStoreValue		v;
+	bool			skipNested = false;
+	bool		   *nulls;
+	int				lb = 1;
 
-	if (count == 0)
+	if (HS_ISEMPTY(hs))
 	{
 		a = construct_empty_array(TEXTOID);
 		PG_RETURN_POINTER(a);
 	}
 
-	d = (Datum *) palloc(sizeof(Datum) * count);
-	nulls = (bool *) palloc(sizeof(bool) * count);
+	d = (Datum *) palloc(sizeof(Datum) * ( *(uint32*)VARDATA(hs) & HS_COUNT_MASK ));
+	nulls = (bool *) palloc(sizeof(bool) * ( *(uint32*)VARDATA(hs) & HS_COUNT_MASK ));
 
-	for (i = 0; i < count; ++i)
+	it = HStoreIteratorInit(VARDATA(hs));
+
+	while((r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
 	{
-		if (HS_VALISNULL(entries, i))
-		{
-			d[i] = (Datum) 0;
-			nulls[i] = true;
-		}
-		else
-		{
-			text	   *item = cstring_to_text_with_len(HS_VAL(entries, base, i),
-													  HS_VALLEN(entries, i));
+		skipNested = true;
 
-			d[i] = PointerGetDatum(item);
-			nulls[i] = false;
+		if (r == WHS_ELEM || r == WHS_VALUE)
+		{
+			d[i] = PointerGetDatum(HStoreValueToText(&v));
+			nulls[i] = (DatumGetPointer(d[i]) == NULL) ? true : false;
+			i++;
 		}
 	}
 
-	a = construct_md_array(d, nulls, 1, &count, &lb,
+	a = construct_md_array(d, nulls, 1, &i, &lb,
 						   TEXTOID, -1, false, 'i');
 
 	PG_RETURN_POINTER(a);
