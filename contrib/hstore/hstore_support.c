@@ -180,6 +180,7 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 				r.type = hsvNullString;
 				if (lowbound)
 					*lowbound = i;
+				r.size = sizeof(HEntry);
 
 				return &r;
 			} 
@@ -190,6 +191,7 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 					r.type = hsvString;
 					r.string.val = data + HSE_OFF(*e);
 					r.string.len = keylen;
+					r.size = sizeof(HEntry) + r.string.len;
 					if (lowbound)
 						*lowbound = i;
 
@@ -232,12 +234,14 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 					if (HSE_ISNULL(*v))
 					{
 						r.type = hsvNullString;
+						r.size = sizeof(HEntry);
 					}
 					else
 					{
 						r.type = hsvString;
 						r.string.val = data + HSE_OFF(*v);
 						r.string.len = HSE_LEN(*v);
+						r.size = sizeof(HEntry) + r.string.len;
 					}
 				}
 				else

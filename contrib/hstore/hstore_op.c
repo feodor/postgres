@@ -69,48 +69,6 @@ hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen)
 	return -1;
 }
 
-static Pairs *
-hstoreArrayToPairs(ArrayType *a, int *npairs)
-{
-	Datum	   *key_datums;
-	bool	   *key_nulls;
-	int			key_count;
-	Pairs	   *key_pairs;
-	int			bufsiz;
-	int			i,
-				j;
-
-	deconstruct_array(a,
-					  TEXTOID, -1, false, 'i',
-					  &key_datums, &key_nulls, &key_count);
-
-	if (key_count == 0)
-	{
-		*npairs = 0;
-		return NULL;
-	}
-
-	key_pairs = palloc(sizeof(Pairs) * key_count);
-
-	for (i = 0, j = 0; i < key_count; i++)
-	{
-		if (!key_nulls[i])
-		{
-			key_pairs[j].key = VARDATA(key_datums[i]);
-			key_pairs[j].keylen = VARSIZE(key_datums[i]) - VARHDRSZ;
-			key_pairs[j].val.text.val = NULL;
-			key_pairs[j].val.text.vallen = 0;
-			key_pairs[j].needfree = 0;
-			key_pairs[j].valtype = valNull;
-			j++;
-		}
-	}
-
-	*npairs = hstoreUniquePairs(key_pairs, j, &bufsiz);
-
-	return key_pairs;
-}
-
 static HStoreValue*
 arrayToHStoreSortedArray(ArrayType *a)
 {
@@ -877,58 +835,69 @@ Datum		hstore_slice_to_hstore(PG_FUNCTION_ARGS);
 Datum
 hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	HEntry	   *entries = ARRPTR(hs);
-	char	   *ptr = STRPTR(hs);
-	ArrayType  *key_array = PG_GETARG_ARRAYTYPE_P(1);
-	HStore	   *out;
-	int			nkeys;
-	Pairs	   *key_pairs = hstoreArrayToPairs(key_array, &nkeys);
-	Pairs	   *out_pairs;
-	int			bufsiz;
-	int			lastidx = 0;
-	int			i;
-	int			out_count = 0;
+	HStore		   *hs = PG_GETARG_HS(0);
+	HStoreValue	   *a = arrayToHStoreSortedArray(PG_GETARG_ARRAYTYPE_P(1));
+	uint32			lowbound = 0,
+				   *plowbound;
+	HStoreValue		*res = NULL;
+	ToHStoreState	*state = NULL;
+	text			*out;
+	uint32			i;
 
-	if (nkeys == 0)
+	out = palloc(VARSIZE(hs));
+
+	if (a == NULL || a->array.nelems == 0 || HS_ISEMPTY(hs)) 
 	{
-		out = hstorePairs(NULL, 0, 0);
+		memcpy(out, hs, VARSIZE(hs));
 		PG_RETURN_POINTER(out);
 	}
 
-	out_pairs = palloc(sizeof(Pairs) * nkeys);
-	bufsiz = 0;
-
-	/*
-	 * we exploit the fact that the pairs list is already sorted into strictly
-	 * increasing order to narrow the hstoreFindKey search; each search can
-	 * start one entry past the previous "found" entry, or at the lower bound
-	 * of the last search.
-	 */
-
-	for (i = 0; i < nkeys; ++i)
+	if (*(uint32*)VARDATA(hs) & HS_FLAG_HSTORE)
 	{
-		int			idx = hstoreFindKey(hs, &lastidx,
-									  key_pairs[i].key, key_pairs[i].keylen);
+		plowbound = &lowbound;
+		pushHStoreValue(&state, WHS_BEGIN_HASH, NULL);
+	}
+	else
+	{
+		plowbound = NULL;
+		pushHStoreValue(&state, WHS_BEGIN_ARRAY, NULL);
+	}
+		
+	for (i = 0; i < a->array.nelems; ++i)
+	{
+		HStoreValue	*v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
+									  a->array.elems[i].string.val, a->array.elems[i].string.len);
 
-		if (idx >= 0)
+		if (v)
 		{
-			out_pairs[out_count].key = key_pairs[i].key;
-			bufsiz += (out_pairs[out_count].keylen = key_pairs[i].keylen);
-			out_pairs[out_count].val.text.val = HS_VAL(entries, ptr, idx);
-			bufsiz += (out_pairs[out_count].val.text.vallen = HS_VALLEN(entries, idx));
-			out_pairs[out_count].valtype = HS_VALISNULL(entries, idx) ? valNull : valText;
-			out_pairs[out_count].needfree = false;
-			++out_count;
+			if (plowbound)
+			{
+				pushHStoreValue(&state, WHS_KEY, a->array.elems + i);
+				pushHStoreValue(&state, WHS_VALUE, v);
+			}
+			else
+			{
+				pushHStoreValue(&state, WHS_ELEM, v);
+			}
 		}
 	}
 
-	/*
-	 * we don't use uniquePairs here because we know that the pairs list is
-	 * already sorted and uniq'ed.
-	 */
+	if (plowbound)
+		res = pushHStoreValue(&state, WHS_END_HASH, a /* any non-null value */);
+	else
+		res = pushHStoreValue(&state, WHS_END_ARRAY, NULL);
 
-	out = hstorePairs(out_pairs, out_count, bufsiz);
+
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) ||
+						(res->type == hsvHash && res->hash.npairs == 0) )
+	{
+		SET_VARSIZE(out, VARHDRSZ);
+	}
+	else
+	{
+		int r = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, r + VARHDRSZ);
+	}
 
 	PG_RETURN_POINTER(out);
 }

@@ -119,6 +119,12 @@ select slice_array(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
 select slice_array(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
 select slice_array(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
 
+select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
+select slice(hstore 'aa,1, b,2, c,3', ARRAY['g','h','i']);
+select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
+select slice(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
+select slice(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
+
 
 --decoration
 

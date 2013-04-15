@@ -526,6 +526,36 @@ select slice_array(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
  {"\"2\"=>\"1\"","{\"1\", \"2\"}"}
 (1 row)
 
+select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
+ slice 
+-------
+ 
+(1 row)
+
+select slice(hstore 'aa,1, b,2, c,3', ARRAY['g','h','i']);
+ slice 
+-------
+ 
+(1 row)
+
+select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
+       slice        
+--------------------
+ "b"=>"2", "c"=>"3"
+(1 row)
+
+select slice(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
+   slice    
+------------
+ {"b", "c"}
+(1 row)
+
+select slice(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
+              slice               
+----------------------------------
+ "b"=>{"2"=>"1"}, "c"=>{"1", "2"}
+(1 row)
+
 --decoration
 SET hstore.array_square_brackets=false;
 SET hstore.root_array_decorated=false;
