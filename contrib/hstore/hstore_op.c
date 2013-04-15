@@ -794,30 +794,8 @@ hstore_slice_to_array(PG_FUNCTION_ARGS)
 			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, NULL,
 											VARDATA(key), VARSIZE(key) - VARHDRSZ);
 
-		if (v == NULL || v->type == hsvNullString)
-		{
-			out_nulls[i] = true;
-			out_datums[i] = (Datum) 0;
-		}
-		else if (v->type == hsvString)
-		{
-			out_datums[i] = PointerGetDatum(cstring_to_text_with_len(v->string.val, v->string.len));
-			out_nulls[i] = false;
-		}
-		else
-		{
-			StringInfo	 str = makeStringInfo();
-			text		*out;
-
-			Assert(v->type == hsvBinary);
-			appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
-			hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
-			out = (text*)str->data;
-			SET_VARSIZE(out, str->len);
-
-			out_datums[i] = PointerGetDatum(out);
-			out_nulls[i] = false;
-		}
+		out_datums[i] = PointerGetDatum(HStoreValueToText(v));
+		out_nulls[i] = (DatumGetPointer(out_datums[i]) == NULL) ? true : false;	
 	}
 
 	aout = construct_md_array(out_datums, out_nulls,

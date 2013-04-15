@@ -263,6 +263,7 @@ typedef enum HStoreOutputKind {
 
 extern char* hstoreToCString(StringInfo out, char *in,
 							 int len /* just estimation */, HStoreOutputKind kind);
+text* HStoreValueToText(HStoreValue *v);
 
 typedef struct ToHStoreState
 {

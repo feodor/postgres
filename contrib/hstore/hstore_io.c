@@ -1102,6 +1102,35 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 	return out->data;
 }
 
+text*
+HStoreValueToText(HStoreValue *v)
+{
+	text		*out;
+
+	if (v == NULL || v->type == hsvNullString)
+	{
+		out = NULL;
+	}
+	else if (v->type == hsvString)
+	{
+		out = cstring_to_text_with_len(v->string.val, v->string.len);
+	}
+	else
+	{
+		StringInfo	str;
+
+		str = makeStringInfo();
+		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+
+		hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
+
+		out = (text*)str->data;
+		SET_VARSIZE(out, str->len);
+	}
+
+	return out;
+}
+
 PG_FUNCTION_INFO_V1(hstore_out);
 Datum		hstore_out(PG_FUNCTION_ARGS);
 Datum
