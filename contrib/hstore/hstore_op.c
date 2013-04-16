@@ -238,12 +238,14 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
 	HStoreValue		*v = arrayToHStoreSortedArray(keys);
 	int				i;
-	uint32			lowbound = 0;
+	uint32			*plowbound = NULL, lowbound = 0;
 	bool			res = false;
 
 	if (HS_ISEMPTY(hs) || v == NULL || v->hash.npairs == 0)
 		PG_RETURN_BOOL(false);
 
+	if (HS_ROOT_IS_HASH(hs))
+		plowbound = &lowbound;
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
 	 * increasing order to narrow the hstoreFindKey search; each search can
@@ -252,7 +254,7 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, &lowbound,
+		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
 										v->array.elems[i].string.val, 
 										v->array.elems[i].string.len) != NULL)
 		{
@@ -274,18 +276,20 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
 	HStoreValue		*v = arrayToHStoreSortedArray(keys);
 	int				i;
-	uint32			lowbound = 0;
+	uint32			*plowbound = NULL, lowbound = 0;
 	bool			res = true;
 
 	if (HS_ISEMPTY(hs) || v == NULL || v->array.nelems == 0)
 	{
 
-		if (v == NULL || v->hash.npairs == 0)
+		if (v == NULL || v->array.nelems == 0)
 			PG_RETURN_BOOL(true); /* compatibility */
 		else
 			PG_RETURN_BOOL(false);
 	}
 
+	if (HS_ROOT_IS_HASH(hs))
+		plowbound = &lowbound;
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
 	 * increasing order to narrow the hstoreFindKey search; each search can
@@ -294,7 +298,7 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, &lowbound,
+		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
 										v->array.elems[i].string.val, 
 										v->array.elems[i].string.len) == NULL)
 		{
@@ -830,7 +834,7 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(out);
 	}
 
-	if (*(uint32*)VARDATA(hs) & HS_FLAG_HSTORE)
+	if (HS_ROOT_IS_HASH(hs))
 	{
 		plowbound = &lowbound;
 		pushHStoreValue(&state, WHS_BEGIN_HASH, NULL);
@@ -967,44 +971,53 @@ hstore_avals(PG_FUNCTION_ARGS)
 static ArrayType *
 hstore_to_array_internal(HStore *hs, int ndims)
 {
-	HEntry	   *entries = ARRPTR(hs);
-	char	   *base = STRPTR(hs);
-	int			count = HS_COUNT(hs);
-	int			out_size[2] = {0, 2};
-	int			lb[2] = {1, 1};
-	Datum	   *out_datums;
-	bool	   *out_nulls;
-	int			i;
+	int				count = HS_COUNT(hs);
+	int				out_size[2] = {0, 2};
+	int				lb[2] = {1, 1};
+	Datum		   *out_datums;
+	bool	   		*out_nulls;
+	bool			isHash = HS_ROOT_IS_HASH(hs) ? true : false; 
+	int				i = 0, r = 0;
+	HStoreIterator	*it;
+	HStoreValue		v;
+	bool			skipNested = false;
 
 	Assert(ndims < 3);
 
 	if (count == 0 || ndims == 0)
 		return construct_empty_array(TEXTOID);
 
-	out_size[0] = count * 2 / ndims;
+	if (isHash == false && ndims == 2 && count % 2 != 0)
+		elog(ERROR, "hstore's array should have even number of elements");
+
+	out_size[0] = count * (isHash ? 2 : 1) / ndims;
 	out_datums = palloc(sizeof(Datum) * count * 2);
 	out_nulls = palloc(sizeof(bool) * count * 2);
 
-	for (i = 0; i < count; ++i)
+	it = HStoreIteratorInit(VARDATA(hs));
+
+	while((r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
 	{
-		text	   *key = cstring_to_text_with_len(HS_KEY(entries, base, i),
-												   HS_KEYLEN(entries, i));
+		skipNested = true;
 
-		out_datums[i * 2] = PointerGetDatum(key);
-		out_nulls[i * 2] = false;
-
-		if (HS_VALISNULL(entries, i))
+		switch(r)
 		{
-			out_datums[i * 2 + 1] = (Datum) 0;
-			out_nulls[i * 2 + 1] = true;
-		}
-		else
-		{
-			text	   *item = cstring_to_text_with_len(HS_VAL(entries, base, i),
-													  HS_VALLEN(entries, i));
-
-			out_datums[i * 2 + 1] = PointerGetDatum(item);
-			out_nulls[i * 2 + 1] = false;
+			case WHS_ELEM:
+				out_datums[i] = PointerGetDatum(HStoreValueToText(&v));
+				out_nulls[i] = (DatumGetPointer(out_datums[i]) == NULL) ? true : false;
+				i++;
+				break;
+			case WHS_KEY:
+				out_datums[i * 2] = PointerGetDatum(HStoreValueToText(&v));
+				out_nulls[i * 2] = (DatumGetPointer(out_datums[i * 2]) == NULL) ? true : false;
+				break;
+			case WHS_VALUE:
+				out_datums[i * 2 + 1] = PointerGetDatum(HStoreValueToText(&v));
+				out_nulls[i * 2 + 1] = (DatumGetPointer(out_datums[i * 2 + 1]) == NULL) ? true : false;
+				i++;
+				break;
+			default:
+				break;
 		}
 	}
 

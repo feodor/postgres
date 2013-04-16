@@ -125,6 +125,12 @@ select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
 select slice(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
 select slice(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
 
+--to array
+select %% 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL';
+select %% 'aa,1, cq,l, b,g, fg,NULL';
+select hstore_to_matrix( 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL');
+select hstore_to_matrix( 'aa,1, cq,l, b,g, fg,NULL');
+
 
 --decoration
 
