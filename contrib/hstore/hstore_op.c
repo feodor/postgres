@@ -1057,17 +1057,36 @@ hstore_to_matrix(PG_FUNCTION_ARGS)
  * there was no explanatory comment in the original code. --AG)
  */
 
-static void
+typedef struct SetReturningState
+{
+	HStore			*hs;
+	HStoreIterator	*it;
+} SetReturningState;
+
+static SetReturningState*
 setup_firstcall(FuncCallContext *funcctx, HStore *hs,
 				FunctionCallInfoData *fcinfo)
 {
-	MemoryContext oldcontext;
-	HStore	   *st;
+	MemoryContext 			oldcontext;
+	SetReturningState	   *st;
 
 	oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-	st = (HStore *) palloc(VARSIZE(hs));
-	memcpy(st, hs, VARSIZE(hs));
+	st = palloc(sizeof(*st));
+
+	st->hs = (HStore *) palloc(VARSIZE(hs));
+	memcpy(st->hs, hs, VARSIZE(hs));
+	if (HS_ISEMPTY(hs))
+	{
+		st->it = NULL;
+	}
+	else
+	{
+		HStoreValue	v;
+
+		st->it = HStoreIteratorInit(VARDATA(hs));
+		HStoreIteratorGet(&st->it, &v, false); /* skip initial WHS_BEGIN* */
+	}
 
 	funcctx->user_fctx = (void *) st;
 
@@ -1083,6 +1102,8 @@ setup_firstcall(FuncCallContext *funcctx, HStore *hs,
 	}
 
 	MemoryContextSwitchTo(oldcontext);
+
+	return st;
 }
 
 
@@ -1091,84 +1112,140 @@ Datum		hstore_skeys(PG_FUNCTION_ARGS);
 Datum
 hstore_skeys(PG_FUNCTION_ARGS)
 {
-	FuncCallContext *funcctx;
-	HStore	   *hs;
-	int			i;
+	FuncCallContext 	*funcctx;
+	SetReturningState	*st;
+	int					r;
+	HStoreValue			v;
 
 	if (SRF_IS_FIRSTCALL())
 	{
-		hs = PG_GETARG_HS(0);
 		funcctx = SRF_FIRSTCALL_INIT();
-		setup_firstcall(funcctx, hs, NULL);
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
-	hs = (HStore *) funcctx->user_fctx;
-	i = funcctx->call_cntr;
+	st = (SetReturningState *) funcctx->user_fctx;
 
-	if (i < HS_COUNT(hs))
+	while(st->it && (r = HStoreIteratorGet(&st->it, &v, true)) != 0)
 	{
-		HEntry	   *entries = ARRPTR(hs);
-		text	   *item;
-
-		item = cstring_to_text_with_len(HS_KEY(entries, STRPTR(hs), i),
-										HS_KEYLEN(entries, i));
-
-		SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
+		if (r == WHS_KEY || r == WHS_ELEM)
+		{
+			text	   *item = HStoreValueToText(&v);
+	
+			if (item == NULL)
+				SRF_RETURN_NEXT_NULL(funcctx);
+			else
+				SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
+		}
 	}
 
 	SRF_RETURN_DONE(funcctx);
 }
-
 
 PG_FUNCTION_INFO_V1(hstore_svals);
 Datum		hstore_svals(PG_FUNCTION_ARGS);
 Datum
 hstore_svals(PG_FUNCTION_ARGS)
 {
-	FuncCallContext *funcctx;
-	HStore	   *hs;
-	int			i;
+	FuncCallContext 	*funcctx;
+	SetReturningState	*st;
+	int					r;
+	HStoreValue			v;
 
 	if (SRF_IS_FIRSTCALL())
 	{
-		hs = PG_GETARG_HS(0);
 		funcctx = SRF_FIRSTCALL_INIT();
-		setup_firstcall(funcctx, hs, NULL);
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
-	hs = (HStore *) funcctx->user_fctx;
-	i = funcctx->call_cntr;
+	st = (SetReturningState *) funcctx->user_fctx;
 
-	if (i < HS_COUNT(hs))
+	while(st->it && (r = HStoreIteratorGet(&st->it, &v, true)) != 0)
 	{
-		HEntry	   *entries = ARRPTR(hs);
-
-		if (HS_VALISNULL(entries, i))
+		if (r == WHS_VALUE || r == WHS_ELEM)
 		{
-			ReturnSetInfo *rsi;
-
-			/* ugly ugly ugly. why no macro for this? */
-			(funcctx)->call_cntr++;
-			rsi = (ReturnSetInfo *) fcinfo->resultinfo;
-			rsi->isDone = ExprMultipleResult;
-			PG_RETURN_NULL();
-		}
-		else
-		{
-			text	   *item;
-
-			item = cstring_to_text_with_len(HS_VAL(entries, STRPTR(hs), i),
-											HS_VALLEN(entries, i));
-
-			SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
+			text	   *item = HStoreValueToText(&v);
+	
+			if (item == NULL)
+				SRF_RETURN_NEXT_NULL(funcctx);
+			else
+				SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
 		}
 	}
 
 	SRF_RETURN_DONE(funcctx);
 }
 
+
+PG_FUNCTION_INFO_V1(hstore_each);
+Datum		hstore_each(PG_FUNCTION_ARGS);
+Datum
+hstore_each(PG_FUNCTION_ARGS)
+{
+	FuncCallContext 	*funcctx;
+	SetReturningState	*st;
+	int					r;
+	HStoreValue			v;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		funcctx = SRF_FIRSTCALL_INIT();
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), fcinfo);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	st = (SetReturningState *) funcctx->user_fctx;
+
+	while(st->it && (r = HStoreIteratorGet(&st->it, &v, true)) != 0)
+	{
+		Datum		res,
+					dvalues[2] = {0, 0};
+		bool		nulls[2] = {false, false};
+		text	   *item;
+		HeapTuple	tuple;
+
+		if (r == WHS_ELEM)
+		{
+			item = HStoreValueToText(&v);
+			if (item == NULL)
+				nulls[0] = true;
+			else
+				dvalues[0] = PointerGetDatum(item);
+			nulls[1] = true;
+		}
+		else if (r == WHS_KEY)
+		{
+			item = HStoreValueToText(&v);
+			dvalues[0] = PointerGetDatum(item);
+			r = HStoreIteratorGet(&st->it, &v, true);
+			Assert(r == WHS_VALUE);
+			item = HStoreValueToText(&v);
+			if (item == NULL)
+				nulls[1] = true;
+			else
+				dvalues[1] = PointerGetDatum(item);
+		}
+		else
+		{
+			Assert(r == WHS_END_ARRAY || r == WHS_END_HASH);
+			continue;
+		}
+
+		tuple = heap_form_tuple(funcctx->tuple_desc, dvalues, nulls);
+		res = HeapTupleGetDatum(tuple);
+
+		SRF_RETURN_NEXT(funcctx, PointerGetDatum(res));
+	}
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+/*
+ * btree sort order for hstores isn't intended to be useful; we really only
+ * care about equality versus non-equality.  we compare the entire string
+ * buffer first, then the entry pos array.
+ */
 
 PG_FUNCTION_INFO_V1(hstore_contains);
 Datum		hstore_contains(PG_FUNCTION_ARGS);
@@ -1228,67 +1305,6 @@ hstore_contained(PG_FUNCTION_ARGS)
 										));
 }
 
-
-PG_FUNCTION_INFO_V1(hstore_each);
-Datum		hstore_each(PG_FUNCTION_ARGS);
-Datum
-hstore_each(PG_FUNCTION_ARGS)
-{
-	FuncCallContext *funcctx;
-	HStore	   *hs;
-	int			i;
-
-	if (SRF_IS_FIRSTCALL())
-	{
-		hs = PG_GETARG_HS(0);
-		funcctx = SRF_FIRSTCALL_INIT();
-		setup_firstcall(funcctx, hs, fcinfo);
-	}
-
-	funcctx = SRF_PERCALL_SETUP();
-	hs = (HStore *) funcctx->user_fctx;
-	i = funcctx->call_cntr;
-
-	if (i < HS_COUNT(hs))
-	{
-		HEntry	   *entries = ARRPTR(hs);
-		char	   *ptr = STRPTR(hs);
-		Datum		res,
-					dvalues[2];
-		bool		nulls[2] = {false, false};
-		text	   *item;
-		HeapTuple	tuple;
-
-		item = cstring_to_text_with_len(HS_KEY(entries, ptr, i),
-										HS_KEYLEN(entries, i));
-		dvalues[0] = PointerGetDatum(item);
-
-		if (HS_VALISNULL(entries, i))
-		{
-			dvalues[1] = (Datum) 0;
-			nulls[1] = true;
-		}
-		else
-		{
-			item = cstring_to_text_with_len(HS_VAL(entries, ptr, i),
-											HS_VALLEN(entries, i));
-			dvalues[1] = PointerGetDatum(item);
-		}
-
-		tuple = heap_form_tuple(funcctx->tuple_desc, dvalues, nulls);
-		res = HeapTupleGetDatum(tuple);
-
-		SRF_RETURN_NEXT(funcctx, PointerGetDatum(res));
-	}
-
-	SRF_RETURN_DONE(funcctx);
-}
-
-/*
- * btree sort order for hstores isn't intended to be useful; we really only
- * care about equality versus non-equality.  we compare the entire string
- * buffer first, then the entry pos array.
- */
 
 PG_FUNCTION_INFO_V1(hstore_cmp);
 Datum		hstore_cmp(PG_FUNCTION_ARGS);
