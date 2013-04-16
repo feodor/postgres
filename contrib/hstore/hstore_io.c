@@ -24,7 +24,7 @@ PG_MODULE_MAGIC;
 HSTORE_POLLUTE(hstore_from_text, tconvert);
 
 /* GUC variables */
-static bool array_square_brackets = false;
+static bool array_brackets = false;
 static bool	root_array_decorated = true;
 static bool	root_hash_decorated = false;
 
@@ -907,7 +907,7 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 
 				if (!(kind == HStoreOutput && level == 0 && root_array_decorated == false))
 					appendStringInfoCharMacro(out, 
-										  (kind == HStoreOutput && array_square_brackets == false) ? '{' : '[');
+										  (kind == HStoreOutput && array_brackets == false) ? '{' : '[');
 				level++;
 				break;
 			case WHS_BEGIN_HASH:
@@ -953,7 +953,7 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 				level--;
 				if (!(kind == HStoreOutput && level == 0 && root_array_decorated == false))
 					appendStringInfoCharMacro(out, 
-										 (kind == HStoreOutput && array_square_brackets == false) ? '}' : ']');
+										 (kind == HStoreOutput && array_brackets == false) ? '}' : ']');
 				first = false;
 				break;
 			case WHS_END_HASH:
@@ -1132,11 +1132,11 @@ void
 _PG_init(void)
 {
 	DefineCustomBoolVariable(
-		"hstore.array_square_brackets",
+		"hstore.array_brackets",
 		"[] brackets for array",
 		"Use [] brackets for array's decoration",
-		&array_square_brackets,
-		array_square_brackets,
+		&array_brackets,
+		array_brackets,
 		PGC_USERSET,
 		GUC_NOT_IN_SAMPLE,
 		NULL,

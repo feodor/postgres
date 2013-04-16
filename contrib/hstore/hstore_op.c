@@ -1252,16 +1252,18 @@ Datum		hstore_contains(PG_FUNCTION_ARGS);
 Datum
 hstore_contains(PG_FUNCTION_ARGS)
 {
-	HStore	   *val = PG_GETARG_HS(0);
-	HStore	   *tmpl = PG_GETARG_HS(1);
-	bool		res = true;
-	HEntry	   *te = ARRPTR(tmpl);
-	char	   *tstr = STRPTR(tmpl);
-	HEntry	   *ve = ARRPTR(val);
-	char	   *vstr = STRPTR(val);
-	int			tcount = HS_COUNT(tmpl);
-	int			lastidx = 0;
-	int			i;
+	HStore	   		*val = PG_GETARG_HS(0);
+	HStore	   		*tmpl = PG_GETARG_HS(1);
+	bool			res = true;
+	HStoreIterator	*it;
+	uint32			r;
+	uint32			lowbound = 0,
+					*plowbound = NULL;
+	HStoreValue		*v, t;
+	bool			skipNested = false;
+
+	if (HS_COUNT(val) < HS_COUNT(tmpl) || HS_ROOT_IS_HASH(val) != HS_ROOT_IS_HASH(tmpl))
+		PG_RETURN_BOOL(false);
 
 	/*
 	 * we exploit the fact that keys in "tmpl" are in strictly increasing
@@ -1270,24 +1272,43 @@ hstore_contains(PG_FUNCTION_ARGS)
 	 * search
 	 */
 
-	for (i = 0; res && i < tcount; ++i)
+	if (HS_ROOT_IS_HASH(val))
+		plowbound = &lowbound;
+
+	it = HStoreIteratorInit(VARDATA(tmpl));
+
+	while(res && (r = HStoreIteratorGet(&it, &t, skipNested)) != 0)
 	{
-		int			idx = hstoreFindKey(val, &lastidx,
-									  HS_KEY(te, tstr, i), HS_KEYLEN(te, i));
+		skipNested = true;
 
-		if (idx >= 0)
+		if (r == WHS_ELEM)
 		{
-			bool		nullval = HS_VALISNULL(te, i);
-			int			vallen = HS_VALLEN(te, i);
+			HStoreIterator	*vit;
+			HStoreValue		vv;
 
-			if (nullval != HS_VALISNULL(ve, idx)
-				|| (!nullval
-					&& (vallen != HS_VALLEN(ve, idx)
-			 || memcmp(HS_VAL(te, tstr, i), HS_VAL(ve, vstr, idx), vallen))))
-				res = false;
-		}
-		else
+			vit = HStoreIteratorInit(VARDATA(val));
+			HStoreIteratorGet(&vit, &vv, false); /* skip WHS_BEGIN_* */
+
 			res = false;
+			while(res == false && (r = HStoreIteratorGet(&vit, &vv, true)) != 0)
+				if (r == WHS_ELEM && compareHStoreValue(&t, &vv) == 0)
+					res = true;
+		}
+		else if (r == WHS_KEY)
+		{
+			v = findUncompressedHStoreValue(VARDATA(val), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
+											t.string.val, t.string.len);
+			if (v)
+			{
+				r = HStoreIteratorGet(&it, &t, skipNested);
+				Assert(r == WHS_VALUE);
+				res = (compareHStoreValue(&t, v) == 0) ? true : false;
+			}
+			else
+			{
+				res = false;
+			}
+		}
 	}
 
 	PG_RETURN_BOOL(res);
