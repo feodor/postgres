@@ -419,6 +419,12 @@ HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested)
 	if (*it == NULL)
 		return 0;
 
+	/*
+	 * Encode all possible states by one integer. That's possible
+	 * because enum members of HStoreIterator->state uses different bits
+	 * than HS_FLAG_ARRAY/HS_FLAG_HSTORE. See definition of HStoreIterator
+	 */
+
 	switch((*it)->type | (*it)->state)
 	{
 		case HS_FLAG_ARRAY | hsi_start:

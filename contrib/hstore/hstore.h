@@ -39,14 +39,13 @@ typedef struct
 /*
  * determined by the size of "endpos" (ie HENTRY_POSMASK)
  */
-#define HSTORE_MAX_KEY_LEN 		0x0FFFFFFF		/* XXX */
-#define HSTORE_MAX_VALUE_LEN 	0x0FFFFFFF		/* XXX */
-#define HSTORE_MAX_STRING_LEN	0x0FFFFFFF
+#define HSTORE_MAX_KEY_LEN 		0x1FFFFFFF
+#define HSTORE_MAX_VALUE_LEN 	0x1FFFFFFF
 
 typedef struct
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	uint32		size_;			/* flags and number of items in hstore */
+	/* header of hash or array hstore type */
 	/* array of HEntry follows */
 } HStore;
 
@@ -64,25 +63,6 @@ typedef struct
 #define HS_ISEMPTY(hsp_)		(VARSIZE(hsp_) <= VARHDRSZ)
 #define HS_ROOT_COUNT(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))
 #define HS_ROOT_IS_HASH(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_HSTORE))
-#define HS_SETCOUNT(hsp_,c_) 	((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION | ((hsp_)->size_ & ~HS_COUNT_MASK))
-
-
-#define HSHRDSIZE	(sizeof(HStore))
-#define CALCDATASIZE(x, lenstr) ( (x) * 2 * sizeof(HEntry) + HSHRDSIZE + (lenstr) )
-
-/* note multiple evaluations of x */
-#define ARRPTR(x)		( (HEntry*) ( (HStore*)(x) + 1 ) )
-#define STRPTR(x)		( (char*)(ARRPTR(x) + HS_ROOT_COUNT((HStore*)(x)) * 2) )
-
-/* note multiple/non evaluations */
-#define HS_KEYLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)]))
-
-/* ensure the varlena size of an existing hstore is correct */
-#define HS_FIXSIZE(hsp_,count_)											\
-	do {																\
-		int bl = (count_) ? HSE_ENDPOS(ARRPTR(hsp_)[2*(count_)-1]) : 0; \
-		SET_VARSIZE((hsp_), CALCDATASIZE((count_),bl));					\
-	} while (0)
 
 /* DatumGetHStoreP includes support for reading old-format hstore values */
 extern HStore *hstoreUpgrade(Datum orig);
@@ -230,6 +210,10 @@ typedef struct HStoreIterator
 
 	int						i;
 
+	/*
+	 * enum emembers should be freely OR'ed with HS_FLAG_ARRAY/HS_FLAG_HSTORE 
+	 * with possiblity of decoding. See optimization in HStoreIteratorGet()
+	 */
 	enum {
 		hsi_start 	= 0x00,
 		hsi_key		= 0x01,
