@@ -41,36 +41,71 @@ makeitem(char *str, int len, char flag)
 	return item;
 }
 
+static text *
+makeitemFromValue(HStoreValue *v, char flag)
+{
+	text		*item;
+
+	switch(v->type)
+	{
+		case hsvNullString:
+			item = makeitem(NULL, 0, NULLFLAG);
+			break;
+		case hsvString:
+			item = makeitem(v->string.val, v->string.len, flag);
+			break;
+		default:
+			Assert(v->type == hsvBinary);
+			do {
+				StringInfo	str;
+
+				str = makeStringInfo();
+				appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+				appendStringInfoCharMacro(str, flag);
+
+				hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
+				item = (text*)str->data;
+				SET_VARSIZE(item, str->len);
+			} while(0);
+	}
+
+	return item;
+}
+
+
 Datum
 gin_extract_hstore(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	int32	   *nentries = (int32 *) PG_GETARG_POINTER(1);
-	Datum	   *entries = NULL;
-	HEntry	   *hsent = ARRPTR(hs);
-	char	   *ptr = STRPTR(hs);
-	int			count = HS_COUNT(hs);
-	int			i;
+	HStore	   		*hs = PG_GETARG_HS(0);
+	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
+	Datum	   		*entries = NULL;
+	int				total = 2 * HS_ROOT_COUNT(hs);
+	int				i = 0, r;
+	HStoreIterator	*it;
+	HStoreValue		v;
+	bool			skipNested = false;
 
-	*nentries = 2 * count;
-	if (count)
-		entries = (Datum *) palloc(sizeof(Datum) * 2 * count);
-
-	for (i = 0; i < count; ++i)
+	if (total == 0)
 	{
-		text	   *item;
-
-		item = makeitem(HS_KEY(hsent, ptr, i), HS_KEYLEN(hsent, i),
-						KEYFLAG);
-		entries[2 * i] = PointerGetDatum(item);
-
-		if (HS_VALISNULL(hsent, i))
-			item = makeitem(NULL, 0, NULLFLAG);
-		else
-			item = makeitem(HS_VAL(hsent, ptr, i), HS_VALLEN(hsent, i),
-							VALFLAG);
-		entries[2 * i + 1] = PointerGetDatum(item);
+		*nentries = 0;
+		PG_RETURN_POINTER(NULL);
 	}
+
+	entries = (Datum *) palloc(sizeof(Datum) * total);
+
+	it = HStoreIteratorInit(VARDATA(hs));
+
+	while((r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
+	{
+		skipNested = true;
+
+		if (r == WHS_ELEM || r == WHS_KEY)
+			entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYFLAG));
+		else if (r == WHS_VALUE)
+			entries[i++] = PointerGetDatum(makeitemFromValue(&v, VALFLAG));
+	}
+
+	*nentries = i;
 
 	PG_RETURN_POINTER(entries);
 }

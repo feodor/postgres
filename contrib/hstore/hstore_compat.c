@@ -118,7 +118,7 @@ static int	hstoreValidOldFormat(HStore *hs);
 static int
 hstoreValidNewFormat(HStore *hs)
 {
-	int			count = HS_COUNT(hs);
+	int			count = HS_ROOT_COUNT(hs);
 	HEntry	   *entries = ARRPTR(hs);
 	int			buflen = (count) ? HSE_ENDPOS(entries[2 * (count) - 1]) : 0;
 	int			vsize = CALCDATASIZE(count, buflen);
@@ -272,8 +272,8 @@ hstoreUpgrade(Datum orig)
 			 */
 			if (writable)
 			{
-				HS_SETCOUNT(hs, HS_COUNT(hs));
-				HS_FIXSIZE(hs, HS_COUNT(hs));
+				HS_SETCOUNT(hs, HS_ROOT_COUNT(hs));
+				HS_FIXSIZE(hs, HS_ROOT_COUNT(hs));
 			}
 			return hs;
 		}
@@ -317,8 +317,8 @@ hstoreUpgrade(Datum orig)
 		 */
 		if (writable)
 		{
-			HS_SETCOUNT(hs, HS_COUNT(hs));
-			HS_FIXSIZE(hs, HS_COUNT(hs));
+			HS_SETCOUNT(hs, HS_ROOT_COUNT(hs));
+			HS_FIXSIZE(hs, HS_ROOT_COUNT(hs));
 		}
 		return hs;
 #else

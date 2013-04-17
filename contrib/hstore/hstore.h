@@ -62,9 +62,8 @@ typedef struct
 #define HS_COUNT_MASK			0x1FFFFFFF
 
 #define HS_ISEMPTY(hsp_)		(VARSIZE(hsp_) <= VARHDRSZ)
-#define HS_COUNT(hsp_) 			(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))		/* XXX */
-#define HS_ROOT_IS_HASH(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_HSTORE))	/* XXX */
-#define HS_COUNT(hsp_) 			(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))		/* XXX */
+#define HS_ROOT_COUNT(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))
+#define HS_ROOT_IS_HASH(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_HSTORE))
 #define HS_SETCOUNT(hsp_,c_) 	((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION | ((hsp_)->size_ & ~HS_COUNT_MASK))
 
 
@@ -73,7 +72,7 @@ typedef struct
 
 /* note multiple evaluations of x */
 #define ARRPTR(x)		( (HEntry*) ( (HStore*)(x) + 1 ) )
-#define STRPTR(x)		( (char*)(ARRPTR(x) + HS_COUNT((HStore*)(x)) * 2) )
+#define STRPTR(x)		( (char*)(ARRPTR(x) + HS_ROOT_COUNT((HStore*)(x)) * 2) )
 
 /* note multiple/non evaluations */
 #define HS_KEY(arr_,str_,i_) ((str_) + HSE_OFF((arr_)[2*(i_)]))
@@ -98,29 +97,6 @@ extern HStore *hstoreUpgrade(Datum orig);
 
 #define PG_GETARG_HS(x) DatumGetHStoreP(PG_GETARG_DATUM(x))
 
-
-/*
- * Pairs is a "decompressed" representation of one key/value pair.
- * The two strings are not necessarily null-terminated.
- */
-typedef struct Pairs
-{
-	char	   *key;
-	size_t		keylen;
-	enum		{
-		valText 			= 0,
-		valNull
-	}	valtype;
-	union {
-		struct {
-			char	   		*val;
-			size_t			vallen;
-		} text;
-	} val;
-	int32		anyvallen;
-	bool		needfree;		/* need to pfree the value? */
-} Pairs;
-
 typedef struct HStorePair HStorePair;
 typedef struct HStoreValue HStoreValue;
 
@@ -133,12 +109,12 @@ struct HStoreValue {
 		hsvBinary  /* binary form of hsvArray/hsvHash */
 	} type;
 
-	uint32		size; /* size of node (including subnodes) */
+	uint32		size; /* estimation size of node (including subnodes) */
 
 	union {
 		struct {
 			uint32		len;
-			char 		*val;
+			char 		*val; /* could be not null-terminated */
 		} string;
 
 		struct {
@@ -271,11 +247,6 @@ typedef struct HStoreIterator
 
 extern 	HStoreIterator*	HStoreIteratorInit(char *buffer);
 extern	int /* WHS_* */	HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested);
-
-extern size_t hstoreCheckKeyLen(size_t len);
-extern size_t hstoreCheckValLen(size_t len);
-
-extern int	hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen);
 
 #define HStoreContainsStrategyNumber	7
 #define HStoreExistsStrategyNumber		9

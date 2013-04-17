@@ -30,7 +30,7 @@ static bool	root_hash_decorated = false;
 
 static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
 
-size_t
+static size_t
 hstoreCheckKeyLen(size_t len)
 {
 	if (len > HSTORE_MAX_KEY_LEN)
@@ -40,7 +40,7 @@ hstoreCheckKeyLen(size_t len)
 	return len;
 }
 
-size_t
+static size_t
 hstoreCheckValLen(size_t len)
 {
 	if (len > HSTORE_MAX_VALUE_LEN)

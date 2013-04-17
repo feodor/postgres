@@ -25,50 +25,6 @@ HSTORE_POLLUTE(hstore_skeys, skeys);
 HSTORE_POLLUTE(hstore_svals, svals);
 HSTORE_POLLUTE(hstore_each, each);
 
-
-/*
- * We're often finding a sequence of keys in ascending order. The
- * "lowbound" parameter is used to cache lower bounds of searches
- * between calls, based on this assumption. Pass NULL for it for
- * one-off or unordered searches.
- */
-int
-hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen)
-{
-	HEntry	   *entries = ARRPTR(hs);
-	int			stopLow = lowbound ? *lowbound : 0;
-	int			stopHigh = HS_COUNT(hs);
-	int			stopMiddle;
-	char	   *base = STRPTR(hs);
-
-	while (stopLow < stopHigh)
-	{
-		int			difference;
-
-		stopMiddle = stopLow + (stopHigh - stopLow) / 2;
-
-		if (HS_KEYLEN(entries, stopMiddle) == keylen)
-			difference = memcmp(HS_KEY(entries, base, stopMiddle), key, keylen);
-		else
-			difference = (HS_KEYLEN(entries, stopMiddle) > keylen) ? 1 : -1;
-
-		if (difference == 0)
-		{
-			if (lowbound)
-				*lowbound = stopMiddle + 1;
-			return stopMiddle;
-		}
-		else if (difference < 0)
-			stopLow = stopMiddle + 1;
-		else
-			stopHigh = stopMiddle;
-	}
-
-	if (lowbound)
-		*lowbound = stopLow;
-	return -1;
-}
-
 static HStoreValue*
 arrayToHStoreSortedArray(ArrayType *a)
 {
@@ -248,7 +204,7 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 		plowbound = &lowbound;
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
-	 * increasing order to narrow the hstoreFindKey search; each search can
+	 * increasing order to narrow the findUncompressedHStoreValue search; each search can
 	 * start one entry past the previous "found" entry, or at the lower bound
 	 * of the last search.
 	 */
@@ -292,7 +248,7 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 		plowbound = &lowbound;
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
-	 * increasing order to narrow the hstoreFindKey search; each search can
+	 * increasing order to narrow the findUncompressedHStoreValue search; each search can
 	 * start one entry past the previous "found" entry, or at the lower bound
 	 * of the last search.
 	 */
@@ -904,7 +860,7 @@ hstore_akeys(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(a);
 	}
 
-	d = (Datum *) palloc(sizeof(Datum) * HS_COUNT(hs));
+	d = (Datum *) palloc(sizeof(Datum) * HS_ROOT_COUNT(hs));
 
 	it = HStoreIteratorInit(VARDATA(hs));
 
@@ -944,8 +900,8 @@ hstore_avals(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(a);
 	}
 
-	d = (Datum *) palloc(sizeof(Datum) * HS_COUNT(hs));
-	nulls = (bool *) palloc(sizeof(bool) * HS_COUNT(hs));
+	d = (Datum *) palloc(sizeof(Datum) * HS_ROOT_COUNT(hs));
+	nulls = (bool *) palloc(sizeof(bool) * HS_ROOT_COUNT(hs));
 
 	it = HStoreIteratorInit(VARDATA(hs));
 
@@ -971,7 +927,7 @@ hstore_avals(PG_FUNCTION_ARGS)
 static ArrayType *
 hstore_to_array_internal(HStore *hs, int ndims)
 {
-	int				count = HS_COUNT(hs);
+	int				count = HS_ROOT_COUNT(hs);
 	int				out_size[2] = {0, 2};
 	int				lb[2] = {1, 1};
 	Datum		   *out_datums;
@@ -1262,12 +1218,12 @@ hstore_contains(PG_FUNCTION_ARGS)
 	HStoreValue		*v, t;
 	bool			skipNested = false;
 
-	if (HS_COUNT(val) < HS_COUNT(tmpl) || HS_ROOT_IS_HASH(val) != HS_ROOT_IS_HASH(tmpl))
+	if (HS_ROOT_COUNT(val) < HS_ROOT_COUNT(tmpl) || HS_ROOT_IS_HASH(val) != HS_ROOT_IS_HASH(tmpl))
 		PG_RETURN_BOOL(false);
 
 	/*
 	 * we exploit the fact that keys in "tmpl" are in strictly increasing
-	 * order to narrow the hstoreFindKey search; each search can start one
+	 * order to narrow the findUncompressedHStoreValue search; each search can start one
 	 * entry past the previous "found" entry, or at the lower bound of the
 	 * search
 	 */
@@ -1453,9 +1409,9 @@ hstore_hash(PG_FUNCTION_ARGS)
 	 * be maintained by all the other code, but we make it explicit here.
 	 */
 	Assert(VARSIZE(hs) ==
-		   (HS_COUNT(hs) != 0 ?
-			CALCDATASIZE(HS_COUNT(hs),
-						 HSE_ENDPOS(ARRPTR(hs)[2 * HS_COUNT(hs) - 1])) :
+		   (HS_ROOT_COUNT(hs) != 0 ?
+			CALCDATASIZE(HS_ROOT_COUNT(hs),
+						 HSE_ENDPOS(ARRPTR(hs)[2 * HS_ROOT_COUNT(hs) - 1])) :
 			VARHDRSZ));
 
 	PG_FREE_IF_COPY(hs, 0);

@@ -105,6 +105,29 @@ Datum		ghstore_picksplit(PG_FUNCTION_ARGS);
 Datum		ghstore_union(PG_FUNCTION_ARGS);
 Datum		ghstore_same(PG_FUNCTION_ARGS);
 
+static int
+crc32_HStoreValue(HStoreValue *v)
+{
+	int	crc = 0;
+
+	if (v->type == hsvString)
+	{
+		crc = crc32_sz(v->string.val, v->string.len);
+	}
+	else if (v->type != hsvNullString)
+	{
+		StringInfo  str;
+
+		Assert(v->type == hsvBinary);
+		str = makeStringInfo();
+		hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
+
+		crc = crc32_sz(str->data, str->len);
+	}
+
+	return crc;
+}
+
 Datum
 ghstore_compress(PG_FUNCTION_ARGS)
 {
@@ -113,25 +136,28 @@ ghstore_compress(PG_FUNCTION_ARGS)
 
 	if (entry->leafkey)
 	{
-		GISTTYPE   *res = (GISTTYPE *) palloc0(CALCGTSIZE(0));
-		HStore	   *val = DatumGetHStoreP(entry->key);
-		HEntry	   *hsent = ARRPTR(val);
-		char	   *ptr = STRPTR(val);
-		int			count = HS_COUNT(val);
-		int			i;
+		GISTTYPE   		*res = (GISTTYPE *) palloc0(CALCGTSIZE(0));
+		HStore	   		*val = DatumGetHStoreP(entry->key);
 
 		SET_VARSIZE(res, CALCGTSIZE(0));
 
-		for (i = 0; i < count; ++i)
+		if (!HS_ISEMPTY(val))
 		{
-			int			h;
+			int				r;
+			HStoreIterator	*it = HStoreIteratorInit(VARDATA(val));
+			HStoreValue		v;
+			bool			skipNested = false;
 
-			h = crc32_sz((char *) HS_KEY(hsent, ptr, i), HS_KEYLEN(hsent, i));
-			HASH(GETSIGN(res), h);
-			if (!HS_VALISNULL(hsent, i))
+			while(res && (r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
 			{
-				h = crc32_sz((char *) HS_VAL(hsent, ptr, i), HS_VALLEN(hsent, i));
-				HASH(GETSIGN(res), h);
+				skipNested = true;
+	
+				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
+				{
+					int   h = crc32_HStoreValue(&v);
+
+					HASH(GETSIGN(res), h);
+				}
 			}
 		}
 
@@ -490,7 +516,6 @@ ghstore_picksplit(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(v);
 }
 
-
 Datum
 ghstore_consistent(PG_FUNCTION_ARGS)
 {
@@ -513,27 +538,27 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 	if (strategy == HStoreContainsStrategyNumber ||
 		strategy == HStoreOldContainsStrategyNumber)
 	{
-		HStore	   *query = PG_GETARG_HS(1);
-		HEntry	   *qe = ARRPTR(query);
-		char	   *qv = STRPTR(query);
-		int			count = HS_COUNT(query);
-		int			i;
+		HStore	   		*query = PG_GETARG_HS(1);
 
-		for (i = 0; res && i < count; ++i)
+		if (!HS_ISEMPTY(query))
 		{
-			int			crc = crc32_sz((char *) HS_KEY(qe, qv, i), HS_KEYLEN(qe, i));
+			int				r;
+			HStoreIterator	*it = HStoreIteratorInit(VARDATA(query));
+			HStoreValue		v;
+			bool			skipNested = false;
 
-			if (GETBIT(sign, HASHVAL(crc)))
+			while(res && (r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
 			{
-				if (!HS_VALISNULL(qe, i))
+				skipNested = true;
+
+				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
 				{
-					crc = crc32_sz((char *) HS_VAL(qe, qv, i), HS_VALLEN(qe, i));
-					if (!GETBIT(sign, HASHVAL(crc)))
+					int   crc = crc32_HStoreValue(&v);
+
+					if (GETBIT(sign, HASHVAL(crc)) == 0)
 						res = false;
 				}
 			}
-			else
-				res = false;
 		}
 	}
 	else if (strategy == HStoreExistsStrategyNumber)
