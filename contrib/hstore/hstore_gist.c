@@ -120,7 +120,7 @@ crc32_HStoreValue(HStoreValue *v)
 
 		Assert(v->type == hsvBinary);
 		str = makeStringInfo();
-		hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
+		hstoreToCString(str, v->binary.data, v->binary.len, HStoreStrictOutput);
 
 		crc = crc32_sz(str->data, str->len);
 	}

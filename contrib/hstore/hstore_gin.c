@@ -63,7 +63,7 @@ makeitemFromValue(HStoreValue *v, char flag)
 				appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 				appendStringInfoCharMacro(str, flag);
 
-				hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
+				hstoreToCString(str, v->binary.data, v->binary.len, HStoreStrictOutput);
 				item = (text*)str->data;
 				SET_VARSIZE(item, str->len);
 			} while(0);

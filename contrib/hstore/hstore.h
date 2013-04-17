@@ -75,13 +75,7 @@ typedef struct
 #define STRPTR(x)		( (char*)(ARRPTR(x) + HS_ROOT_COUNT((HStore*)(x)) * 2) )
 
 /* note multiple/non evaluations */
-#define HS_KEY(arr_,str_,i_) ((str_) + HSE_OFF((arr_)[2*(i_)]))
-#define HS_VAL(arr_,str_,i_) ((str_) + HSE_OFF((arr_)[2*(i_)+1]))
 #define HS_KEYLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)]))
-#define HS_VALLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)+1]))
-#define HS_VALISNULL(arr_,i_) (HSE_ISNULL((arr_)[2*(i_)+1]))
-#define HS_VALISSTRING(arr_,i_) (HSE_ISSTRING((arr_)[2*(i_)+1]))
-#define HS_VALISNEST(arr_,i_) (HSE_ISNEST((arr_)[2*(i_)+1]))
 
 /* ensure the varlena size of an existing hstore is correct */
 #define HS_FIXSIZE(hsp_,count_)											\
@@ -172,6 +166,7 @@ extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags,
 
 typedef enum HStoreOutputKind {
 	HStoreOutput,
+	HStoreStrictOutput,
 	JsonOutput,
 	JsonLooseOutput
 } HStoreOutputKind;

@@ -872,6 +872,59 @@ putEscapedString(StringInfo out, HStoreOutputKind kind, char *string, uint32 len
 	}
 }
 
+static bool
+needBrackets(int level, bool isArray, HStoreOutputKind kind)
+{
+	bool res;
+
+	if (level == 0)
+	{
+		switch(kind)
+		{
+			case HStoreOutput:
+				if ((isArray == true && root_array_decorated == false) || 
+					(isArray == false && root_hash_decorated == false))
+					res = false;
+				else
+					res = true;
+				break;
+			case HStoreStrictOutput:
+				res = isArray;
+				break;
+			default:
+				res = true;
+				break;
+		}
+	}
+	else
+	{
+		res = true;
+	}
+
+	return res;
+}
+
+static bool
+isArrayBrackets(HStoreOutputKind kind)
+{
+	bool res;
+
+	switch(kind)
+	{
+		case HStoreOutput:
+			res = array_brackets;
+			break;
+		case HStoreStrictOutput:
+			res = false;
+			break;
+		default:
+			res = true;
+	}
+
+	return res;
+}
+		
+
 char*
 hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 		  HStoreOutputKind kind)
@@ -905,9 +958,8 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 					appendBinaryStringInfo(out, ", ", 2);
 				first = true;
 
-				if (!(kind == HStoreOutput && level == 0 && root_array_decorated == false))
-					appendStringInfoCharMacro(out, 
-										  (kind == HStoreOutput && array_brackets == false) ? '{' : '[');
+				if (needBrackets(level, true, kind))
+					appendStringInfoChar(out, isArrayBrackets(kind) ? '[' : '{');
 				level++;
 				break;
 			case WHS_BEGIN_HASH:
@@ -915,7 +967,7 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 					appendBinaryStringInfo(out, ", ", 2);
 				first = true;
 
-				if (!(kind == HStoreOutput && level == 0 && root_hash_decorated == false))
+				if (needBrackets(level, false, kind))
 					appendStringInfoCharMacro(out, '{');
 
 				level++;
@@ -951,14 +1003,13 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 				break;
 			case WHS_END_ARRAY:
 				level--;
-				if (!(kind == HStoreOutput && level == 0 && root_array_decorated == false))
-					appendStringInfoCharMacro(out, 
-										 (kind == HStoreOutput && array_brackets == false) ? '}' : ']');
+				if (needBrackets(level, true, kind))
+					appendStringInfoChar(out, isArrayBrackets(kind) ? ']' : '}');
 				first = false;
 				break;
 			case WHS_END_HASH:
 				level--;
-				if (!(kind == HStoreOutput && level == 0 && root_hash_decorated == false))
+				if (needBrackets(level, false, kind))
 					appendStringInfoCharMacro(out, '}');
 				first = false;
 				break;
