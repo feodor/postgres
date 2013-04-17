@@ -654,6 +654,49 @@ select 'a,b, c,{1,2}'::hstore @> 'b,{1,2}';
  t
 (1 row)
 
+-- %>
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'n';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'a';
+ ?column? 
+----------
+ {"1"}
+(1 row)
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'b';
+  ?column?  
+------------
+ {"1", "2"}
+(1 row)
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'c';
+ ?column? 
+----------
+ "1"=>"2"
+(1 row)
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'd';
+    ?column?     
+-----------------
+ "1"=>{"2", "3"}
+(1 row)
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'd' %> '1';
+  ?column?  
+------------
+ {"2", "3"}
+(1 row)
+
+SELECT '1,2,3,{a,b}'::hstore %> '1';
+ ?column? 
+----------
+ {"1"}
+(1 row)
+
 --decoration
 SET hstore.array_brackets=false;
 SET hstore.root_array_decorated=false;

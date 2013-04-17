@@ -167,6 +167,52 @@ hstore_fetchval(PG_FUNCTION_ARGS)
 	}
 }
 
+PG_FUNCTION_INFO_V1(hstore_fetchval_hstore);
+Datum		hstore_fetchval_hstore(PG_FUNCTION_ARGS);
+Datum
+hstore_fetchval_hstore(PG_FUNCTION_ARGS)
+{
+	HStore	   	*hs = PG_GETARG_HS(0);
+	text	   	*key = PG_GETARG_TEXT_PP(1);
+	HStoreValue	*v = NULL;
+
+	if (!HS_ISEMPTY(hs))
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+
+	if (v == NULL || v->type == hsvNullString)
+	{
+		PG_RETURN_NULL();
+	}
+	else if (v->type == hsvString)
+	{
+		ToHStoreState	*state = NULL;
+		HStoreValue		*res;
+		HStore			*out;
+		int				r;
+
+		pushHStoreValue(&state, WHS_BEGIN_ARRAY, NULL);
+		pushHStoreValue(&state, WHS_ELEM, v);
+		res = pushHStoreValue(&state, WHS_END_ARRAY, NULL);
+
+		out = palloc(VARHDRSZ + res->size);
+		SET_VARSIZE(out, VARHDRSZ + res->size);
+		r = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, r + VARHDRSZ);
+
+		PG_RETURN_POINTER(out);
+	}
+	else
+	{
+		HStore			*out = palloc(VARHDRSZ + v->size);
+
+		SET_VARSIZE(out, VARHDRSZ + v->binary.len);
+		memcpy(VARDATA(out), v->binary.data, v->binary.len);
+
+		PG_RETURN_POINTER(out);
+	}
+}
+
 
 PG_FUNCTION_INFO_V1(hstore_exists);
 Datum		hstore_exists(PG_FUNCTION_ARGS);

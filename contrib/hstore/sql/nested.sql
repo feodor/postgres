@@ -146,6 +146,17 @@ select 'a,b, c,b'::hstore @> 'a,b';
 select 'a,b, c,{1,2}'::hstore @> 'a,{1,2}';
 select 'a,b, c,{1,2}'::hstore @> 'b,{1,2}';
 
+-- %>
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'n';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'a';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'b';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'c';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'd';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'd' %> '1';
+
+SELECT '1,2,3,{a,b}'::hstore %> '1';
+
 --decoration
 
 SET hstore.array_brackets=false;

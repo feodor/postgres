@@ -249,7 +249,7 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 					r.type = hsvBinary;
 					r.binary.data = data + INTALIGN(HSE_OFF(*v));
 					r.binary.len = HSE_LEN(*v) - (INTALIGN(HSE_OFF(*v)) - HSE_OFF(*v));
-					r.size = r.binary.len + sizeof(HEntry);
+					r.size = r.binary.len + 2*sizeof(HEntry);
 				}
 
 				return &r;
