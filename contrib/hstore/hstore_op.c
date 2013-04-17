@@ -198,6 +198,7 @@ hstore_fetchval_hstore(PG_FUNCTION_ARGS)
 		out = palloc(VARHDRSZ + res->size);
 		SET_VARSIZE(out, VARHDRSZ + res->size);
 		r = compressHStore(res, VARDATA(out));
+		Assert(r <= res->size);
 		SET_VARSIZE(out, r + VARHDRSZ);
 
 		PG_RETURN_POINTER(out);
@@ -206,6 +207,7 @@ hstore_fetchval_hstore(PG_FUNCTION_ARGS)
 	{
 		HStore			*out = palloc(VARHDRSZ + v->size);
 
+		Assert(v->type == hsvBinary);
 		SET_VARSIZE(out, VARHDRSZ + v->binary.len);
 		memcpy(VARDATA(out), v->binary.data, v->binary.len);
 
