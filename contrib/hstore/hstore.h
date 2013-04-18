@@ -211,7 +211,7 @@ typedef struct HStoreIterator
 	int						i;
 
 	/*
-	 * enum emembers should be freely OR'ed with HS_FLAG_ARRAY/HS_FLAG_HSTORE 
+	 * enum members should be freely OR'ed with HS_FLAG_ARRAY/HS_FLAG_HSTORE 
 	 * with possiblity of decoding. See optimization in HStoreIteratorGet()
 	 */
 	enum {
