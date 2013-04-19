@@ -152,30 +152,6 @@ makeHStorePair(string *key, HStoreValue *value) {
 	return v;
 }
 
-/*
- * See comments below, in result product
- */
-static HStoreValue*
-makeHStoreValueFinalArray(List *l)
-{
-	HStoreValue	*v = NULL;
-
-	if (list_length(l) == 1)
-	{
-		v = ((HStoreValue*)linitial(l));
-
-		if (v->type == hsvString)
-			v = makeHStoreValueArray(l);
-		else if (v->type == hsvNullString)
-			v = NULL;
-	}
-	else if (list_length(l) > 1)
-	{
-		v = makeHStoreValueArray(l);
-	}
-
-	return v;
-}
 %}
 
 /* BISON Declarations */
@@ -208,13 +184,15 @@ makeHStoreValueFinalArray(List *l)
 
 result: 
 	pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
-	/* 
-	 * hstore product produces reduce/reduce conflict althought we would like to make 'a,b'::hstore and
-	 * '{a,b}'::hstore etc the same. In other words it's desirable to make outer {} braces optional.
-	 * To make it we just remove root array if it contains only one non-scalar element, see 
-	 * makeHStoreValueFinalArray() definition. 
-	 */
-	| value_list					{ *((HStoreValue**)result) = makeHStoreValueFinalArray($1); }
+	| value_list					{ *((HStoreValue**)result) = makeHStoreValueArray($1); }
+	| value							{ 	
+										if ($1->type == hsvString)
+											*((HStoreValue**)result) = makeHStoreValueArray(lappend(NIL, $1));
+										else if ($1->type == hsvNullString)
+											*((HStoreValue**)result) = NULL;
+										else
+											*((HStoreValue**)result) = $1;
+									}
 	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
 
@@ -222,6 +200,8 @@ hstore:
 	'{' pair_list '}'				{ $$ = makeHStoreValuePairs($2); }
 	| '{' value_list '}'			{ $$ = makeHStoreValueArray($2); }
 	| '[' value_list ']'			{ $$ = makeHStoreValueArray($2); }
+	| '{' value '}'					{ $$ = makeHStoreValueArray(lappend(NIL, $2)); }
+	| '[' value ']'					{ $$ = makeHStoreValueArray(lappend(NIL, $2)); }
 	| '{' '}'						{ $$ = makeHStoreValueString(NULL, NULL); }
 	| '[' ']'						{ $$ = makeHStoreValueString(NULL, NULL); }
 	;
@@ -233,7 +213,7 @@ value:
 	;
 
 value_list:
-	value							{ $$ = lappend(NIL, $1); } 
+	value ',' value					{ $$ = lappend(lappend(NIL, $1), $3); } 
 	| value_list ',' value			{ $$ = lappend($1, $3); } 
 	;
 
