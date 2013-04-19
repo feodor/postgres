@@ -1024,6 +1024,16 @@ SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{4,5}';
  {"five"}
 (1 row)
 
+--cast 
+SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::text)::hstore AS err;
+ERROR:  bad hstore representation
+DETAIL:  syntax error, unexpected STRING_P, expecting '}' or ',' at end of input
+SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::json)::hstore AS ok;
+                           ok                           
+--------------------------------------------------------
+ "f2"=>{"f3"=>"1"}, "f4"=>{"f5"=>"99", "f6"=>"stringy"}
+(1 row)
+
 --decoration
 SET hstore.array_brackets=false;
 SET hstore.root_array_decorated=false;
