@@ -186,6 +186,44 @@ SELECT 'a,b, c,{1,2}, NULL'::hstore -> 2;
 SELECT 'a,b, c,{1,2}, NULL'::hstore -> 1;
 SELECT 'a,b, c,{1,2}, NULL'::hstore -> 0;
 
+-- #>
+
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{0}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{a}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c, 0}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c, 1}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c, 2}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c, 3}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c, -1}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c, -2}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c, -3}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{c, -4}';
+
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #> '{0}';
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #> '{3}';
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #> '{4}';
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #> '{4,5}';
+
+-- #%>
+
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{0}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{a}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c, 0}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c, 1}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c, 2}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c, 3}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c, -1}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c, -2}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c, -3}';
+SELECT 'a=>b, c=>{1,2,3}'::hstore #%> '{c, -4}';
+
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{0}';
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{3}';
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{4}';
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{4,5}';
+
 --decoration
 
 SET hstore.array_brackets=false;

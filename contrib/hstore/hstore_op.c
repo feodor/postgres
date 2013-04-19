@@ -166,6 +166,142 @@ hstore_fetchval_n(PG_FUNCTION_ARGS)
 		PG_RETURN_TEXT_P(out);
 }	
 
+static bool
+h_atoi(char *c, int l, int *acc)
+{
+	bool	negative = false;
+	char 	*p = c;
+
+	*acc = 0;
+
+	while(isspace(*p) && p - c < l)
+		p++;
+
+	if (p - c >= l)
+		return false;
+
+	if (*p == '-')
+	{
+		negative = true;
+		p++;
+	}
+	else if (*p == '+')
+	{
+		p++;
+	}
+
+	if (p - c >= l)
+		return false;
+
+
+	while(p - c < l)
+	{
+		if (!isdigit(*p))
+			return false;
+
+		*acc *= 10;
+		*acc += (*p - '0');
+		p++;
+	}
+
+	if (negative)
+		*acc = - *acc;
+
+	return true;
+}
+
+static HStoreValue*
+hstoreDeepFetch(HStore *in, ArrayType *path)
+{
+	HStoreValue			*v = NULL;
+	static HStoreValue 	init /* could be returned */;
+	Datum				*path_elems;
+	bool				*path_nulls;
+	int					path_len, i;
+
+	Assert(ARR_ELEMTYPE(path) == TEXTOID);
+
+	if (ARR_NDIM(path) > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+				 errmsg("wrong number of array subscripts")));
+
+	if (HS_ROOT_COUNT(in) == 0)
+		return NULL;
+
+	deconstruct_array(path, TEXTOID, -1, false, 'i',
+					  &path_elems, &path_nulls, &path_len);
+
+	init.type = hsvBinary;
+	init.size = VARSIZE(in);
+	init.binary.data = VARDATA(in);
+	init.binary.len = VARSIZE_ANY_EXHDR(in);
+
+	v = &init;
+
+	if (path_len == 0)
+		return v;
+
+	for(i=0; v != NULL && i<path_len; i++)
+	{
+		uint32	header;
+
+		if (v->type != hsvBinary || path_nulls[i])
+			return NULL;
+
+		header = *(uint32*)v->binary.data;
+
+		if (header & HS_FLAG_HSTORE)
+		{
+			v = findUncompressedHStoreValue(v->binary.data, HS_FLAG_HSTORE,
+											NULL, VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]));
+		}
+		else if (header & HS_FLAG_ARRAY)
+		{
+			int ith;
+
+			if (h_atoi(VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]), &ith) == false)
+				return NULL;
+
+			if (ith < 0)
+			{
+				if (-ith > (int)(header & HS_COUNT_MASK))
+					return NULL;
+				else
+					ith = ((int)(header & HS_COUNT_MASK)) + ith;
+			}
+			else
+			{
+				if (ith >= (int)(header & HS_COUNT_MASK))
+					return NULL;
+			}
+
+			v = getHStoreValue(v->binary.data, HS_FLAG_ARRAY, ith);
+		}
+		else
+		{
+			elog(PANIC,"wrong header type: %08x", header);
+		}
+	}
+
+	return v;
+}
+		
+PG_FUNCTION_INFO_V1(hstore_fetchval_path);
+Datum		hstore_fetchval_path(PG_FUNCTION_ARGS);
+Datum
+hstore_fetchval_path(PG_FUNCTION_ARGS)
+{
+	HStore	   	*hs = PG_GETARG_HS(0);
+	ArrayType	*path = PG_GETARG_ARRAYTYPE_P(1);
+	text		*out;
+
+	if ((out = HStoreValueToText(hstoreDeepFetch(hs, path))) == NULL)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_TEXT_P(out);
+}
+
 static HStore *
 HStoreValueToHStore(HStoreValue *v)
 {
@@ -221,7 +357,7 @@ hstore_fetchval_hstore(PG_FUNCTION_ARGS)
 	if ((out = HStoreValueToHStore(v)) == NULL)
 		PG_RETURN_NULL();
 	else
-		PG_RETURN_TEXT_P(out);
+		PG_RETURN_POINTER(out);
 }
 
 PG_FUNCTION_INFO_V1(hstore_fetchval_n_hstore);
@@ -240,7 +376,22 @@ hstore_fetchval_n_hstore(PG_FUNCTION_ARGS)
 	if ((out = HStoreValueToHStore(v)) == NULL)
 		PG_RETURN_NULL();
 	else
-		PG_RETURN_TEXT_P(out);
+		PG_RETURN_POINTER(out);
+}
+
+PG_FUNCTION_INFO_V1(hstore_fetchval_path_hstore);
+Datum		hstore_fetchval_path_hstore(PG_FUNCTION_ARGS);
+Datum
+hstore_fetchval_path_hstore(PG_FUNCTION_ARGS)
+{
+	HStore	   	*hs = PG_GETARG_HS(0);
+	ArrayType	*path = PG_GETARG_ARRAYTYPE_P(1);
+	HStore		*out;
+
+	if ((out = HStoreValueToHStore(hstoreDeepFetch(hs, path))) == NULL)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_POINTER(out);
 }
 
 PG_FUNCTION_INFO_V1(hstore_exists);
