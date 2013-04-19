@@ -80,7 +80,7 @@ Datum		hstore_in(PG_FUNCTION_ARGS);
 Datum
 hstore_in(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_POINTER(hstoreDump(parseHStore(PG_GETARG_CSTRING(0))));
+	PG_RETURN_POINTER(hstoreDump(parseHStore(PG_GETARG_CSTRING(0), -1, false)));
 }
 
 static void
@@ -1178,6 +1178,17 @@ hstore_to_json(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(out);
 }
 
+PG_FUNCTION_INFO_V1(json_to_hstore);
+Datum		json_to_hstore(PG_FUNCTION_ARGS);
+Datum
+json_to_hstore(PG_FUNCTION_ARGS)
+{
+	text	*json = PG_GETARG_TEXT_PP(0);
+
+	PG_RETURN_POINTER(hstoreDump(parseHStore(VARDATA_ANY(json), VARSIZE_ANY_EXHDR(json), true)));
+}
+
+
 void _PG_init(void);
 void
 _PG_init(void)
@@ -1220,5 +1231,4 @@ _PG_init(void)
 		NULL,
 		NULL
 	);
-
 }

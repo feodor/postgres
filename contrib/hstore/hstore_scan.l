@@ -12,6 +12,8 @@ static int	scanbuflen;
 static void addstring(bool init, char *s, int l);
 static void addchar(bool init, char s);
 
+static bool	inputJSON = false;
+
 %}
 
 %option 8bit
@@ -27,7 +29,7 @@ static void addchar(bool init, char s);
 %x xQUOTED
 %x xNONQUOTED
 
-any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\]
+any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 
 
 %%
@@ -35,6 +37,18 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\]
 <INITIAL>[\,\{\}\[\]]			{ return *yytext; }
 
 <INITIAL>\=\>					{ return DELIMITER_P; }
+
+<INITIAL>\:						{ 
+									if (inputJSON)
+									{
+										return DELIMITER_P;
+									}
+									else
+									{
+										addchar(true, ':');
+										BEGIN xNONQUOTED;
+									}
+								}
 
 <INITIAL>[ \t\n\r\f]+			{ /* ignore */ }
 
@@ -68,7 +82,7 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\]
 									return STRING_P;
 								}
 
-<xNONQUOTED>({any}|[\>\"])+		{ 
+<xNONQUOTED>({any}|[\>\"\:])+		{ 
 									addstring(false, yytext, yyleng); 
 								}
 
@@ -152,9 +166,10 @@ yyerror(const char *message)
  * Called before any actual parsing is done
  */
 static void
-hstore_scanner_init(const char *str)
+hstore_scanner_init(const char *str, int slen)
 {
-	Size	slen = strlen(str);
+	if (slen <= 0)
+		slen = strlen(str);
 
 	/*
 	 * Might be left over after ereport()
@@ -224,10 +239,12 @@ addchar(bool init, char s) {
 }
 
 HStoreValue* 
-parseHStore(const char *str) {
+parseHStore(const char *str, int len, bool json) {
 	HStoreValue		*parseresult;
 
-	hstore_scanner_init(str);
+	inputJSON = json;
+
+	hstore_scanner_init(str, len);
 
 	if (hstore_yyparse((void*)&parseresult) != 0)
 		hstore_yyerror("bugus input");

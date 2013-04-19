@@ -58,3 +58,11 @@ CREATE OPERATOR #%> (
 	PROCEDURE = fetchval_hstore
 );
 
+CREATE FUNCTION json_to_hstore(json)
+RETURNS hstore
+AS 'MODULE_PATHNAME','json_to_hstore'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE CAST (json AS hstore)
+WITH FUNCTION json_to_hstore(json);
+

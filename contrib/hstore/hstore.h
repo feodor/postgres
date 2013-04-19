@@ -116,7 +116,7 @@ struct HStorePair {
 }; 
 
 
-extern HStoreValue* parseHStore(const char *str);
+extern HStoreValue* parseHStore(const char *str, int len, bool json);
 
 /*
  * hstore support functios

@@ -365,6 +365,14 @@ CREATE OPERATOR #= (
 	PROCEDURE = populate_record
 );
 
+CREATE FUNCTION json_to_hstore(json)
+RETURNS hstore
+AS 'MODULE_PATHNAME','json_to_hstore'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE CAST (json AS hstore)
+WITH FUNCTION json_to_hstore(json);
+
 -- btree support
 
 CREATE FUNCTION hstore_eq(hstore,hstore)

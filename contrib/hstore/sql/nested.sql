@@ -224,6 +224,11 @@ SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{3}';
 SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{4}';
 SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{4,5}';
 
+--cast 
+
+SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::text)::hstore AS err;
+SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::json)::hstore AS ok;
+
 --decoration
 
 SET hstore.array_brackets=false;
