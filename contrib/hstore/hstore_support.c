@@ -271,6 +271,62 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 	return NULL;
 }
 
+HStoreValue*
+getHStoreValue(char *buffer, uint32 flags, uint32 i)
+{
+	uint32				header = *(uint32*)buffer;
+	static HStoreValue	r;
+	HEntry				*array, *e;
+	char				*data;
+
+	Assert((header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE)) != (HS_FLAG_ARRAY | HS_FLAG_HSTORE));
+
+	if (i >= (header & HS_COUNT_MASK))
+		return NULL;
+
+	array = (HEntry*)(buffer + sizeof(header));
+
+	if (flags & HS_FLAG_ARRAY & header)
+	{
+		e = array + i;
+		data = (char*)(array + (header & HS_COUNT_MASK));
+	}
+	else if (flags & HS_FLAG_HSTORE & header)
+	{
+		e = array + i * 2 + 1;
+		data = (char*)(array + (header & HS_COUNT_MASK) * 2);
+	}
+	else
+	{
+		return NULL;
+	}
+
+	if (HSE_ISSTRING(*e))
+	{
+		if (HSE_ISNULL(*e))
+		{
+			r.type = hsvNullString;
+			r.size = sizeof(HEntry);
+		}
+		else
+		{
+			r.type = hsvString;
+			r.string.val = data + HSE_OFF(*e);
+			r.string.len = HSE_LEN(*e);
+			r.size = sizeof(HEntry) + r.string.len;
+		}
+	}
+	else
+	{
+		r.type = hsvBinary;
+		r.binary.data = data + INTALIGN(HSE_OFF(*e));
+		r.binary.len = HSE_LEN(*e) - (INTALIGN(HSE_OFF(*e)) - HSE_OFF(*e));
+		r.size = r.binary.len + 2*sizeof(HEntry);
+	}
+
+	return &r;
+}
+
 /****************************************************************************
  *                         Walk on tree representation of hstore            * 
  ****************************************************************************/

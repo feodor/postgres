@@ -135,60 +135,50 @@ hstore_fetchval(PG_FUNCTION_ARGS)
 	HStore	   	*hs = PG_GETARG_HS(0);
 	text	   	*key = PG_GETARG_TEXT_PP(1);
 	HStoreValue	*v = NULL;
+	text		*out;
 
 	if (!HS_ISEMPTY(hs))
 		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
 										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
-	if (v == NULL || v->type == hsvNullString)
-	{
+	if ((out = HStoreValueToText(v)) == NULL)
 		PG_RETURN_NULL();
-	}
-	else if (v->type == hsvString)
-	{
-		PG_RETURN_TEXT_P(cstring_to_text_with_len(v->string.val, v->string.len));
-	}
 	else
-	{
-		text	   	*out;
-		StringInfo	str;
-
-		Assert(v->type == hsvBinary);
-
-		str = makeStringInfo();
-		appendBinaryStringInfo(str, "    ", 4);
-
-		hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
-
-		out = (text*)str->data;
-		SET_VARSIZE(out, str->len /* included VARHDRSZ */);
-
 		PG_RETURN_TEXT_P(out);
-	}
 }
 
-PG_FUNCTION_INFO_V1(hstore_fetchval_hstore);
-Datum		hstore_fetchval_hstore(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(hstore_fetchval_n);
+Datum		hstore_fetchval_n(PG_FUNCTION_ARGS);
 Datum
-hstore_fetchval_hstore(PG_FUNCTION_ARGS)
+hstore_fetchval_n(PG_FUNCTION_ARGS)
 {
 	HStore	   	*hs = PG_GETARG_HS(0);
-	text	   	*key = PG_GETARG_TEXT_PP(1);
-	HStoreValue	*v = NULL;
+	int	   		i = PG_GETARG_INT32(1);
+	HStoreValue	*v;
+	text		*out;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
-										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, i);
+
+	if ((out = HStoreValueToText(v)) == NULL)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_TEXT_P(out);
+}	
+
+static HStore *
+HStoreValueToHStore(HStoreValue *v)
+{
+	HStore			*out;
 
 	if (v == NULL || v->type == hsvNullString)
 	{
-		PG_RETURN_NULL();
+		out = NULL;
 	}
 	else if (v->type == hsvString)
 	{
 		ToHStoreState	*state = NULL;
 		HStoreValue		*res;
-		HStore			*out;
 		int				r;
 
 		pushHStoreValue(&state, WHS_BEGIN_ARRAY, NULL);
@@ -200,21 +190,58 @@ hstore_fetchval_hstore(PG_FUNCTION_ARGS)
 		r = compressHStore(res, VARDATA(out));
 		Assert(r <= res->size);
 		SET_VARSIZE(out, r + VARHDRSZ);
-
-		PG_RETURN_POINTER(out);
 	}
 	else
 	{
-		HStore			*out = palloc(VARHDRSZ + v->size);
+		out = palloc(VARHDRSZ + v->size);
 
 		Assert(v->type == hsvBinary);
 		SET_VARSIZE(out, VARHDRSZ + v->binary.len);
 		memcpy(VARDATA(out), v->binary.data, v->binary.len);
-
-		PG_RETURN_POINTER(out);
 	}
+
+	return out;
 }
 
+PG_FUNCTION_INFO_V1(hstore_fetchval_hstore);
+Datum		hstore_fetchval_hstore(PG_FUNCTION_ARGS);
+Datum
+hstore_fetchval_hstore(PG_FUNCTION_ARGS)
+{
+	HStore	   	*hs = PG_GETARG_HS(0);
+	text	   	*key = PG_GETARG_TEXT_PP(1);
+	HStoreValue	*v = NULL;
+	HStore		*out;
+
+	if (!HS_ISEMPTY(hs))
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+
+
+	if ((out = HStoreValueToHStore(v)) == NULL)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_TEXT_P(out);
+}
+
+PG_FUNCTION_INFO_V1(hstore_fetchval_n_hstore);
+Datum		hstore_fetchval_n_hstore(PG_FUNCTION_ARGS);
+Datum
+hstore_fetchval_n_hstore(PG_FUNCTION_ARGS)
+{
+	HStore	   	*hs = PG_GETARG_HS(0);
+	int	   		i = PG_GETARG_INT32(1);
+	HStoreValue	*v = NULL;
+	HStore		*out;
+
+	if (!HS_ISEMPTY(hs))
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, i);
+
+	if ((out = HStoreValueToHStore(v)) == NULL)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_TEXT_P(out);
+}
 
 PG_FUNCTION_INFO_V1(hstore_exists);
 Datum		hstore_exists(PG_FUNCTION_ARGS);

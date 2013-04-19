@@ -143,6 +143,7 @@ extern int compareHStoreValue(HStoreValue *a, HStoreValue *b);
 extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
 												uint32 *lowbound, char *key, uint32 keylen);
 
+extern HStoreValue* getHStoreValue(char *buffer, uint32 flags, uint32 i);
 
 typedef enum HStoreOutputKind {
 	HStoreOutput,

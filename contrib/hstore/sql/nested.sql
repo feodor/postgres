@@ -1,15 +1,15 @@
 
-select 'ff => {a=>12, b=>16}'::hstore;
+SELECT 'ff => {a=>12, b=>16}'::hstore;
 
-select 'ff => {a=>12, b=>16}, qq=> 123'::hstore;
+SELECT 'ff => {a=>12, b=>16}, qq=> 123'::hstore;
 
-select 'aa => {a,aaa}, qq=>{ a=>12, b=>16 , c=> { c1, c2}, d=>{d1=>d1, d2=>d2, d1=>d3} }'::hstore;
+SELECT 'aa => {a,aaa}, qq=>{ a=>12, b=>16 , c=> { c1, c2}, d=>{d1=>d1, d2=>d2, d1=>d3} }'::hstore;
 
-select '"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore;
+SELECT '"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore;
 
-select '"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{c3},{c4=>4}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore;
+SELECT '"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{c3},{c4=>4}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore;
 
-select 'ff => {a,aaa}'::hstore;
+SELECT 'ff => {a,aaa}'::hstore;
 
 --test optional outer braces
 SELECT	'a=>1'::hstore;
@@ -64,7 +64,7 @@ SELECT	hstore_to_json('{a}');
 SELECT	hstore_to_json('');
 SELECT	hstore_to_json('{}');
 
-select hstore_to_json('"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{c3},{c4=>4}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore);
+SELECT hstore_to_json('"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{c3},{c4=>4}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore);
 
 --
 
@@ -85,66 +85,66 @@ SELECT populate_record(v, 'i=>2, h=>{b=>3}, a=>{7,8,9}'::hstore) FROM testtype v
 
 --complex delete
 
-select 'b=>{a,c}'::hstore - 'a'::text;
-select 'b=>{a,c}, a=>1'::hstore - 'a'::text;
-select 'b=>{a,c}, a=>[2,3]'::hstore - 'a'::text;
-select 'b=>{a,c}, a=>[2,3]'::hstore - 'a'::text;
-select '[2,3,a]'::hstore - 'a'::text;
-select '[a,2,3,a]'::hstore - 'a'::text;
-select '[a,a]'::hstore - 'a'::text;
-select '[a]'::hstore - 'a'::text;
-select 'a=>1'::hstore - 'a'::text;
-select ''::hstore - 'a'::text;
+SELECT 'b=>{a,c}'::hstore - 'a'::text;
+SELECT 'b=>{a,c}, a=>1'::hstore - 'a'::text;
+SELECT 'b=>{a,c}, a=>[2,3]'::hstore - 'a'::text;
+SELECT 'b=>{a,c}, a=>[2,3]'::hstore - 'a'::text;
+SELECT '[2,3,a]'::hstore - 'a'::text;
+SELECT '[a,2,3,a]'::hstore - 'a'::text;
+SELECT '[a,a]'::hstore - 'a'::text;
+SELECT '[a]'::hstore - 'a'::text;
+SELECT 'a=>1'::hstore - 'a'::text;
+SELECT ''::hstore - 'a'::text;
 
-select 'a, 1 , b,2, c,3'::hstore - ARRAY['d','b'];
+SELECT 'a, 1 , b,2, c,3'::hstore - ARRAY['d','b'];
 
-select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v'::hstore;
-select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v=>23'::hstore;
-select 'a=>{1,2}, v=>23, b=>c'::hstore - 'v=>{1,2}'::hstore;
-select 'a=>{1,2}, v=>23, b=>c'::hstore - 'a=>{1,2}'::hstore;
-select 'a, {1,2}, v, 23, b, c'::hstore - 'v'::hstore;
-select 'a, {1,2}, v, 23, b, c'::hstore - 'v=>23'::hstore;
-select 'a, {1,2}, v, 23, b, c'::hstore - 'v,23'::hstore;
-select 'a, {1,2}, v, 23, b, c'::hstore - 'v,{1,2}'::hstore;
+SELECT 'a=>{1,2}, v=>23, b=>c'::hstore - 'v'::hstore;
+SELECT 'a=>{1,2}, v=>23, b=>c'::hstore - 'v=>23'::hstore;
+SELECT 'a=>{1,2}, v=>23, b=>c'::hstore - 'v=>{1,2}'::hstore;
+SELECT 'a=>{1,2}, v=>23, b=>c'::hstore - 'a=>{1,2}'::hstore;
+SELECT 'a, {1,2}, v, 23, b, c'::hstore - 'v'::hstore;
+SELECT 'a, {1,2}, v, 23, b, c'::hstore - 'v=>23'::hstore;
+SELECT 'a, {1,2}, v, 23, b, c'::hstore - 'v,23'::hstore;
+SELECT 'a, {1,2}, v, 23, b, c'::hstore - 'v,{1,2}'::hstore;
 
 --joining
 
-select 'aa=>1 , b=>2, cq=>3'::hstore || 'cq,l, b,g, fg,f, 1,2'::hstore;
-select 'aa,1 , b,2, cq,3'::hstore || 'cq,l, b,g, fg,f, 1,2'::hstore;
+SELECT 'aa=>1 , b=>2, cq=>3'::hstore || 'cq,l, b,g, fg,f, 1,2'::hstore;
+SELECT 'aa,1 , b,2, cq,3'::hstore || 'cq,l, b,g, fg,f, 1,2'::hstore;
 
 --slice
-select slice_array(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
-select slice_array(hstore 'aa,1, b,2, c,3', ARRAY['g','h','i']);
-select slice_array(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
-select slice_array(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
-select slice_array(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
+SELECT slice_array(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
+SELECT slice_array(hstore 'aa,1, b,2, c,3', ARRAY['g','h','i']);
+SELECT slice_array(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
+SELECT slice_array(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
+SELECT slice_array(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
 
-select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
-select slice(hstore 'aa,1, b,2, c,3', ARRAY['g','h','i']);
-select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
-select slice(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
-select slice(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
+SELECT slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
+SELECT slice(hstore 'aa,1, b,2, c,3', ARRAY['g','h','i']);
+SELECT slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['b','c']);
+SELECT slice(hstore 'aa,1, b,2, c,3', ARRAY['b','c']);
+SELECT slice(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
 
 --to array
-select %% 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL';
-select %% 'aa,1, cq,l, b,g, fg,NULL';
-select hstore_to_matrix( 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL');
-select hstore_to_matrix( 'aa,1, cq,l, b,g, fg,NULL');
+SELECT %% 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL';
+SELECT %% 'aa,1, cq,l, b,g, fg,NULL';
+SELECT hstore_to_matrix( 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL');
+SELECT hstore_to_matrix( 'aa,1, cq,l, b,g, fg,NULL');
 
 
 --contains
-select 'a=>b'::hstore @> 'a=>b, c=>b';
-select 'a=>b, c=>b'::hstore @> 'a=>b';
-select 'a=>{1,2}, c=>b'::hstore @> 'a=>{1,2}';
-select 'a=>{2,1}, c=>b'::hstore @> 'a=>{1,2}';
-select 'a=>{1=>2}, c=>b'::hstore @> 'a=>{1,2}';
-select 'a=>{2=>1}, c=>b'::hstore @> 'a=>{1,2}';
-select 'a=>{1=>2}, c=>b'::hstore @> 'a=>{1=>2}';
-select 'a=>{2=>1}, c=>b'::hstore @> 'a=>{1=>2}';
-select 'a,b'::hstore @> 'a,b, c,b';
-select 'a,b, c,b'::hstore @> 'a,b';
-select 'a,b, c,{1,2}'::hstore @> 'a,{1,2}';
-select 'a,b, c,{1,2}'::hstore @> 'b,{1,2}';
+SELECT 'a=>b'::hstore @> 'a=>b, c=>b';
+SELECT 'a=>b, c=>b'::hstore @> 'a=>b';
+SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{1,2}';
+SELECT 'a=>{2,1}, c=>b'::hstore @> 'a=>{1,2}';
+SELECT 'a=>{1=>2}, c=>b'::hstore @> 'a=>{1,2}';
+SELECT 'a=>{2=>1}, c=>b'::hstore @> 'a=>{1,2}';
+SELECT 'a=>{1=>2}, c=>b'::hstore @> 'a=>{1=>2}';
+SELECT 'a=>{2=>1}, c=>b'::hstore @> 'a=>{1=>2}';
+SELECT 'a,b'::hstore @> 'a,b, c,b';
+SELECT 'a,b, c,b'::hstore @> 'a,b';
+SELECT 'a,b, c,{1,2}'::hstore @> 'a,{1,2}';
+SELECT 'a,b, c,{1,2}'::hstore @> 'b,{1,2}';
 
 -- %>
 
@@ -156,6 +156,35 @@ SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'd';
 SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'd' %> '1';
 
 SELECT '1,2,3,{a,b}'::hstore %> '1';
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 5;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 4;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 3;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 2;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 1;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 0;
+
+SELECT 'a,b, c,{1,2}, NULL'::hstore %> 5;
+SELECT 'a,b, c,{1,2}, NULL'::hstore %> 4;
+SELECT 'a,b, c,{1,2}, NULL'::hstore %> 3;
+SELECT 'a,b, c,{1,2}, NULL'::hstore %> 2;
+SELECT 'a,b, c,{1,2}, NULL'::hstore %> 1;
+SELECT 'a,b, c,{1,2}, NULL'::hstore %> 0;
+
+-- ->
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> 5;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> 4;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> 3;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> 2;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> 1;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> 0;
+
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> 5;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> 4;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> 3;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> 2;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> 1;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> 0;
 
 --decoration
 
