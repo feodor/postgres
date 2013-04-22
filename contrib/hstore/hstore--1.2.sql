@@ -139,6 +139,42 @@ CREATE OPERATOR ? (
 	JOIN = contjoinsel
 );
 
+CREATE FUNCTION isexists(hstore,int)
+RETURNS bool
+AS 'MODULE_PATHNAME','hstore_exists_idx'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE FUNCTION exist(hstore,int)
+RETURNS bool
+AS 'MODULE_PATHNAME','hstore_exists_idx'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR ? (
+	LEFTARG = hstore,
+	RIGHTARG = int,
+	PROCEDURE = exist,
+	RESTRICT = contsel,
+	JOIN = contjoinsel
+);
+
+CREATE FUNCTION isexists(hstore,text[])
+RETURNS bool
+AS 'MODULE_PATHNAME','hstore_exists_path'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE FUNCTION exist(hstore,text[])
+RETURNS bool
+AS 'MODULE_PATHNAME','hstore_exists_path'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR ? (
+	LEFTARG = hstore,
+	RIGHTARG = text[],
+	PROCEDURE = exist,
+	RESTRICT = contsel,
+	JOIN = contjoinsel
+);
+
 CREATE FUNCTION exists_any(hstore,text[])
 RETURNS bool
 AS 'MODULE_PATHNAME','hstore_exists_any'

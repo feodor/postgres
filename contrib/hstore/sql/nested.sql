@@ -186,6 +186,20 @@ SELECT 'a,b, c,{1,2}, NULL'::hstore -> 2;
 SELECT 'a,b, c,{1,2}, NULL'::hstore -> 1;
 SELECT 'a,b, c,{1,2}, NULL'::hstore -> 0;
 
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> -6;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> -5;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> -4;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> -3;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> -2;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore -> -1;
+
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> -6;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> -5;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> -4;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> -3;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> -2;
+SELECT 'a,b, c,{1,2}, NULL'::hstore -> -1;
+
 -- #>
 
 SELECT 'a=>b, c=>{1,2,3}'::hstore #> '{0}';
@@ -223,6 +237,55 @@ SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{0}';
 SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{3}';
 SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{4}';
 SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore #%> '{4,5}';
+
+-- ?
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? 5;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? 4;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? 3;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? 2;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? 1;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? 0;
+
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? 5;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? 4;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? 3;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? 2;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? 1;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? 0;
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? -6;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? -5;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? -4;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? -3;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? -2;
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore ? -1;
+
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? -6;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? -5;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? -4;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? -3;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? -2;
+SELECT 'a,b, c,{1,2}, NULL'::hstore ? -1;
+
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{0}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{a}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{b}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, 0}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, 1}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, 2}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, 3}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, -1}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, -2}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, -3}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, -4}'::text[];
+SELECT 'a=>b, c=>{1,2,3}'::hstore ? '{c, -5}'::text[];
+
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore ? '{0}'::text[];
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore ? '{3}'::text[];
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore ? '{4}'::text[];
+SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore ? '{4,5}'::text[];
 
 --cast 
 
