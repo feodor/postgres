@@ -102,3 +102,14 @@ CREATE OPERATOR ? (
 	JOIN = contjoinsel
 );
 
+CREATE FUNCTION delete_path(hstore,text[])
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_delete_path'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR / (
+	LEFTARG = hstore,
+	RIGHTARG = text[],
+	PROCEDURE = delete_path
+);
+

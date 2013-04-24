@@ -287,6 +287,55 @@ SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore ? '{3}'::text[];
 SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore ? '{4}'::text[];
 SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore ? '{4,5}'::text[];
 
+--deep delete
+
+SELECT 'a=>1'::hstore / '{x}';
+SELECT 'a=>1'::hstore / '{a}';
+SELECT 'a=>1, b=>2, c=>3'::hstore / '{x}';
+SELECT 'a=>1, b=>2, c=>3'::hstore / '{a}';
+SELECT 'a=>1, b=>2, c=>3'::hstore / '{b}';
+SELECT 'a=>1, b=>2, c=>3'::hstore / '{c}';
+SELECT 'a=>1'::hstore / '{x,1}';
+SELECT 'a=>1'::hstore / '{a,1}';
+SELECT 'a=>1, b=>2, c=>3'::hstore / '{x,1}';
+SELECT 'a=>1, b=>2, c=>3'::hstore / '{a,1}';
+SELECT 'a=>1, b=>2, c=>3'::hstore / '{b,1}';
+SELECT 'a=>1, b=>2, c=>3'::hstore / '{c,1}';
+
+SELECT '[a]'::hstore / '{2}';
+SELECT '[a]'::hstore / '{1}';
+SELECT '[a]'::hstore / '{0}';
+SELECT '[a]'::hstore / '{-1}';
+SELECT '[a]'::hstore / '{-2}';
+
+SELECT '[a,b,c]'::hstore / '{3}';
+SELECT '[a,b,c]'::hstore / '{2}';
+SELECT '[a,b,c]'::hstore / '{1}';
+SELECT '[a,b,c]'::hstore / '{0}';
+SELECT '[a,b,c]'::hstore / '{-1}';
+SELECT '[a,b,c]'::hstore / '{-2}';
+SELECT '[a,b,c]'::hstore / '{-3}';
+SELECT '[a,b,c]'::hstore / '{-4}';
+
+SELECT '[a,b,c]'::hstore / '{0,0}';
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{x}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{a}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{b}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{c}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d}';
+
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{b, 0}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{b, -1}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{b, -1}' / '{b, -1}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{c, 1}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{c, 2}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, -2}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, 1}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, 0}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, 0}' / '{d, 1, 0}';
+SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, 0}' / '{d, 1, 0}' / '{d, 1, 0}';
+
 --cast 
 
 SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::text)::hstore AS err;

@@ -807,20 +807,184 @@ hstore_delete_hstore(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(out);
 }
 
-/*
+static HStoreValue*
+deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_len,
+			 ToHStoreState	**st, int level)
+{
+	HStoreValue	v, *res = NULL;
+	int			r;
+
+	r = HStoreIteratorGet(it, &v, false);
+
+	if (r == WHS_BEGIN_ARRAY)
+	{
+		int 	skipIdx, i;
+		uint32	n = v.array.nelems;
+
+		skipIdx = n;
+		if (level >= path_len || 
+			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &skipIdx) == false)
+		{
+			skipIdx = n;
+		}
+		else if (skipIdx < 0)
+		{
+			if (-skipIdx > n)
+				skipIdx = n;
+			else
+				skipIdx = n + skipIdx;
+		}
+
+		if (skipIdx > n)
+			skipIdx = n;
+
+		if (skipIdx == 0 && n == 1)
+		{
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_ELEM);
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_END_ARRAY);
+			return NULL;
+		}
+
+		pushHStoreValue(st, r, &v);
+
+		for(i=0; i<skipIdx; i++) {
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_ELEM);
+			res = pushHStoreValue(st, r, &v);
+		}
+
+		if (level >= path_len || skipIdx == n) {
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_END_ARRAY);
+			res = pushHStoreValue(st, r, &v);
+			return res;
+		}
+
+		if (level == path_len - 1)
+		{
+			/* last level in path, skip all elem */
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_ELEM);
+		}
+		else
+		{
+			res = deletePathDo(it, path_elems, path_nulls, path_len, st, level + 1);
+		}
+
+		for(i = skipIdx + 1; i<n; i++) {
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_ELEM);
+			res = pushHStoreValue(st, r, &v);
+		}
+
+		r = HStoreIteratorGet(it, &v, true);
+		Assert(r == WHS_END_ARRAY);
+		res = pushHStoreValue(st, r, &v);
+	}
+	else if (r == WHS_BEGIN_HASH)
+	{
+		int			i;
+		uint32		n = v.hash.npairs;
+		HStoreValue	k;
+		bool		done = false;
+
+		if (n == 1 && level == path_len - 1)
+		{
+			r = HStoreIteratorGet(it, &k, false);
+			Assert(r == WHS_KEY);
+
+			if ( k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+				 memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
+			{
+				r = HStoreIteratorGet(it, &v, true);
+				Assert(r == WHS_VALUE);
+				r = HStoreIteratorGet(it, &v, true);
+				Assert(r == WHS_END_HASH);
+				return NULL;
+			}
+
+			pushHStoreValue(st, WHS_BEGIN_HASH, &v);
+			pushHStoreValue(st, WHS_KEY, &k);
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_VALUE);
+			pushHStoreValue(st, r, &v);
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_END_HASH);
+			return pushHStoreValue(st, r, &v);
+		}
+
+		pushHStoreValue(st, WHS_BEGIN_HASH, &v);
+
+		for(i=0; i<n; i++)
+		{
+			r = HStoreIteratorGet(it, &k, false);
+			Assert(r == WHS_KEY);
+
+			if (done == false && k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+				memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
+			{
+				done = true;
+
+				if (level == path_len - 1)
+				{
+					r = HStoreIteratorGet(it, &v, true);
+					Assert(r == WHS_VALUE);
+				}
+				else
+				{
+					pushHStoreValue(st, r, &k);
+					res = deletePathDo(it, path_elems, path_nulls, path_len, st, level + 1);
+					if (res == NULL)
+					{
+						v.type = hsvNullString;
+						pushHStoreValue(st, WHS_VALUE, &v);
+					}
+				}
+
+				continue;
+			}
+
+			pushHStoreValue(st, r, &k);
+			r = HStoreIteratorGet(it, &v, true);
+			Assert(r == WHS_VALUE);
+			pushHStoreValue(st, r, &v);
+		}
+
+		r = HStoreIteratorGet(it, &v, true);
+		Assert(r == WHS_END_HASH);
+		res = pushHStoreValue(st, r, &v);
+	}
+	else if (r == WHS_ELEM || r == WHS_VALUE) /* just a string or null */
+	{
+		pushHStoreValue(st, r, &v);
+		res = (void*)0x01; /* dummy value */
+	}
+	else
+	{
+		elog(PANIC, "impossible state");
+	}
+
+	return res;
+}
+
+
 PG_FUNCTION_INFO_V1(hstore_delete_path);
 Datum		hstore_delete_path(PG_FUNCTION_ARGS);
 Datum
 hstore_delete_path(PG_FUNCTION_ARGS)
 {
-	HStore	   	*in = PG_GETARG_HS(0);
-	HStore		*out = palloc(sizeof(VARSIZE(in)));
-	ArrayType	*path = PG_GETARG_ARRAYTYPE_P(1);
-	HStoreValue	*v = NULL;
-	Datum		*path_elems;
-	bool		*path_nulls;
-	int			path_len, i;
-
+	HStore	   		*in = PG_GETARG_HS(0);
+	HStore			*out = palloc(VARSIZE(in));
+	ArrayType		*path = PG_GETARG_ARRAYTYPE_P(1);
+	HStoreValue		*res = NULL;
+	Datum			*path_elems;
+	bool			*path_nulls;
+	int				path_len;
+	HStoreIterator	*it;
+	ToHStoreState	*st = NULL;
+ 
 	Assert(ARR_ELEMTYPE(path) == TEXTOID);
 
 	if (ARR_NDIM(path) > 1)
@@ -843,49 +1007,25 @@ hstore_delete_path(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(out);
 	}
 
-	for(i=0; v != NULL && i<path_len; i++)
+	it = HStoreIteratorInit(VARDATA(in));
+
+	res = deletePathDo(&it, path_elems, path_nulls, path_len, &st, 0); 
+
+	if (res == NULL)
 	{
-		uint32	header;
-
-		if (v->type != hsvBinary || path_nulls[i])
-			return NULL;
-
-		header = *(uint32*)v->binary.data;
-
-		if (header & HS_FLAG_HSTORE)
-		{
-			v = findUncompressedHStoreValue(v->binary.data, HS_FLAG_HSTORE,
-											NULL, VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]));
-		}
-		else if (header & HS_FLAG_ARRAY)
-		{
-			int ith;
-
-			if (h_atoi(VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]), &ith) == false)
-				return NULL;
-
-			if (ith < 0)
-			{
-				if (-ith > (int)(header & HS_COUNT_MASK))
-					return NULL;
-				else
-					ith = ((int)(header & HS_COUNT_MASK)) + ith;
-			}
-			else
-			{
-				if (ith >= (int)(header & HS_COUNT_MASK))
-					return NULL;
-			}
-
-			v = getHStoreValue(v->binary.data, HS_FLAG_ARRAY, ith);
-		}
-		else
-		{
-			elog(PANIC,"wrong header type: %08x", header);
-		}
+		SET_VARSIZE(out, VARHDRSZ);
 	}
+	else
+	{
+		int				sz;
+
+		sz = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, sz + VARHDRSZ);
+	}
+
+	PG_RETURN_POINTER(out);
 }
-*/
+
 
 PG_FUNCTION_INFO_V1(hstore_concat);
 Datum		hstore_concat(PG_FUNCTION_ARGS);
