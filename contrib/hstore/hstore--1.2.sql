@@ -216,6 +216,11 @@ RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_delete'
 LANGUAGE C STRICT IMMUTABLE;
 
+CREATE FUNCTION delete(hstore,int)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_delete_idx'
+LANGUAGE C STRICT IMMUTABLE;
+
 CREATE FUNCTION delete(hstore,text[])
 RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_delete_array'
@@ -234,6 +239,12 @@ LANGUAGE C STRICT IMMUTABLE;
 CREATE OPERATOR - (
 	LEFTARG = hstore,
 	RIGHTARG = text,
+	PROCEDURE = delete
+);
+
+CREATE OPERATOR - (
+	LEFTARG = hstore,
+	RIGHTARG = int,
 	PROCEDURE = delete
 );
 

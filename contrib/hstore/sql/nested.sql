@@ -336,6 +336,26 @@ SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, 0}'
 SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, 0}' / '{d, 1, 0}';
 SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, 0}' / '{d, 1, 0}' / '{d, 1, 0}';
 
+-- delete(int)
+
+SELECT '[a,b,c]'::hstore - 3;
+SELECT '[a,b,c]'::hstore - 2;
+SELECT '[a,b,c]'::hstore - 1;
+SELECT '[a,b,c]'::hstore - 0;
+SELECT '[a,b,c]'::hstore - -1;
+SELECT '[a,b,c]'::hstore - -2;
+SELECT '[a,b,c]'::hstore - -3;
+SELECT '[a,b,c]'::hstore - -4;
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - 3;
+SELECT 'a=>1, b=>2, c=>3'::hstore - 2;
+SELECT 'a=>1, b=>2, c=>3'::hstore - 1;
+SELECT 'a=>1, b=>2, c=>3'::hstore - 0;
+SELECT 'a=>1, b=>2, c=>3'::hstore - -1;
+SELECT 'a=>1, b=>2, c=>3'::hstore - -2;
+SELECT 'a=>1, b=>2, c=>3'::hstore - -3;
+SELECT 'a=>1, b=>2, c=>3'::hstore - -4;
+
 --cast 
 
 SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::text)::hstore AS err;

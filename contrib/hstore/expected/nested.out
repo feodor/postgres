@@ -1590,6 +1590,103 @@ SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore / '{d, 1, 0}'
  "a"=>"1", "b"=>{"1", "2"}, "c"=>{"1"=>"2"}, "d"=>{"1"=>NULL}, "n"=>NULL
 (1 row)
 
+-- delete(int)
+SELECT '[a,b,c]'::hstore - 3;
+    ?column?     
+-----------------
+ {"a", "b", "c"}
+(1 row)
+
+SELECT '[a,b,c]'::hstore - 2;
+  ?column?  
+------------
+ {"a", "b"}
+(1 row)
+
+SELECT '[a,b,c]'::hstore - 1;
+  ?column?  
+------------
+ {"a", "c"}
+(1 row)
+
+SELECT '[a,b,c]'::hstore - 0;
+  ?column?  
+------------
+ {"b", "c"}
+(1 row)
+
+SELECT '[a,b,c]'::hstore - -1;
+  ?column?  
+------------
+ {"a", "b"}
+(1 row)
+
+SELECT '[a,b,c]'::hstore - -2;
+  ?column?  
+------------
+ {"a", "c"}
+(1 row)
+
+SELECT '[a,b,c]'::hstore - -3;
+  ?column?  
+------------
+ {"b", "c"}
+(1 row)
+
+SELECT '[a,b,c]'::hstore - -4;
+    ?column?     
+-----------------
+ {"a", "b", "c"}
+(1 row)
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - 3;
+           ?column?           
+------------------------------
+ "a"=>"1", "b"=>"2", "c"=>"3"
+(1 row)
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - 2;
+      ?column?      
+--------------------
+ "a"=>"1", "b"=>"2"
+(1 row)
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - 1;
+      ?column?      
+--------------------
+ "a"=>"1", "c"=>"3"
+(1 row)
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - 0;
+      ?column?      
+--------------------
+ "b"=>"2", "c"=>"3"
+(1 row)
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - -1;
+      ?column?      
+--------------------
+ "a"=>"1", "b"=>"2"
+(1 row)
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - -2;
+      ?column?      
+--------------------
+ "a"=>"1", "c"=>"3"
+(1 row)
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - -3;
+      ?column?      
+--------------------
+ "b"=>"2", "c"=>"3"
+(1 row)
+
+SELECT 'a=>1, b=>2, c=>3'::hstore - -4;
+           ?column?           
+------------------------------
+ "a"=>"1", "b"=>"2", "c"=>"3"
+(1 row)
+
 --cast 
 SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::text)::hstore AS err;
 ERROR:  bad hstore representation

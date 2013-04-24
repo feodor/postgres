@@ -113,3 +113,14 @@ CREATE OPERATOR / (
 	PROCEDURE = delete_path
 );
 
+CREATE FUNCTION delete(hstore,int)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_delete_idx'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR - (
+	LEFTARG = hstore,
+	RIGHTARG = int,
+	PROCEDURE = delete
+);
+

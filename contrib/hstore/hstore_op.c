@@ -592,7 +592,6 @@ hstore_delete(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(out);
 }
 
-
 PG_FUNCTION_INFO_V1(hstore_delete_array);
 Datum		hstore_delete_array(PG_FUNCTION_ARGS);
 Datum
@@ -1021,6 +1020,78 @@ hstore_delete_path(PG_FUNCTION_ARGS)
 
 		sz = compressHStore(res, VARDATA(out));
 		SET_VARSIZE(out, sz + VARHDRSZ);
+	}
+
+	PG_RETURN_POINTER(out);
+}
+
+PG_FUNCTION_INFO_V1(hstore_delete_idx);
+Datum		hstore_delete_idx(PG_FUNCTION_ARGS);
+Datum
+hstore_delete_idx(PG_FUNCTION_ARGS)
+{
+	HStore	   		*in = PG_GETARG_HS(0);
+	int	   			idx = PG_GETARG_INT32(1);
+	HStore	   		*out = palloc(VARSIZE(in));
+	ToHStoreState	*toState = NULL;
+	HStoreIterator	*it;
+	uint32			r, i = 0, n;
+	HStoreValue		v, *res = NULL;
+
+	if (HS_ISEMPTY(in))
+	{
+		memcpy(out, in, VARSIZE(in));
+		PG_RETURN_POINTER(out);
+	}
+
+	it = HStoreIteratorInit(VARDATA(in));
+
+	r = HStoreIteratorGet(&it, &v, false);
+	if (r == WHS_BEGIN_ARRAY)
+		n = v.array.nelems;
+	else
+		n = v.hash.npairs;
+
+	if (idx < 0)
+	{
+		if (-idx > n)
+			idx = n;
+		else
+			idx = n + idx;
+	}
+
+	if (idx >= n)
+	{
+		memcpy(out, in, VARSIZE(in));
+		PG_RETURN_POINTER(out);
+	}
+
+	pushHStoreValue(&toState, r, &v);
+
+	while((r = HStoreIteratorGet(&it, &v, true)) != 0)
+	{
+		if (r == WHS_ELEM || r == WHS_KEY)
+		{
+			if (i++ == idx)
+			{
+				if (r == WHS_KEY)
+					HStoreIteratorGet(&it, &v, true); /* skip value */
+				continue;
+			}
+		}
+
+		res = pushHStoreValue(&toState, r, &v);
+	}
+
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+					   (res->type == hsvHash && res->hash.npairs == 0) )
+	{
+		SET_VARSIZE(out, VARHDRSZ);
+	}
+	else
+	{
+		r = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, r + VARHDRSZ);
 	}
 
 	PG_RETURN_POINTER(out);
