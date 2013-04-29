@@ -1184,11 +1184,10 @@ PortalRunUtility(Portal portal, Node *utilityStmt, bool isTopLevel,
 
 	ProcessUtility(utilityStmt,
 				   portal->sourceText,
+				   isTopLevel ? PROCESS_UTILITY_TOPLEVEL : PROCESS_UTILITY_QUERY,
 				   portal->portalParams,
 				   dest,
-				   completionTag,
-				   isTopLevel ?
-					PROCESS_UTILITY_TOPLEVEL : PROCESS_UTILITY_QUERY);
+				   completionTag);
 
 	/* Some utility statements may change context on us */
 	MemoryContextSwitchTo(PortalGetHeapMemory(portal));
@@ -1603,7 +1602,7 @@ DoPortalRunFetch(Portal portal,
 	forward = (fdirection == FETCH_FORWARD);
 
 	/*
-	 * Zero count means to re-fetch the current row, if any (per SQL92)
+	 * Zero count means to re-fetch the current row, if any (per SQL)
 	 */
 	if (count == 0)
 	{

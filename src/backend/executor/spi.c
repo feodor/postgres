@@ -2093,10 +2093,10 @@ _SPI_execute_plan(SPIPlanPtr plan, ParamListInfo paramLI,
 
 				ProcessUtility(stmt,
 							   plansource->query_string,
+							   PROCESS_UTILITY_QUERY,
 							   paramLI,
 							   dest,
-							   completionTag,
-							   PROCESS_UTILITY_QUERY);
+							   completionTag);
 
 				/* Update "processed" if stmt returned tuples */
 				if (_SPI_current->tuptable)
@@ -2121,13 +2121,6 @@ _SPI_execute_plan(SPIPlanPtr plan, ParamListInfo paramLI,
 					 */
 					if (((CreateTableAsStmt *) stmt)->is_select_into)
 						res = SPI_OK_SELINTO;
-				}
-				else if (IsA(stmt, RefreshMatViewStmt))
-				{
-					Assert(strncmp(completionTag,
-								   "REFRESH MATERIALIZED VIEW ", 23) == 0);
-					_SPI_current->processed = strtoul(completionTag + 23,
-													  NULL, 10);
 				}
 				else if (IsA(stmt, CopyStmt))
 				{
