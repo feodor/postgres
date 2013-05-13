@@ -1678,6 +1678,42 @@ hstore_svals(PG_FUNCTION_ARGS)
 }
 
 
+PG_FUNCTION_INFO_V1(hstore_hvals);
+Datum		hstore_hvals(PG_FUNCTION_ARGS);
+Datum
+hstore_hvals(PG_FUNCTION_ARGS)
+{
+	FuncCallContext 	*funcctx;
+	SetReturningState	*st;
+	int					r;
+	HStoreValue			v;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		funcctx = SRF_FIRSTCALL_INIT();
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	st = (SetReturningState *) funcctx->user_fctx;
+
+	while(st->it && (r = HStoreIteratorGet(&st->it, &v, true)) != 0)
+	{
+		if (r == WHS_VALUE || r == WHS_ELEM)
+		{
+			HStore	   *item = HStoreValueToHStore(&v);
+	
+			if (item == NULL)
+				SRF_RETURN_NEXT_NULL(funcctx);
+			else
+				SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
+		}
+	}
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+
 PG_FUNCTION_INFO_V1(hstore_each);
 Datum		hstore_each(PG_FUNCTION_ARGS);
 Datum

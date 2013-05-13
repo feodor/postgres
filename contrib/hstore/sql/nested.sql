@@ -361,6 +361,8 @@ SELECT 'a=>1, b=>2, c=>3'::hstore - -4;
 SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::text)::hstore AS err;
 SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::json)::hstore AS ok;
 
+SELECT q->'tags' FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore) AS q;
+
 --decoration
 
 SET hstore.array_brackets=false;
