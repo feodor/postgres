@@ -212,7 +212,7 @@ addstring(bool init, char *s, int l) {
 	if (s && l) {
 		while(scanstring.len + l + 1 >= scanstring.total) {
 			scanstring.total *= 2;
-			scanstring.val=realloc(scanstring.val, scanstring.total);
+			scanstring.val = repalloc(scanstring.val, scanstring.total);
 		}
 
 		memcpy(scanstring.val+scanstring.len, s, l);
@@ -231,7 +231,7 @@ addchar(bool init, char s) {
 	if (s != '\0') {
 		if(scanstring.len + 2 >= scanstring.total) {
 			scanstring.total*=2;
-			scanstring.val=realloc(scanstring.val, scanstring.total);
+			scanstring.val=repalloc(scanstring.val, scanstring.total);
 		}
 
 		scanstring.val[ scanstring.len++ ] = s;
