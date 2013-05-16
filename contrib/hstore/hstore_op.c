@@ -1384,6 +1384,191 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(out);
 }
 
+static HStoreValue*
+modifyPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_len,
+			 ToHStoreState  **st, int level, HStoreValue *newval)
+{
+	HStoreValue v, *res = NULL;
+	int			r;
+
+	r = HStoreIteratorGet(it, &v, false);
+
+	if (r == WHS_BEGIN_ARRAY)
+	{
+		int		idx, i;
+		uint32	n = v.array.nelems;
+
+		idx = n;
+		if (level >= path_len ||
+			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &idx) == false)
+		{
+			idx = n;
+		}
+		else if (idx < 0)
+		{
+			if (-idx > n)
+				idx = n;
+			else
+				idx = n + idx;
+		}
+
+		if (idx > n)
+			idx = n;
+
+		pushHStoreValue(st, r, &v);
+
+		for(i=0; i<n; i++)
+		{
+			if (i == idx && level < path_len)
+			{
+				if (level == path_len - 1)
+				{
+					r = HStoreIteratorGet(it, &v, true); /* skip */
+					Assert(r == WHS_ELEM);
+					res = pushHStoreValue(st, r, newval);
+				}
+				else
+				{
+					res = modifyPathDo(it, path_elems, path_nulls, path_len, st, level + 1, newval);
+				}
+			}
+			else
+			{
+				r = HStoreIteratorGet(it, &v, true);
+				Assert(r == WHS_ELEM);
+				res = pushHStoreValue(st, r, &v);
+			}
+		}
+
+		r = HStoreIteratorGet(it, &v, true);
+		Assert(r == WHS_END_ARRAY);
+		res = pushHStoreValue(st, r, &v);
+	}
+	else if (r == WHS_BEGIN_HASH)
+	{
+		int			i;
+		uint32		n = v.hash.npairs;
+		HStoreValue	k;
+		bool		done = false;
+
+		pushHStoreValue(st, WHS_BEGIN_HASH, &v);
+
+		for(i=0; i<n; i++)
+		{
+			r = HStoreIteratorGet(it, &k, false);
+			Assert(r == WHS_KEY);
+			res = pushHStoreValue(st, r, &k);
+
+			if (done == false && level < path_len && k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+				memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
+			{
+				if (level == path_len - 1)
+				{
+					r = HStoreIteratorGet(it, &v, true); /* skip */
+					Assert(r == WHS_VALUE);
+					res = pushHStoreValue(st, r, newval);
+				}
+				else
+				{
+					res = modifyPathDo(it, path_elems, path_nulls, path_len, st, level + 1, newval);
+				}
+			}
+			else
+			{
+				r = HStoreIteratorGet(it, &v, true);
+				Assert(r == WHS_VALUE);
+				res = pushHStoreValue(st, r, &v);
+			}
+		}
+
+		r = HStoreIteratorGet(it, &v, true);
+		Assert(r == WHS_END_HASH);
+		res = pushHStoreValue(st, r, &v);
+	}
+	else if (r == WHS_ELEM || r == WHS_VALUE)
+	{
+		pushHStoreValue(st, r, &v);
+		res = (void*)0x01; /* dummy value */
+	}
+	else
+	{
+		elog(PANIC, "impossible state");
+	}
+
+	return res;
+}
+
+PG_FUNCTION_INFO_V1(hstore_modify);
+Datum		hstore_modify(PG_FUNCTION_ARGS);
+Datum
+hstore_modify(PG_FUNCTION_ARGS)
+{
+	HStore	   		*in = PG_GETARG_HS(0);
+	ArrayType		*path = PG_GETARG_ARRAYTYPE_P(1);
+	HStore	   		*newval = PG_GETARG_HS(2);
+	HStore			*out = palloc(VARSIZE(in) + VARSIZE(newval));
+	HStoreValue		*res = NULL;
+	HStoreValue		value;
+	Datum			*path_elems;
+	bool			*path_nulls;
+	int				path_len;
+	HStoreIterator	*it;
+	ToHStoreState	*st = NULL;
+ 
+	Assert(ARR_ELEMTYPE(path) == TEXTOID);
+
+	if (ARR_NDIM(path) > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+				 errmsg("wrong number of array subscripts")));
+
+	if (HS_ROOT_COUNT(in) == 0)
+	{
+		memcpy(out, in, VARSIZE(in));
+		PG_RETURN_POINTER(out);
+	}
+
+	deconstruct_array(path, TEXTOID, -1, false, 'i',
+					  &path_elems, &path_nulls, &path_len);
+
+	if (path_len == 0)
+	{
+		memcpy(out, in, VARSIZE(in));
+		PG_RETURN_POINTER(out);
+	}
+
+	if (HS_ROOT_COUNT(newval) == 0)
+	{
+		value.type = hsvNullString;
+		value.size = sizeof(HEntry);
+	}
+	else
+	{
+		value.type = hsvBinary;
+		value.binary.data = VARDATA(newval);
+		value.binary.len = VARSIZE_ANY_EXHDR(newval);
+		value.size = value.binary.len + sizeof(HEntry);
+	}
+
+	it = HStoreIteratorInit(VARDATA(in));
+
+	res = modifyPathDo(&it, path_elems, path_nulls, path_len, &st, 0, &value); 
+
+	if (res == NULL)
+	{
+		SET_VARSIZE(out, VARHDRSZ);
+	}
+	else
+	{
+		int				sz;
+
+		sz = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, sz + VARHDRSZ);
+	}
+
+	PG_RETURN_POINTER(out);
+}
+
 
 PG_FUNCTION_INFO_V1(hstore_akeys);
 Datum		hstore_akeys(PG_FUNCTION_ARGS);

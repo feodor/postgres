@@ -124,6 +124,12 @@ CREATE OPERATOR - (
 	PROCEDURE = delete
 );
 
+CREATE FUNCTION modify(hstore,text[],hstore)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_modify'
+LANGUAGE C STRICT IMMUTABLE;
+
+
 CREATE FUNCTION hvals(hstore)
 RETURNS setof hstore
 AS 'MODULE_PATHNAME','hstore_hvals'

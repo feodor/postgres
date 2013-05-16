@@ -356,6 +356,13 @@ SELECT 'a=>1, b=>2, c=>3'::hstore - -2;
 SELECT 'a=>1, b=>2, c=>3'::hstore - -3;
 SELECT 'a=>1, b=>2, c=>3'::hstore - -4;
 
+--modify
+
+SELECT modify('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{n}', '{1,2,3}');
+SELECT modify('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{b,-1}', '{1,2,3}');
+SELECT modify('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d,1,0}', '{1,2,3}');
+
+
 --cast 
 
 SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::text)::hstore AS err;

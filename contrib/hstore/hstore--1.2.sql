@@ -266,6 +266,11 @@ CREATE OPERATOR / (
 	PROCEDURE = delete_path
 );
 
+CREATE FUNCTION modify(hstore,text[],hstore)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_modify'
+LANGUAGE C STRICT IMMUTABLE;
+
 CREATE FUNCTION hs_concat(hstore,hstore)
 RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_concat'
