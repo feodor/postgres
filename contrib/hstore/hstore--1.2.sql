@@ -282,6 +282,11 @@ CREATE OPERATOR || (
 	PROCEDURE = hs_concat
 );
 
+CREATE FUNCTION concat_path(hstore,text[],hstore)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_deep_concat'
+LANGUAGE C STRICT IMMUTABLE;
+
 CREATE FUNCTION hs_contains(hstore,hstore)
 RETURNS bool
 AS 'MODULE_PATHNAME','hstore_contains'

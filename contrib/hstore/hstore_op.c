@@ -1097,49 +1097,28 @@ hstore_delete_idx(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(out);
 }
 
-
-PG_FUNCTION_INFO_V1(hstore_concat);
-Datum		hstore_concat(PG_FUNCTION_ARGS);
-Datum
-hstore_concat(PG_FUNCTION_ARGS)
+static HStoreValue *
+IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toState)
 {
-	HStore	   		*hs1 = PG_GETARG_HS(0);
-	HStore	   		*hs2 = PG_GETARG_HS(1);
-	HStore	   		*out = palloc(VARSIZE(hs1) + VARSIZE(hs2));
-	HStoreIterator	*it1, *it2;
-	ToHStoreState	*toState = NULL;
-	uint32			r1, r2;
+	uint32			r1, r2, rk1, rk2;
 	HStoreValue		v1, v2, *res = NULL;
-	bool			isHash1, isHash2;
 
-	if (HS_ISEMPTY(hs1))
-	{
-		memcpy(out, hs2, VARSIZE(hs2));
-		PG_RETURN_POINTER(out);
-	}
-	else if (HS_ISEMPTY(hs2))
-	{
-		memcpy(out, hs1, VARSIZE(hs1));
-		PG_RETURN_POINTER(out);
-	}
+	r1 = rk1 = HStoreIteratorGet(it1, &v1, false);
+	r2 = rk2 = HStoreIteratorGet(it2, &v2, false);
 
-	it1 = HStoreIteratorInit(VARDATA(hs1));
-	r1 = HStoreIteratorGet(&it1, &v1, false);
-	isHash1 = (v1.type == hsvArray) ? false : true;
-
-	it2 = HStoreIteratorInit(VARDATA(hs2));
-	r2 = HStoreIteratorGet(&it2, &v2, false);
-	isHash2 = (v2.type == hsvArray) ? false : true;
-
-	res = pushHStoreValue(&toState, r1, &v1);
-
-	if (isHash1 == true && isHash2 == true)
+	if (rk1 == WHS_BEGIN_HASH && rk2 == WHS_BEGIN_HASH)
 	{
 		bool			fin2 = false,
 						keyIsDef = false;
 
-		while((r1 = HStoreIteratorGet(&it1, &v1, true)) != 0)
+		res = pushHStoreValue(toState, r1, &v1);
+
+		for(;;)
 		{
+			r1 = HStoreIteratorGet(it1, &v1, true);
+
+			Assert(r1 == WHS_KEY || r1 == WHS_VALUE || r1 == WHS_END_HASH);
+
 			if (r1 == WHS_KEY && fin2 == false)
 			{
 				int diff  = 1;
@@ -1147,7 +1126,7 @@ hstore_concat(PG_FUNCTION_ARGS)
 				if (keyIsDef)
 					r2 = WHS_KEY;
 
-				while(keyIsDef || (r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+				while(keyIsDef || (r2 = HStoreIteratorGet(it2, &v2, true)) != 0)
 				{
 					if (r2 != WHS_KEY)
 						continue;
@@ -1159,10 +1138,10 @@ hstore_concat(PG_FUNCTION_ARGS)
 						if (keyIsDef)
 							keyIsDef = false;
 
-						pushHStoreValue(&toState, r2, &v2);
-						r2 = HStoreIteratorGet(&it2, &v2, true);
+						pushHStoreValue(toState, r2, &v2);
+						r2 = HStoreIteratorGet(it2, &v2, true);
 						Assert(r2 == WHS_VALUE);
-						pushHStoreValue(&toState, r2, &v2);
+						pushHStoreValue(toState, r2, &v2);
 					}
 					else if (diff <= 0)
 					{
@@ -1178,13 +1157,13 @@ hstore_concat(PG_FUNCTION_ARGS)
 				{
 					keyIsDef = false;
 
-					pushHStoreValue(&toState, r1, &v1);
+					pushHStoreValue(toState, r1, &v1);
 
-					r1 = HStoreIteratorGet(&it1, &v1, true); /* ignore */
-					r2 = HStoreIteratorGet(&it2, &v2, true); /* new val */
+					r1 = HStoreIteratorGet(it1, &v1, true); /* ignore */
+					r2 = HStoreIteratorGet(it2, &v2, true); /* new val */
 
 					Assert(r1 == WHS_VALUE && r2 == WHS_VALUE);
-					pushHStoreValue(&toState, r2, &v2);
+					pushHStoreValue(toState, r2, &v2);
 
 					continue;
 				}
@@ -1193,58 +1172,110 @@ hstore_concat(PG_FUNCTION_ARGS)
 					keyIsDef = true;
 				}
 			}
-			else if (r1 == WHS_END_HASH && r2 != 0) 
+			else if (r1 == WHS_END_HASH)
 			{
-				if (keyIsDef)
-					r2 = WHS_KEY;
-
-				while(keyIsDef || (r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+				if (r2 != 0)
 				{
-					if (r2 != WHS_KEY)
-						continue;
+					if (keyIsDef)
+						r2 = WHS_KEY;
 
-					pushHStoreValue(&toState, r2, &v2);
-					r2 = HStoreIteratorGet(&it2, &v2, true);
-					Assert(r2 == WHS_VALUE);
-					pushHStoreValue(&toState, r2, &v2);
-					keyIsDef = false;
+					while(keyIsDef || (r2 = HStoreIteratorGet(it2, &v2, true)) != 0)
+					{
+						if (r2 != WHS_KEY)
+							continue;
+
+						pushHStoreValue(toState, r2, &v2);
+						r2 = HStoreIteratorGet(it2, &v2, true);
+						Assert(r2 == WHS_VALUE);
+						pushHStoreValue(toState, r2, &v2);
+						keyIsDef = false;
+					}
 				}
+
+				res = pushHStoreValue(toState, r1, &v1);
+				break;
 			}
 
-			res = pushHStoreValue(&toState, r1, &v1);
+			res = pushHStoreValue(toState, r1, &v1);
 		}
 	}
-	else
+	else if ((rk1 == WHS_BEGIN_HASH || rk1 == WHS_BEGIN_ARRAY) && (rk2 == WHS_BEGIN_HASH || rk2 == WHS_BEGIN_ARRAY)) 
 	{
-		if (isHash1 && v2.array.nelems % 2 != 0)
+		if (rk1 == WHS_BEGIN_HASH && rk2 == WHS_BEGIN_ARRAY && v2.array.nelems % 2 != 0)
 			elog(ERROR, "hstore's array must have even number of elements");
 
-		while((r1 = HStoreIteratorGet(&it1, &v1, true)) != 0)
+		res = pushHStoreValue(toState, r1, &v1);
+
+		for(;;)
 		{
-			if (!(r1 == WHS_END_HASH || r1 == WHS_END_ARRAY))
-				pushHStoreValue(&toState, r1, &v1);
+			r1 = HStoreIteratorGet(it1, &v1, true);
+			if (r1 == WHS_END_HASH || r1 == WHS_END_ARRAY)
+				break;
+			Assert(r1 == WHS_KEY || r1 == WHS_VALUE || r1 == WHS_ELEM); 
+			pushHStoreValue(toState, r1, &v1);
 		}
 
-		while((r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+		while((r2 = HStoreIteratorGet(it2, &v2, true)) != 0)
 		{
 			if (!(r2 == WHS_END_HASH || r2 == WHS_END_ARRAY))
 			{
-				if (isHash1)
+				if (rk1 == WHS_BEGIN_HASH)
 				{
-					pushHStoreValue(&toState, WHS_KEY, &v2);
-					r2 = HStoreIteratorGet(&it2, &v2, true);
+					pushHStoreValue(toState, WHS_KEY, &v2);
+					r2 = HStoreIteratorGet(it2, &v2, true);
 					Assert(r2 == WHS_ELEM);
-					pushHStoreValue(&toState, WHS_VALUE, &v2);
+					pushHStoreValue(toState, WHS_VALUE, &v2);
 				}
 				else
 				{
-					pushHStoreValue(&toState, WHS_ELEM, &v2);
+					pushHStoreValue(toState, WHS_ELEM, &v2);
 				}
 			}
 		}
 
-		res = pushHStoreValue(&toState, isHash1 ? WHS_END_HASH : WHS_END_ARRAY, NULL/* signal to sort */);
+		res = pushHStoreValue(toState, (rk1 == WHS_BEGIN_HASH) ? WHS_END_HASH : WHS_END_ARRAY, NULL/* signal to sort */);
 	}
+	else if ((rk1 & (WHS_VALUE | WHS_ELEM)) != 0)
+	{
+		res = pushHStoreValue(toState, r2, &v2);
+		while((r2 = HStoreIteratorGet(it2, &v2, true)) != 0)
+			res = pushHStoreValue(toState, r2, &v2);
+	}
+	else
+	{
+		elog(ERROR, "invalid concatnation of hstores");
+	}
+
+	return res;
+}
+
+PG_FUNCTION_INFO_V1(hstore_concat);
+Datum		hstore_concat(PG_FUNCTION_ARGS);
+Datum
+hstore_concat(PG_FUNCTION_ARGS)
+{
+	HStore	   		*hs1 = PG_GETARG_HS(0);
+	HStore	   		*hs2 = PG_GETARG_HS(1);
+	HStore	   		*out = palloc(VARSIZE(hs1) + VARSIZE(hs2));
+	ToHStoreState	*toState = NULL;
+	HStoreValue		*res;
+	HStoreIterator	*it1, *it2;
+
+	if (HS_ISEMPTY(hs1))
+	{
+		memcpy(out, hs2, VARSIZE(hs2));
+		PG_RETURN_POINTER(out);
+	}
+	else if (HS_ISEMPTY(hs2))
+	{
+		memcpy(out, hs1, VARSIZE(hs1));
+		PG_RETURN_POINTER(out);
+	}
+
+	it1 = HStoreIteratorInit(VARDATA(hs1));
+	it2 = HStoreIteratorInit(VARDATA(hs2));
+
+	res = IteratorConcat(&it1, &it2, &toState);
 
 	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
 					   (res->type == hsvHash && res->hash.npairs == 0) )
@@ -1569,6 +1600,162 @@ hstore_modify(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(out);
 }
 
+static HStoreValue*
+concatPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_len,
+			 ToHStoreState  **st, int level, HStoreIterator	*toConcat)
+{
+	HStoreValue v, *res = NULL;
+	int			r;
+
+	r = HStoreIteratorGet(it, &v, false);
+
+	if (r == WHS_BEGIN_ARRAY)
+	{
+		int		idx, i;
+		uint32	n = v.array.nelems;
+
+		idx = n;
+		if (level >= path_len ||
+			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &idx) == false)
+		{
+			idx = n;
+		}
+		else if (idx < 0)
+		{
+			if (-idx > n)
+				idx = n;
+			else
+				idx = n + idx;
+		}
+
+		if (idx > n)
+			idx = n;
+
+		pushHStoreValue(st, r, &v);
+
+		for(i=0; i<n; i++)
+		{
+			if (i == idx && level < path_len)
+			{
+				if (level == path_len - 1)
+					res = IteratorConcat(it, &toConcat, st);
+				else
+					res = concatPathDo(it, path_elems, path_nulls, path_len, st, level + 1, toConcat);
+			}
+			else
+			{
+				r = HStoreIteratorGet(it, &v, true);
+				Assert(r == WHS_ELEM);
+				res = pushHStoreValue(st, r, &v);
+			}
+		}
+
+		r = HStoreIteratorGet(it, &v, true);
+		Assert(r == WHS_END_ARRAY);
+		res = pushHStoreValue(st, r, &v);
+	}
+	else if (r == WHS_BEGIN_HASH)
+	{
+		int			i;
+		uint32		n = v.hash.npairs;
+		HStoreValue	k;
+		bool		done = false;
+
+		pushHStoreValue(st, WHS_BEGIN_HASH, &v);
+
+		for(i=0; i<n; i++)
+		{
+			r = HStoreIteratorGet(it, &k, false);
+			Assert(r == WHS_KEY);
+			res = pushHStoreValue(st, r, &k);
+
+			if (done == false && level < path_len && k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+				memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
+			{
+				if (level == path_len - 1)
+					res = IteratorConcat(it, &toConcat, st);
+				else
+					res = concatPathDo(it, path_elems, path_nulls, path_len, st, level + 1, toConcat);
+			}
+			else
+			{
+				r = HStoreIteratorGet(it, &v, true);
+				Assert(r == WHS_VALUE);
+				res = pushHStoreValue(st, r, &v);
+			}
+		}
+
+		r = HStoreIteratorGet(it, &v, true);
+		Assert(r == WHS_END_HASH);
+		res = pushHStoreValue(st, r, &v);
+	}
+	else if (r == WHS_ELEM || r == WHS_VALUE)
+	{
+		pushHStoreValue(st, r, &v);
+		res = (void*)0x01; /* dummy value */
+	}
+	else
+	{
+		elog(PANIC, "impossible state");
+	}
+
+	return res;
+}
+
+PG_FUNCTION_INFO_V1(hstore_deep_concat);
+Datum		hstore_deep_concat(PG_FUNCTION_ARGS);
+Datum
+hstore_deep_concat(PG_FUNCTION_ARGS)
+{
+	HStore	   		*in = PG_GETARG_HS(0);
+	ArrayType		*path = PG_GETARG_ARRAYTYPE_P(1);
+	HStore	   		*newval = PG_GETARG_HS(2);
+	HStore			*out = palloc(VARSIZE(in) + VARSIZE(newval));
+	HStoreValue		*res = NULL;
+	Datum			*path_elems;
+	bool			*path_nulls;
+	int				path_len;
+	HStoreIterator	*it1, *it2;
+	ToHStoreState	*st = NULL;
+ 
+	Assert(ARR_ELEMTYPE(path) == TEXTOID);
+
+	if (ARR_NDIM(path) > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+				 errmsg("wrong number of array subscripts")));
+
+	if (HS_ROOT_COUNT(in) == 0 || HS_ROOT_COUNT(newval) == 0)
+	{
+		memcpy(out, in, VARSIZE(in));
+		PG_RETURN_POINTER(out);
+	}
+
+	deconstruct_array(path, TEXTOID, -1, false, 'i',
+					  &path_elems, &path_nulls, &path_len);
+
+	it1 = HStoreIteratorInit(VARDATA(in));
+	it2 = HStoreIteratorInit(VARDATA(newval));
+
+	if (path_len == 0)
+		res = IteratorConcat(&it1, &it2, &st);
+	else
+		res = concatPathDo(&it1, path_elems, path_nulls, path_len, &st, 0, it2);
+
+	if (res == NULL)
+	{
+		SET_VARSIZE(out, VARHDRSZ);
+	}
+	else
+	{
+		int				sz;
+
+		sz = compressHStore(res, VARDATA(out));
+		SET_VARSIZE(out, sz + VARHDRSZ);
+	}
+
+	PG_RETURN_POINTER(out);
+}
 
 PG_FUNCTION_INFO_V1(hstore_akeys);
 Datum		hstore_akeys(PG_FUNCTION_ARGS);

@@ -362,6 +362,16 @@ SELECT modify('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{n}'
 SELECT modify('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{b,-1}', '{1,2,3}');
 SELECT modify('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d,1,0}', '{1,2,3}');
 
+--deep concat
+
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{}', 'n=>not_null');
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{n}', 'n=>not_null');
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{n}', 'not_null');
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{}', 'b=>{3,4}');
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{b}', '{3,4}');
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d,1}', '{4,5}');
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d,1}', '4=>5');
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d}', '2=>{4,5}');
 
 --cast 
 

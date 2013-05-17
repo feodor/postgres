@@ -135,3 +135,8 @@ RETURNS setof hstore
 AS 'MODULE_PATHNAME','hstore_hvals'
 LANGUAGE C STRICT IMMUTABLE;
 
+CREATE FUNCTION concat_path(hstore,text[],hstore)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_deep_concat'
+LANGUAGE C STRICT IMMUTABLE;
+
