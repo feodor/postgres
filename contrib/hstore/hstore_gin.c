@@ -10,17 +10,6 @@
 #include "hstore.h"
 
 
-/*
- * When using a GIN index for hstore, we choose to index both keys and values.
- * The storage format is "text" values, with K, V, or N prepended to the string
- * to indicate key, value, or null values.	(As of 9.1 it might be better to
- * store null values as nulls, but we'll keep it this way for on-disk
- * compatibility.)
- */
-#define KEYFLAG		'K'
-#define VALFLAG		'V'
-#define NULLFLAG	'N'
-
 PG_FUNCTION_INFO_V1(gin_extract_hstore);
 Datum		gin_extract_hstore(PG_FUNCTION_ARGS);
 
@@ -95,14 +84,22 @@ gin_extract_hstore(PG_FUNCTION_ARGS)
 
 	it = HStoreIteratorInit(VARDATA(hs));
 
-	while((r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
+	while((r = HStoreIteratorGet(&it, &v, false)) != 0)
 	{
-		skipNested = true;
-
-		if (r == WHS_ELEM || r == WHS_KEY)
-			entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYFLAG));
-		else if (r == WHS_VALUE)
-			entries[i++] = PointerGetDatum(makeitemFromValue(&v, VALFLAG));
+		switch(r)
+		{
+			case WHS_KEY:
+				entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYFLAG));
+				break;
+			case WHS_VALUE:
+				entries[i++] = PointerGetDatum(makeitemFromValue(&v, VALFLAG));
+				break;
+			case WHS_ELEM:
+				entries[i++] = PointerGetDatum(makeitemFromValue(&v, ELEMFLAG));
+				break;
+			default:
+				break;
+		}
 	}
 
 	*nentries = i;

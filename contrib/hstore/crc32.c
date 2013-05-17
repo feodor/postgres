@@ -94,13 +94,31 @@ unsigned int
 crc32_sz(char *buf, int size)
 {
 	unsigned int crc = ~((unsigned int) 0);
-	char	   *p;
-	int			len,
-				nr;
 
-	len = 0;
-	nr = size;
-	for (len += nr, p = buf; nr--; ++p)
-		_CRC32_(crc, *p);
+	for (; size--; buf++)
+		_CRC32_(crc, *buf);
+
 	return ~crc;
 }
+
+unsigned int
+crc32_init(void)
+{
+	return ~((unsigned int) 0);
+}
+
+unsigned int
+crc32_buf(unsigned int crc, char *buf, int size)
+{
+	for (; size--; buf++)
+		_CRC32_(crc, *buf);
+
+	return crc;
+}
+
+unsigned int
+crc32_fini(unsigned int crc)
+{
+	return ~crc;
+}
+

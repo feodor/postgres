@@ -254,4 +254,18 @@ extern	int /* WHS_* */	HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bo
 	extern int no_such_variable
 #endif
 
+/*
+ * When using a GIN/GiST index for hstore, we choose to index both keys and values.
+ * The storage format is "text" values, with K, V, or N prepended to the string
+ * to indicate key, value, or null values.  (As of 9.1 it might be better to
+ * store null values as nulls, but we'll keep it this way for on-disk
+ * compatibility.)
+ */
+#define ELEMFLAG    'E'
+#define KEYFLAG     'K'
+#define VALFLAG     'V'
+#define NULLFLAG    'N'
+
+
+
 #endif   /* __HSTORE_H__ */

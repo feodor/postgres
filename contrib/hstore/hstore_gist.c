@@ -106,26 +106,43 @@ Datum		ghstore_union(PG_FUNCTION_ARGS);
 Datum		ghstore_same(PG_FUNCTION_ARGS);
 
 static int
-crc32_HStoreValue(HStoreValue *v)
+crc32_HStoreValue(HStoreValue *v, uint32 r)
 {
-	int	crc = 0;
+	int		crc = crc32_init();
+	char	flag = '\0';
 
-	if (v->type == hsvString)
+	switch(r)
 	{
-		crc = crc32_sz(v->string.val, v->string.len);
+		case WHS_KEY:
+			flag = KEYFLAG;
+			break;
+		case WHS_VALUE:
+			flag = VALFLAG;
+			break;
+		case WHS_ELEM:
+			flag = ELEMFLAG;
+			break;
+		default:
+			break;
 	}
-	else if (v->type != hsvNullString)
-	{
-		StringInfo  str;
 
-		Assert(v->type == hsvBinary);
-		str = makeStringInfo();
-		hstoreToCString(str, v->binary.data, v->binary.len, HStoreStrictOutput);
+	Assert(v->type == hsvString);
+	crc = crc32_buf(crc, &flag, 1);
+	crc = crc32_buf(crc, v->string.val, v->string.len);
 
-		crc = crc32_sz(str->data, str->len);
-	}
+	return crc32_fini(crc);
+}
 
-	return crc;
+static int
+crc32_Key(char *buf, int sz)
+{
+	int     crc = crc32_init();
+	char	flag = KEYFLAG;
+
+	crc = crc32_buf(crc, &flag, 1);
+	crc = crc32_buf(crc, buf, sz);
+
+	return crc32_fini(crc);
 }
 
 Datum
@@ -146,15 +163,12 @@ ghstore_compress(PG_FUNCTION_ARGS)
 			int				r;
 			HStoreIterator	*it = HStoreIteratorInit(VARDATA(val));
 			HStoreValue		v;
-			bool			skipNested = false;
 
-			while(res && (r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
+			while(res && (r = HStoreIteratorGet(&it, &v, false)) != 0)
 			{
-				skipNested = true;
-	
 				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
 				{
-					int   h = crc32_HStoreValue(&v);
+					int   h = crc32_HStoreValue(&v, r);
 
 					HASH(GETSIGN(res), h);
 				}
@@ -545,15 +559,12 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 			int				r;
 			HStoreIterator	*it = HStoreIteratorInit(VARDATA(query));
 			HStoreValue		v;
-			bool			skipNested = false;
 
-			while(res && (r = HStoreIteratorGet(&it, &v, skipNested)) != 0)
+			while(res && (r = HStoreIteratorGet(&it, &v, false)) != 0)
 			{
-				skipNested = true;
-
 				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
 				{
-					int   crc = crc32_HStoreValue(&v);
+					int   crc = crc32_HStoreValue(&v, r);
 
 					if (GETBIT(sign, HASHVAL(crc)) == 0)
 						res = false;
@@ -564,7 +575,7 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 	else if (strategy == HStoreExistsStrategyNumber)
 	{
 		text	   *query = PG_GETARG_TEXT_PP(1);
-		int			crc = crc32_sz(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query));
+		int			crc = crc32_Key(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query));
 
 		res = (GETBIT(sign, HASHVAL(crc))) ? true : false;
 	}
@@ -586,7 +597,7 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 
 			if (key_nulls[i])
 				continue;
-			crc = crc32_sz(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ);
+			crc = crc32_Key(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ);
 			if (!(GETBIT(sign, HASHVAL(crc))))
 				res = FALSE;
 		}
@@ -611,7 +622,7 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 
 			if (key_nulls[i])
 				continue;
-			crc = crc32_sz(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ);
+			crc = crc32_Key(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ);
 			if (GETBIT(sign, HASHVAL(crc)))
 				res = TRUE;
 		}
