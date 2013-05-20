@@ -86,6 +86,12 @@ gin_extract_hstore(PG_FUNCTION_ARGS)
 
 	while((r = HStoreIteratorGet(&it, &v, false)) != 0)
 	{
+		if (i >= total)
+		{
+			total *= 2;
+			entries = (Datum *) repalloc(entries, sizeof(Datum) * total);
+		}
+
 		switch(r)
 		{
 			case WHS_KEY:
