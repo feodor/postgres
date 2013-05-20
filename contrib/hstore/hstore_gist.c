@@ -164,7 +164,7 @@ ghstore_compress(PG_FUNCTION_ARGS)
 			HStoreIterator	*it = HStoreIteratorInit(VARDATA(val));
 			HStoreValue		v;
 
-			while(res && (r = HStoreIteratorGet(&it, &v, false)) != 0)
+			while((r = HStoreIteratorGet(&it, &v, false)) != 0)
 			{
 				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
 				{
@@ -552,79 +552,120 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 	if (strategy == HStoreContainsStrategyNumber ||
 		strategy == HStoreOldContainsStrategyNumber)
 	{
-		HStore	   		*query = PG_GETARG_HS(1);
+		BITVECP		qe;
+		int			i;
 
-		if (!HS_ISEMPTY(query))
+		qe = fcinfo->flinfo->fn_extra;
+		if (qe == NULL)
 		{
-			int				r;
-			HStoreIterator	*it = HStoreIteratorInit(VARDATA(query));
-			HStoreValue		v;
+			HStore	   		*query = PG_GETARG_HS(1);
 
-			while(res && (r = HStoreIteratorGet(&it, &v, false)) != 0)
+			qe = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(BITVEC));
+			memset(qe, 0, sizeof(BITVEC));
+
+			if (!HS_ISEMPTY(query))
 			{
-				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
-				{
-					int   crc = crc32_HStoreValue(&v, r);
+				int				r;
+				HStoreIterator	*it = HStoreIteratorInit(VARDATA(query));
+				HStoreValue		v;
 
-					if (GETBIT(sign, HASHVAL(crc)) == 0)
-						res = false;
+				while((r = HStoreIteratorGet(&it, &v, false)) != 0)
+				{
+					if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
+					{
+						int   crc = crc32_HStoreValue(&v, r);
+
+						HASH(qe, crc);
+					}
 				}
+			}
+
+			fcinfo->flinfo->fn_extra = qe;
+		}
+
+		LOOPBYTE
+		{
+			if ((sign[i] & qe[i]) != qe[i])
+			{
+				res = false;
+				break;
 			}
 		}
 	}
 	else if (strategy == HStoreExistsStrategyNumber)
 	{
-		text	   *query = PG_GETARG_TEXT_PP(1);
-		int			crc = crc32_Key(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query));
+		int 	*qval;
 
-		res = (GETBIT(sign, HASHVAL(crc))) ? true : false;
-	}
-	else if (strategy == HStoreExistsAllStrategyNumber)
-	{
-		ArrayType  *query = PG_GETARG_ARRAYTYPE_P(1);
-		Datum	   *key_datums;
-		bool	   *key_nulls;
-		int			key_count;
-		int			i;
-
-		deconstruct_array(query,
-						  TEXTOID, -1, false, 'i',
-						  &key_datums, &key_nulls, &key_count);
-
-		for (i = 0; res && i < key_count; ++i)
+		qval = fcinfo->flinfo->fn_extra;
+		if (qval == NULL)
 		{
-			int			crc;
+			text	   *query = PG_GETARG_TEXT_PP(1);
+			int			crc = crc32_Key(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query));
 
-			if (key_nulls[i])
-				continue;
-			crc = crc32_Key(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ);
-			if (!(GETBIT(sign, HASHVAL(crc))))
-				res = FALSE;
+			qval = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(*qval));
+			*qval = HASHVAL(crc);
+
+			fcinfo->flinfo->fn_extra = qval;
 		}
+
+		res = (GETBIT(sign, *qval)) ? true : false;
 	}
-	else if (strategy == HStoreExistsAnyStrategyNumber)
+	else if (strategy == HStoreExistsAllStrategyNumber || strategy == HStoreExistsAnyStrategyNumber)
 	{
-		ArrayType  *query = PG_GETARG_ARRAYTYPE_P(1);
-		Datum	   *key_datums;
-		bool	   *key_nulls;
-		int			key_count;
-		int			i;
-
-		deconstruct_array(query,
-						  TEXTOID, -1, false, 'i',
-						  &key_datums, &key_nulls, &key_count);
-
-		res = FALSE;
-
-		for (i = 0; !res && i < key_count; ++i)
+		BITVECP	arrentry;
+		int		i;
+		
+		arrentry = fcinfo->flinfo->fn_extra;
+		if (arrentry == NULL)
 		{
-			int			crc;
+			ArrayType  *query = PG_GETARG_ARRAYTYPE_P(1);
+			Datum	   *key_datums;
+			bool	   *key_nulls;
+			int			key_count;
 
-			if (key_nulls[i])
-				continue;
-			crc = crc32_Key(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ);
-			if (GETBIT(sign, HASHVAL(crc)))
-				res = TRUE;
+			arrentry = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(BITVEC));
+			memset(arrentry, 0, sizeof(BITVEC));
+
+			deconstruct_array(query,
+							  TEXTOID, -1, false, 'i',
+							  &key_datums, &key_nulls, &key_count);
+
+			for (i = 0; i < key_count; ++i)
+			{
+				int			crc;
+
+				if (key_nulls[i])
+					continue;
+				crc = crc32_Key(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ);
+				HASH(arrentry, crc);
+			}
+
+			fcinfo->flinfo->fn_extra = arrentry;
+		}
+
+		if (strategy == HStoreExistsAllStrategyNumber)
+		{
+			LOOPBYTE
+			{
+				if ((sign[i] & arrentry[i]) != arrentry[i])
+				{
+					res = false;
+					break;
+				}
+			}
+		}
+		else /* HStoreExistsAnyStrategyNumber */
+		{
+			res = false;
+
+			LOOPBYTE
+			{
+				if (sign[i] & arrentry[i])
+				{
+					res = true;
+					break;
+				}
+			}
 		}
 	}
 	else
