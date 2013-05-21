@@ -27,6 +27,7 @@ HSTORE_POLLUTE(hstore_from_text, tconvert);
 static bool array_brackets = false;
 static bool	root_array_decorated = true;
 static bool	root_hash_decorated = false;
+static bool	pretty_print_var = false;
 
 static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
 
@@ -780,7 +781,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			if (v->type == hsvString)
 				s = pnstrdup(v->string.val, v->string.len);
 			else if (v->type == hsvBinary)
-				s = hstoreToCString(NULL, v->binary.data, v->binary.len, HStoreOutput);
+				s = hstoreToCString(NULL, v->binary.data, v->binary.len, HStoreOutput, pretty_print_var);
 			else
 				elog(PANIC, "Wrong hstore");
 
@@ -819,6 +820,25 @@ stringIsNumber(char *string, int len) {
 	}
 
 	return false;
+}
+
+static void
+printIndent(StringInfo out, bool enable, int level)
+{
+	if (enable)
+	{
+		int i;
+
+		for(i=0; i<4*level; i++)
+			appendStringInfoCharMacro(out, ' ');
+	}
+}
+
+static void
+printCR(StringInfo out, bool enable)
+{
+	if (enable)
+		appendStringInfoCharMacro(out, '\n');
 }
 
 static void
@@ -927,7 +947,7 @@ isArrayBrackets(HStoreOutputKind kind)
 
 char*
 hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
-		  HStoreOutputKind kind)
+		  HStoreOutputKind kind, bool enable_pretty_print)
 {
 	bool			first = true;
 	HStoreIterator	*it;
@@ -951,32 +971,51 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 
 	while((type = HStoreIteratorGet(&it, &v, false)) != 0)
 	{
+reout:
 		switch(type)
 		{
 			case WHS_BEGIN_ARRAY:
 				if (first == false)
+				{
 					appendBinaryStringInfo(out, ", ", 2);
+					printCR(out, enable_pretty_print);
+				}
 				first = true;
 
 				if (needBrackets(level, true, kind))
+				{
+					printIndent(out, enable_pretty_print, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? '[' : '{');
+					printCR(out, enable_pretty_print);
+				}
 				level++;
 				break;
 			case WHS_BEGIN_HASH:
 				if (first == false)
+				{
 					appendBinaryStringInfo(out, ", ", 2);
+					printCR(out, enable_pretty_print);
+				}
 				first = true;
 
 				if (needBrackets(level, false, kind))
+				{
+					printIndent(out, enable_pretty_print, level);
 					appendStringInfoCharMacro(out, '{');
+					printCR(out, enable_pretty_print);
+				}
 
 				level++;
 				break;
 			case WHS_KEY:
 				if (first == false)
+				{
 					appendBinaryStringInfo(out, ", ", 2);
+					printCR(out, enable_pretty_print);
+				}
 				first = true;
 
+				printIndent(out, enable_pretty_print, level);
 				if (kind == JsonLooseOutput)
 				{
 					kind = JsonOutput;
@@ -988,29 +1027,52 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 					putEscapedString(out, kind, v.string.val,  v.string.len);
 				}
 				appendBinaryStringInfo(out, (kind == HStoreOutput) ? "=>" : ": ", 2);
+
+				type = HStoreIteratorGet(&it, &v, false);
+				if (type == WHS_VALUE)
+				{
+					first = false;
+					putEscapedString(out, kind, (v.type == hsvNullString) ? NULL : v.string.val,  v.string.len);
+				}
+				else
+				{
+					Assert(type == WHS_BEGIN_HASH || type == WHS_BEGIN_ARRAY);
+					printCR(out, enable_pretty_print);
+					goto reout;
+				}
 				break;
 			case WHS_ELEM:
 				if (first == false)
+				{
 					appendBinaryStringInfo(out, ", ", 2);
+					printCR(out, enable_pretty_print);
+				}
 				else
+				{
 					first = false;
+				}
 
-				putEscapedString(out, kind, (v.type == hsvNullString) ? NULL : v.string.val,  v.string.len);
-				break;
-			case WHS_VALUE:
-				first = false;
+				printIndent(out, enable_pretty_print, level);
 				putEscapedString(out, kind, (v.type == hsvNullString) ? NULL : v.string.val,  v.string.len);
 				break;
 			case WHS_END_ARRAY:
 				level--;
+				printCR(out, enable_pretty_print);
 				if (needBrackets(level, true, kind))
+				{
+					printIndent(out, enable_pretty_print, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? ']' : '}');
+				}
 				first = false;
 				break;
 			case WHS_END_HASH:
 				level--;
+				printCR(out, enable_pretty_print);
 				if (needBrackets(level, false, kind))
+				{
+					printIndent(out, enable_pretty_print, level);
 					appendStringInfoCharMacro(out, '}');
+				}
 				first = false;
 				break;
 			default:
@@ -1043,7 +1105,7 @@ HStoreValueToText(HStoreValue *v)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput);
+		hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput, pretty_print_var);
 
 		out = (text*)str->data;
 		SET_VARSIZE(out, str->len);
@@ -1060,7 +1122,7 @@ hstore_out(PG_FUNCTION_ARGS)
 	HStore	*hs = PG_GETARG_HS(0);
 	char 	*out;
 
-	out = hstoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), HStoreOutput);
+	out = hstoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), HStoreOutput, pretty_print_var);
 
 	PG_RETURN_CSTRING(out);
 }
@@ -1148,7 +1210,7 @@ hstore_to_json_loose(PG_FUNCTION_ARGS)
 	str = makeStringInfo();
 	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-	hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonLooseOutput);
+	hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonLooseOutput, pretty_print_var);
 
 	out = (text*)str->data;
 
@@ -1169,7 +1231,7 @@ hstore_to_json(PG_FUNCTION_ARGS)
 	str = makeStringInfo();
 	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-	hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonOutput);
+	hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonOutput, pretty_print_var);
 
 	out = (text*)str->data;
 
@@ -1225,6 +1287,19 @@ _PG_init(void)
 		"Enables brackets decoration for root hash (hstore)",
 		&root_hash_decorated,
 		root_hash_decorated,
+		PGC_USERSET,
+		GUC_NOT_IN_SAMPLE,
+		NULL,
+		NULL,
+		NULL
+	);
+
+	DefineCustomBoolVariable(
+		"hstore.pretty_print",
+		"Enable pretty print",
+		"Enable pretty print of hstore type",
+		&pretty_print_var,
+		pretty_print_var,
 		PGC_USERSET,
 		GUC_NOT_IN_SAMPLE,
 		NULL,
