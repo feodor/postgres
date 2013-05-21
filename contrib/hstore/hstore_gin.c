@@ -72,7 +72,6 @@ gin_extract_hstore(PG_FUNCTION_ARGS)
 	int				i = 0, r;
 	HStoreIterator	*it;
 	HStoreValue		v;
-	bool			skipNested = false;
 
 	if (total == 0)
 	{

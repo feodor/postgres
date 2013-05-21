@@ -154,7 +154,7 @@ hstore_fetchval_n(PG_FUNCTION_ARGS)
 {
 	HStore	   	*hs = PG_GETARG_HS(0);
 	int	   		i = PG_GETARG_INT32(1);
-	HStoreValue	*v;
+	HStoreValue	*v = NULL;
 	text		*out;
 
 	if (!HS_ISEMPTY(hs))
