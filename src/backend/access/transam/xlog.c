@@ -4932,10 +4932,14 @@ StartupXLOG(void)
 	RelationCacheInitFileRemove();
 
 	/*
-	 * Initialize on the assumption we want to recover to the same timeline
+	 * Initialize on the assumption we want to recover to the latest timeline
 	 * that's active according to pg_control.
 	 */
-	recoveryTargetTLI = ControlFile->checkPointCopy.ThisTimeLineID;
+	if (ControlFile->minRecoveryPointTLI >
+		ControlFile->checkPointCopy.ThisTimeLineID)
+		recoveryTargetTLI = ControlFile->minRecoveryPointTLI;
+	else
+		recoveryTargetTLI = ControlFile->checkPointCopy.ThisTimeLineID;
 
 	/*
 	 * Check for recovery control file, and if so set up state for offline
@@ -4971,22 +4975,6 @@ StartupXLOG(void)
 		else
 			ereport(LOG,
 					(errmsg("starting archive recovery")));
-	}
-	else if (ControlFile->minRecoveryPointTLI > 0)
-	{
-		/*
-		 * If the minRecoveryPointTLI is set when not in Archive Recovery
-		 * it means that we have crashed after ending recovery and
-		 * yet before we wrote a new checkpoint on the new timeline.
-		 * That means we are doing a crash recovery that needs to cross
-		 * timelines to get to our newly assigned timeline again.
-		 * The timeline we are headed for is exact and not 'latest'.
-		 * As soon as we hit a checkpoint, the minRecoveryPointTLI is
-		 * reset, so we will not enter crash recovery again.
-		 */
-		Assert(ControlFile->minRecoveryPointTLI != 1);
-		recoveryTargetTLI = ControlFile->minRecoveryPointTLI;
-		recoveryTargetIsLatest = false;
 	}
 
 	/*
@@ -5281,7 +5269,7 @@ StartupXLOG(void)
 			ereport(LOG,
 					(errmsg("database system was not properly shut down; "
 							"automatic recovery in progress")));
-			if (recoveryTargetTLI > 0)
+			if (recoveryTargetTLI > ControlFile->checkPointCopy.ThisTimeLineID)
 				ereport(LOG,
 					(errmsg("crash recovery starts in timeline %u "
 							"and has target timeline %u",
@@ -6866,7 +6854,7 @@ CreateCheckPoint(int flags)
 		XLogRecPtr	curInsert;
 
 		INSERT_RECPTR(curInsert, Insert, Insert->curridx);
-		if (curInsert == ControlFile->checkPoint + 
+		if (curInsert == ControlFile->checkPoint +
 			MAXALIGN(SizeOfXLogRecord + sizeof(CheckPoint)) &&
 			ControlFile->checkPoint == ControlFile->checkPointCopy.redo)
 		{
