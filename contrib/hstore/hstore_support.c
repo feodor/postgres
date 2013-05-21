@@ -395,6 +395,7 @@ parseBuffer(HStoreIterator *it, char *buffer)
 {
 	it->type = (*(uint32*)buffer) & (HS_FLAG_ARRAY | HS_FLAG_HSTORE);
 	it->nelems = (*(uint32*)buffer) & HS_COUNT_MASK;
+	it->buffer = buffer;
 
 	buffer += sizeof(uint32);
 

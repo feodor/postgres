@@ -208,6 +208,7 @@ typedef struct HStoreIterator
 	uint32					nelems;
 	HEntry					*array;
 	char					*data;
+	char					*buffer; /* unparsed buffer */
 
 	int						i;
 

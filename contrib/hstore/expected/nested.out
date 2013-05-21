@@ -603,7 +603,7 @@ SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{1,2}';
 SELECT 'a=>{2,1}, c=>b'::hstore @> 'a=>{1,2}';
  ?column? 
 ----------
- f
+ t
 (1 row)
 
 SELECT 'a=>{1=>2}, c=>b'::hstore @> 'a=>{1,2}';
@@ -649,6 +649,48 @@ SELECT 'a,b, c,{1,2}'::hstore @> 'a,{1,2}';
 (1 row)
 
 SELECT 'a,b, c,{1,2}'::hstore @> 'b,{1,2}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{1}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{2}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{3}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{c=>3}}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4}}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4},3}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4},1}';
  ?column? 
 ----------
  t

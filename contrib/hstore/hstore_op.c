@@ -2149,11 +2149,152 @@ hstore_each(PG_FUNCTION_ARGS)
 	SRF_RETURN_DONE(funcctx);
 }
 
-/*
- * btree sort order for hstores isn't intended to be useful; we really only
- * care about equality versus non-equality.  we compare the entire string
- * buffer first, then the entry pos array.
- */
+static bool
+deepContains(HStoreIterator **it1, HStoreIterator **it2)
+{
+	uint32			r1, r2;
+	HStoreValue		v1, v2;
+	bool			res = true;
+
+	r1 = HStoreIteratorGet(it1, &v1, false); 
+	r2 = HStoreIteratorGet(it2, &v2, false);
+
+	if (r1 != r2)
+	{
+		res = false;
+	}
+	else if (r1 == WHS_BEGIN_HASH)
+	{
+		uint32		lowbound = 0;
+		HStoreValue	*v;
+
+		for(;;) {
+			r2 = HStoreIteratorGet(it2, &v2, false);
+			if (r2 == WHS_END_HASH)
+				break;
+
+			Assert(r2 == WHS_KEY);
+
+			v = findUncompressedHStoreValue((*it1)->buffer, HS_FLAG_HSTORE, &lowbound,
+											v2.string.val, v2.string.len);
+
+			if (v == NULL)
+			{
+				res = false;
+				break;
+			}
+
+			r2 = HStoreIteratorGet(it2, &v2, true);
+			Assert(r2 == WHS_VALUE);
+
+			if (v->type != v2.type)
+			{
+				res = false;
+				break;
+			}
+			else if (v->type == hsvString || v->type == hsvNullString)
+			{
+				if (compareHStoreValue(v, &v2) != 0)
+				{
+					res = false;
+					break;
+				}
+			}
+			else
+			{
+				HStoreIterator	*it1a, *it2a;
+				
+				Assert(v2.type == hsvBinary);
+				Assert(v->type == hsvBinary);
+
+				it1a = HStoreIteratorInit(v->binary.data);
+				it2a = HStoreIteratorInit(v2.binary.data);
+
+				if ((res = deepContains(&it1a, &it2a)) == false)
+					break;
+			}
+		}
+	}
+	else if (r1 == WHS_BEGIN_ARRAY)
+	{
+		HStoreValue		*v;
+		HStoreValue		*av = NULL;
+		uint32			nelems = v1.array.nelems;
+
+		for(;;) {
+			r2 = HStoreIteratorGet(it2, &v2, true);
+			if (r2 == WHS_END_ARRAY)
+				break;
+
+			Assert(r2 == WHS_ELEM);
+
+			if (v2.type == hsvString || v2.type == hsvNullString)
+			{
+				if (v2.type == hsvNullString)
+				{
+					v2.string.val = NULL;
+					v2.string.len = 0;
+				}
+
+				v = findUncompressedHStoreValue((*it1)->buffer, HS_FLAG_ARRAY, NULL,
+												v2.string.val, v2.string.len);
+				if (v == NULL)
+				{
+					res = false;
+					break;
+				}
+			}
+			else
+			{
+				uint32 			i;
+
+				if (av == NULL)
+				{
+					uint32 			j = 0;
+
+					av = palloc(sizeof(*av) * nelems);
+
+					for(i=0; i<nelems; i++)
+					{
+						r2 = HStoreIteratorGet(it1, &v1, true);
+						Assert(r2 == WHS_ELEM);
+
+						if (v1.type == hsvBinary)
+							av[j++] = v1;
+					}
+
+					if (j == 0)
+					{
+						res = false;
+						break;
+					}
+
+					nelems = j;
+				}
+
+				res = false;
+				for(i = 0; res == false && i<nelems; i++)
+				{
+					HStoreIterator	*it1a, *it2a;
+				
+					it1a = HStoreIteratorInit(av[i].binary.data);
+					it2a = HStoreIteratorInit(v2.binary.data);
+
+					res = deepContains(&it1a, &it2a);
+				}
+
+				if (res == false)
+					break;
+			}
+		}
+	}
+	else
+	{
+		elog(PANIC, "impossible state");
+	}
+
+	return res;
+}
 
 PG_FUNCTION_INFO_V1(hstore_contains);
 Datum		hstore_contains(PG_FUNCTION_ARGS);
@@ -2163,61 +2304,14 @@ hstore_contains(PG_FUNCTION_ARGS)
 	HStore	   		*val = PG_GETARG_HS(0);
 	HStore	   		*tmpl = PG_GETARG_HS(1);
 	bool			res = true;
-	HStoreIterator	*it;
-	uint32			r;
-	uint32			lowbound = 0,
-					*plowbound = NULL;
-	HStoreValue		*v, t;
-	bool			skipNested = false;
+	HStoreIterator	*it1, *it2;
 
 	if (HS_ROOT_COUNT(val) < HS_ROOT_COUNT(tmpl) || HS_ROOT_IS_HASH(val) != HS_ROOT_IS_HASH(tmpl))
 		PG_RETURN_BOOL(false);
 
-	/*
-	 * we exploit the fact that keys in "tmpl" are in strictly increasing
-	 * order to narrow the findUncompressedHStoreValue search; each search can start one
-	 * entry past the previous "found" entry, or at the lower bound of the
-	 * search
-	 */
-
-	if (HS_ROOT_IS_HASH(val))
-		plowbound = &lowbound;
-
-	it = HStoreIteratorInit(VARDATA(tmpl));
-
-	while(res && (r = HStoreIteratorGet(&it, &t, skipNested)) != 0)
-	{
-		skipNested = true;
-
-		if (r == WHS_ELEM)
-		{
-			HStoreIterator	*vit;
-			HStoreValue		vv;
-
-			vit = HStoreIteratorInit(VARDATA(val));
-			HStoreIteratorGet(&vit, &vv, false); /* skip WHS_BEGIN_* */
-
-			res = false;
-			while(res == false && (r = HStoreIteratorGet(&vit, &vv, true)) != 0)
-				if (r == WHS_ELEM && compareHStoreValue(&t, &vv) == 0)
-					res = true;
-		}
-		else if (r == WHS_KEY)
-		{
-			v = findUncompressedHStoreValue(VARDATA(val), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
-											t.string.val, t.string.len);
-			if (v)
-			{
-				r = HStoreIteratorGet(&it, &t, skipNested);
-				Assert(r == WHS_VALUE);
-				res = (compareHStoreValue(&t, v) == 0) ? true : false;
-			}
-			else
-			{
-				res = false;
-			}
-		}
-	}
+	it1 = HStoreIteratorInit(VARDATA(val));
+	it2 = HStoreIteratorInit(VARDATA(tmpl));
+	res = deepContains(&it1, &it2);
 
 	PG_RETURN_BOOL(res);
 }
@@ -2234,6 +2328,11 @@ hstore_contained(PG_FUNCTION_ARGS)
 										));
 }
 
+/*
+ * btree sort order for hstores isn't intended to be useful; we really only
+ * care about equality versus non-equality.  we compare the entire string
+ * buffer first, then the entry pos array.
+ */
 
 PG_FUNCTION_INFO_V1(hstore_cmp);
 Datum		hstore_cmp(PG_FUNCTION_ARGS);

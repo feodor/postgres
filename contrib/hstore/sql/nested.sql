@@ -146,6 +146,14 @@ SELECT 'a,b, c,b'::hstore @> 'a,b';
 SELECT 'a,b, c,{1,2}'::hstore @> 'a,{1,2}';
 SELECT 'a,b, c,{1,2}'::hstore @> 'b,{1,2}';
 
+SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{1}';
+SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{2}';
+SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{3}';
+SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{c=>3}}';
+SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4}}';
+SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4},3}';
+SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4},1}';
+
 -- %>
 
 SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'n';
