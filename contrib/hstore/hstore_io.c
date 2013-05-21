@@ -955,7 +955,6 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 	HStoreValue		v;
 	int				level = 0;
 
-
 	if (out == NULL)
 		out = makeStringInfo();
 

@@ -437,4 +437,4 @@ RESET hstore.root_hash_decorated;
 SET hstore.pretty_print = true;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]], e=>[1,2,3,4], f=>g, g=>j'::hstore AS h, 
 	   'a, {b=>c, c=>d}, [c, d, e, [1,2], h, {f=>g, g=>f}]'::hstore AS a;
-
+RESET hstore.pretty_print;
