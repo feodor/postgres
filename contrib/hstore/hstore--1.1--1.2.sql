@@ -124,9 +124,9 @@ CREATE OPERATOR - (
 	PROCEDURE = delete
 );
 
-CREATE FUNCTION modify(hstore,text[],hstore)
+CREATE FUNCTION replace(hstore,text[],hstore)
 RETURNS hstore
-AS 'MODULE_PATHNAME','hstore_modify'
+AS 'MODULE_PATHNAME','hstore_replace'
 LANGUAGE C STRICT IMMUTABLE;
 
 

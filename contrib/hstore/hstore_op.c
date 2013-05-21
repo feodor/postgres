@@ -1416,7 +1416,7 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 }
 
 static HStoreValue*
-modifyPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_len,
+replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_len,
 			 ToHStoreState  **st, int level, HStoreValue *newval)
 {
 	HStoreValue v, *res = NULL;
@@ -1460,7 +1460,7 @@ modifyPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_
 				}
 				else
 				{
-					res = modifyPathDo(it, path_elems, path_nulls, path_len, st, level + 1, newval);
+					res = replacePathDo(it, path_elems, path_nulls, path_len, st, level + 1, newval);
 				}
 			}
 			else
@@ -1501,7 +1501,7 @@ modifyPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_
 				}
 				else
 				{
-					res = modifyPathDo(it, path_elems, path_nulls, path_len, st, level + 1, newval);
+					res = replacePathDo(it, path_elems, path_nulls, path_len, st, level + 1, newval);
 				}
 			}
 			else
@@ -1529,10 +1529,10 @@ modifyPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_
 	return res;
 }
 
-PG_FUNCTION_INFO_V1(hstore_modify);
-Datum		hstore_modify(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(hstore_replace);
+Datum		hstore_replace(PG_FUNCTION_ARGS);
 Datum
-hstore_modify(PG_FUNCTION_ARGS)
+hstore_replace(PG_FUNCTION_ARGS)
 {
 	HStore	   		*in = PG_GETARG_HS(0);
 	ArrayType		*path = PG_GETARG_ARRAYTYPE_P(1);
@@ -1583,7 +1583,7 @@ hstore_modify(PG_FUNCTION_ARGS)
 
 	it = HStoreIteratorInit(VARDATA(in));
 
-	res = modifyPathDo(&it, path_elems, path_nulls, path_len, &st, 0, &value); 
+	res = replacePathDo(&it, path_elems, path_nulls, path_len, &st, 0, &value); 
 
 	if (res == NULL)
 	{
