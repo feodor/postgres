@@ -50,7 +50,7 @@ typedef struct
 } HStore;
 
 /*
- * it's not possible to get more than 2^28 items into an hstore,
+ * it's not possible to get more than 2^29 items into an hstore,
  * so we reserve the top few bits of the size field. See hstore_compat.c
  * for one reason why.	Some bits are left for future use here.
  */
