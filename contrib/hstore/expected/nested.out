@@ -1807,11 +1807,171 @@ SELECT ('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::json)::hstore AS ok;
  "f2"=>{"f3"=>"1"}, "f4"=>{"f5"=>"99", "f6"=>"stringy"}
 (1 row)
 
+--hvals
 SELECT q->'tags' FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore) AS q;
  ?column? 
 ----------
  1
  3
+(2 rows)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{}') AS q;
+                          q                           
+------------------------------------------------------
+ {{"sh"=>"2", "tags"=>"1"}, {"sh"=>"4", "tags"=>"3"}}
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-3}') AS q;
+ q 
+---
+(0 rows)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-2}') AS q;
+           q            
+------------------------
+ "sh"=>"2", "tags"=>"1"
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-1}') AS q;
+           q            
+------------------------
+ "sh"=>"4", "tags"=>"3"
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{0}') AS q;
+           q            
+------------------------
+ "sh"=>"2", "tags"=>"1"
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{1}') AS q;
+           q            
+------------------------
+ "sh"=>"4", "tags"=>"3"
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{2}') AS q;
+ q 
+---
+(0 rows)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{NULL}') AS q;
+           q            
+------------------------
+ "sh"=>"2", "tags"=>"1"
+ "sh"=>"4", "tags"=>"3"
+(2 rows)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-3,tags}') AS q;
+ q 
+---
+(0 rows)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-2,tags}') AS q;
+   q   
+-------
+ {"1"}
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-1,tags}') AS q;
+   q   
+-------
+ {"3"}
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{0,tags}') AS q;
+   q   
+-------
+ {"1"}
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{1,tags}') AS q;
+   q   
+-------
+ {"3"}
+(1 row)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{2,tags}') AS q;
+ q 
+---
+(0 rows)
+
+SELECT q FROM hvals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{NULL,tags}') AS q;
+   q   
+-------
+ {"1"}
+ {"3"}
+(2 rows)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{}') AS q;
+                                  q                                  
+---------------------------------------------------------------------
+ "1"=>"first", "a"=>{"b"=>"c", "c"=>"b"}, "b"=>{"1", "2"}, "c"=>"cc"
+(1 row)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{1}') AS q;
+     q     
+-----------
+ {"first"}
+(1 row)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{a}') AS q;
+         q          
+--------------------
+ "b"=>"c", "c"=>"b"
+(1 row)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{b}') AS q;
+     q      
+------------
+ {"1", "2"}
+(1 row)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{c}') AS q;
+   q    
+--------
+ {"cc"}
+(1 row)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL}') AS q;
+         q          
+--------------------
+ {"first"}
+ "b"=>"c", "c"=>"b"
+ {"1", "2"}
+ {"cc"}
+(4 rows)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{a,c}') AS q;
+   q   
+-------
+ {"b"}
+(1 row)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,c}') AS q;
+   q   
+-------
+ {"b"}
+(1 row)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{b,NULL}') AS q;
+   q   
+-------
+ {"1"}
+ {"2"}
+(2 rows)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,1}') AS q;
+   q   
+-------
+ {"2"}
+(1 row)
+
+SELECT q FROM hvals('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,1}') AS q;
+     q     
+-----------
+ {"first"}
+ {"2"}
 (2 rows)
 
 --decoration

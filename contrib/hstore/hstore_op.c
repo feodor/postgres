@@ -1933,10 +1933,25 @@ typedef struct SetReturningState
 {
 	HStore			*hs;
 	HStoreIterator	*it;
+
+	HStoreValue		init;
+	int				path_len;
+	int				level;
+	struct {
+		HStoreValue		v;
+		Datum           varStr;
+		int				varInt;
+		enum {
+			pathStr,
+			pathInt,
+			pathAny
+		} 				varKind;
+		int				i;
+	}				*path;
 } SetReturningState;
 
 static SetReturningState*
-setup_firstcall(FuncCallContext *funcctx, HStore *hs,
+setup_firstcall(FuncCallContext *funcctx, HStore *hs, ArrayType *path,
 				FunctionCallInfoData *fcinfo)
 {
 	MemoryContext 			oldcontext;
@@ -1948,17 +1963,10 @@ setup_firstcall(FuncCallContext *funcctx, HStore *hs,
 
 	st->hs = (HStore *) palloc(VARSIZE(hs));
 	memcpy(st->hs, hs, VARSIZE(hs));
-	if (HS_ISEMPTY(hs))
-	{
+	if (HS_ISEMPTY(hs) || path)
 		st->it = NULL;
-	}
 	else
-	{
-		HStoreValue	v;
-
 		st->it = HStoreIteratorInit(VARDATA(hs));
-		HStoreIteratorGet(&st->it, &v, false); /* skip initial WHS_BEGIN* */
-	}
 
 	funcctx->user_fctx = (void *) st;
 
@@ -1971,6 +1979,48 @@ setup_firstcall(FuncCallContext *funcctx, HStore *hs,
 			elog(ERROR, "return type must be a row type");
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+	}
+
+	st->path_len = st->level = 0;
+	if (path)
+	{
+		Datum		*path_elems;
+		bool		*path_nulls;
+		int			i;
+
+		Assert(ARR_ELEMTYPE(path) == TEXTOID);
+		if (ARR_NDIM(path) > 1)
+			ereport(ERROR,
+					(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+					 errmsg("wrong number of array subscripts")));
+
+		deconstruct_array(path, TEXTOID, -1, false, 'i',
+						  &path_elems, &path_nulls, &st->path_len);
+
+		st->init.type = hsvBinary;
+		st->init.size = VARSIZE(st->hs);
+		st->init.binary.data = VARDATA(st->hs);
+		st->init.binary.len = VARSIZE_ANY_EXHDR(st->hs);
+
+		if (st->path_len > 0)
+		{
+			st->path = palloc(sizeof(*st->path) * st->path_len);
+			st->path[0].v = st->init;
+		}
+
+		for(i=0; i<st->path_len; i++)
+		{
+			st->path[i].varStr = path_elems[i];
+			st->path[i].i = 0;
+
+			if (path_nulls[i])
+				st->path[i].varKind = pathAny;
+			else if (h_atoi(VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]), &st->path[i].varInt))
+				st->path[i].varKind = pathInt;
+			else
+				st->path[i].varKind = pathStr;
+		}
+
 	}
 
 	MemoryContextSwitchTo(oldcontext);
@@ -1992,7 +2042,7 @@ hstore_skeys(PG_FUNCTION_ARGS)
 	if (SRF_IS_FIRSTCALL())
 	{
 		funcctx = SRF_FIRSTCALL_INIT();
-		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL);
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL, NULL);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
@@ -2027,7 +2077,7 @@ hstore_svals(PG_FUNCTION_ARGS)
 	if (SRF_IS_FIRSTCALL())
 	{
 		funcctx = SRF_FIRSTCALL_INIT();
-		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL);
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL, NULL);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
@@ -2049,7 +2099,6 @@ hstore_svals(PG_FUNCTION_ARGS)
 	SRF_RETURN_DONE(funcctx);
 }
 
-
 PG_FUNCTION_INFO_V1(hstore_hvals);
 Datum		hstore_hvals(PG_FUNCTION_ARGS);
 Datum
@@ -2063,7 +2112,7 @@ hstore_hvals(PG_FUNCTION_ARGS)
 	if (SRF_IS_FIRSTCALL())
 	{
 		funcctx = SRF_FIRSTCALL_INIT();
-		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL);
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL, NULL);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
@@ -2086,6 +2135,151 @@ hstore_hvals(PG_FUNCTION_ARGS)
 }
 
 
+PG_FUNCTION_INFO_V1(hstore_hvals_path);
+Datum		hstore_hvals_path(PG_FUNCTION_ARGS);
+Datum
+hstore_hvals_path(PG_FUNCTION_ARGS)
+{
+	FuncCallContext 	*funcctx;
+	SetReturningState	*st;
+	HStoreValue 		*v = NULL;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		funcctx = SRF_FIRSTCALL_INIT();
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), PG_GETARG_ARRAYTYPE_P(1), NULL);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	st = (SetReturningState *) funcctx->user_fctx;
+
+	if (st->path_len == 0)
+	{
+		/* empty path */
+		if (st->level == 0)
+		{
+			HStore		*item;
+
+			item = HStoreValueToHStore(&st->init);
+
+			st->level ++;
+
+			if (item == NULL)
+				SRF_RETURN_NEXT_NULL(funcctx);
+			else
+				SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
+		}
+
+		SRF_RETURN_DONE(funcctx);
+	}
+
+	while(st->level >= 0)
+	{
+		uint32	header;
+
+		v = NULL;
+		if (st->path[st->level].v.type != hsvBinary)
+		{
+			st->level--;
+			continue;
+		}
+
+		header = *(uint32*)st->path[st->level].v.binary.data;
+
+		if (header & HS_FLAG_HSTORE)
+		{
+			if (st->path[st->level].varKind == pathAny)
+			{
+				v = getHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_HSTORE, st->path[st->level].i++);
+			}
+			else
+			{
+				v = findUncompressedHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_HSTORE, NULL, 
+												VARDATA_ANY(st->path[st->level].varStr),
+												VARSIZE_ANY_EXHDR(st->path[st->level].varStr));
+			}
+		}
+		else if (header & HS_FLAG_ARRAY)
+		{
+			if (st->path[st->level].varKind == pathAny)
+			{
+				v = getHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_ARRAY, st->path[st->level].i++);
+			}
+			else if (st->path[st->level].varKind == pathInt)
+			{
+				int	ith = st->path[st->level].varInt;
+
+				if (ith < 0)
+				{
+					if (-ith > (int)(header & HS_COUNT_MASK))
+					{
+						st->level--;
+						continue;
+					}
+					else
+					{
+						ith = ((int)(header & HS_COUNT_MASK)) + ith;
+					}
+				}
+				else
+				{
+					if (ith >= (int)(header & HS_COUNT_MASK))
+					{
+						st->level--;
+						continue;
+					}
+				}
+
+				v = getHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_ARRAY, ith);
+			}
+			else
+			{
+				st->level--;
+				continue;
+			}
+		}
+		else
+		{
+			elog(PANIC, "impossible state");
+		}
+
+		if (v == NULL)
+		{
+			st->level--;
+		}
+		else if (st->level == st->path_len - 1)
+		{
+			if (st->path[st->level].varKind != pathAny)
+			{
+				st->path[st->level].v.type = hsvNullString;
+				st->level--;
+			}
+			break;
+		}
+		else
+		{
+			if (st->path[st->level].varKind != pathAny)
+				st->path[st->level].v.type = hsvNullString;
+			st->level++;
+			st->path[st->level].v = *v;
+			st->path[st->level].i = 0;
+		}
+	}
+
+	if (v != NULL)
+	{
+		HStore	   *item = HStoreValueToHStore(v);
+	
+		if (item == NULL)
+			SRF_RETURN_NEXT_NULL(funcctx);
+		else
+			SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
+	}
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+
 PG_FUNCTION_INFO_V1(hstore_each);
 Datum		hstore_each(PG_FUNCTION_ARGS);
 Datum
@@ -2099,7 +2293,7 @@ hstore_each(PG_FUNCTION_ARGS)
 	if (SRF_IS_FIRSTCALL())
 	{
 		funcctx = SRF_FIRSTCALL_INIT();
-		st = setup_firstcall(funcctx, PG_GETARG_HS(0), fcinfo);
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL, fcinfo);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
@@ -2136,7 +2330,6 @@ hstore_each(PG_FUNCTION_ARGS)
 		}
 		else
 		{
-			Assert(r == WHS_END_ARRAY || r == WHS_END_HASH);
 			continue;
 		}
 

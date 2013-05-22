@@ -420,6 +420,11 @@ RETURNS setof hstore
 AS 'MODULE_PATHNAME','hstore_hvals'
 LANGUAGE C STRICT IMMUTABLE;
 
+CREATE FUNCTION hvals(hstore, text[])
+RETURNS setof hstore
+AS 'MODULE_PATHNAME','hstore_hvals_path'
+LANGUAGE C STRICT IMMUTABLE;
+
 CREATE FUNCTION each(IN hs hstore,
     OUT key text,
     OUT value text)
