@@ -129,6 +129,10 @@ RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_replace'
 LANGUAGE C STRICT IMMUTABLE;
 
+CREATE FUNCTION svals(hstore, text[])
+RETURNS setof text
+AS 'MODULE_PATHNAME','hstore_svals_path'
+LANGUAGE C STRICT IMMUTABLE;
 
 CREATE FUNCTION hvals(hstore)
 RETURNS setof hstore

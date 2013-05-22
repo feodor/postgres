@@ -2134,43 +2134,21 @@ hstore_hvals(PG_FUNCTION_ARGS)
 	SRF_RETURN_DONE(funcctx);
 }
 
-
-PG_FUNCTION_INFO_V1(hstore_hvals_path);
-Datum		hstore_hvals_path(PG_FUNCTION_ARGS);
-Datum
-hstore_hvals_path(PG_FUNCTION_ARGS)
+static HStoreValue*
+getNextValsPath(SetReturningState *st)
 {
-	FuncCallContext 	*funcctx;
-	SetReturningState	*st;
 	HStoreValue 		*v = NULL;
-
-	if (SRF_IS_FIRSTCALL())
-	{
-		funcctx = SRF_FIRSTCALL_INIT();
-		st = setup_firstcall(funcctx, PG_GETARG_HS(0), PG_GETARG_ARRAYTYPE_P(1), NULL);
-	}
-
-	funcctx = SRF_PERCALL_SETUP();
-	st = (SetReturningState *) funcctx->user_fctx;
 
 	if (st->path_len == 0)
 	{
 		/* empty path */
 		if (st->level == 0)
 		{
-			HStore		*item;
-
-			item = HStoreValueToHStore(&st->init);
-
+			v = &st->init;
 			st->level ++;
-
-			if (item == NULL)
-				SRF_RETURN_NEXT_NULL(funcctx);
-			else
-				SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
 		}
 
-		SRF_RETURN_DONE(funcctx);
+		return v;
 	}
 
 	while(st->level >= 0)
@@ -2266,7 +2244,59 @@ hstore_hvals_path(PG_FUNCTION_ARGS)
 		}
 	}
 
-	if (v != NULL)
+	return v;
+}
+
+PG_FUNCTION_INFO_V1(hstore_svals_path);
+Datum		hstore_svals_path(PG_FUNCTION_ARGS);
+Datum
+hstore_svals_path(PG_FUNCTION_ARGS)
+{
+	FuncCallContext 	*funcctx;
+	SetReturningState	*st;
+	HStoreValue			*v;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		funcctx = SRF_FIRSTCALL_INIT();
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), PG_GETARG_ARRAYTYPE_P(1), NULL);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	st = (SetReturningState *) funcctx->user_fctx;
+
+	if ((v = getNextValsPath(st)) != NULL)
+	{
+		text	*item = HStoreValueToText(v);
+	
+		if (item == NULL)
+			SRF_RETURN_NEXT_NULL(funcctx);
+		else
+			SRF_RETURN_NEXT(funcctx, PointerGetDatum(item));
+	}
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+PG_FUNCTION_INFO_V1(hstore_hvals_path);
+Datum		hstore_hvals_path(PG_FUNCTION_ARGS);
+Datum
+hstore_hvals_path(PG_FUNCTION_ARGS)
+{
+	FuncCallContext 	*funcctx;
+	SetReturningState	*st;
+	HStoreValue 		*v;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		funcctx = SRF_FIRSTCALL_INIT();
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), PG_GETARG_ARRAYTYPE_P(1), NULL);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	st = (SetReturningState *) funcctx->user_fctx;
+
+	if ((v = getNextValsPath(st)) != NULL)
 	{
 		HStore	   *item = HStoreValueToHStore(v);
 	

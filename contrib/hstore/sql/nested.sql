@@ -418,6 +418,36 @@ SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{b,NU
 SELECT q FROM hvals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,1}') AS q;
 SELECT q FROM hvals('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,1}') AS q;
 
+--svals path
+
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-3}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-2}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-1}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{0}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{1}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{2}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{NULL}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-3,tags}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-2,tags}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{-1,tags}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{0,tags}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{1,tags}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{2,tags}') AS q;
+SELECT q FROM svals('{{tags=>1, sh=>2}, {tags=>3, sh=>4}}'::hstore, '{NULL,tags}') AS q;
+
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{1}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{a}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{b}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{c}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{a,c}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,c}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{b,NULL}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,1}') AS q;
+SELECT q FROM svals('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,1}') AS q;
+
 --decoration
 
 SET hstore.array_brackets=false;
