@@ -1933,6 +1933,7 @@ typedef struct SetReturningState
 {
 	HStore			*hs;
 	HStoreIterator	*it;
+	MemoryContext	ctx;
 
 	HStoreValue		init;
 	int				path_len;
@@ -1960,6 +1961,8 @@ setup_firstcall(FuncCallContext *funcctx, HStore *hs, ArrayType *path,
 	oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 	st = palloc(sizeof(*st));
+
+	st->ctx = funcctx->multi_call_memory_ctx;
 
 	st->hs = (HStore *) palloc(VARSIZE(hs));
 	memcpy(st->hs, hs, VARSIZE(hs));
@@ -2028,6 +2031,18 @@ setup_firstcall(FuncCallContext *funcctx, HStore *hs, ArrayType *path,
 	return st;
 }
 
+static uint32
+HStoreIteratorGetCtx(SetReturningState *st, HStoreValue *v, bool skipNested)
+{
+	int 			r;
+	MemoryContext	oldctx;
+
+	oldctx = MemoryContextSwitchTo(st->ctx);
+	r = HStoreIteratorGet(&st->it, v, skipNested);
+	MemoryContextSwitchTo(oldctx);
+
+	return r;
+}
 
 PG_FUNCTION_INFO_V1(hstore_skeys);
 Datum		hstore_skeys(PG_FUNCTION_ARGS);
@@ -2048,7 +2063,7 @@ hstore_skeys(PG_FUNCTION_ARGS)
 	funcctx = SRF_PERCALL_SETUP();
 	st = (SetReturningState *) funcctx->user_fctx;
 
-	while(st->it && (r = HStoreIteratorGet(&st->it, &v, true)) != 0)
+	while(st->it && (r = HStoreIteratorGetCtx(st, &v, true)) != 0)
 	{
 		if (r == WHS_KEY || r == WHS_ELEM)
 		{
@@ -2083,7 +2098,7 @@ hstore_svals(PG_FUNCTION_ARGS)
 	funcctx = SRF_PERCALL_SETUP();
 	st = (SetReturningState *) funcctx->user_fctx;
 
-	while(st->it && (r = HStoreIteratorGet(&st->it, &v, true)) != 0)
+	while(st->it && (r = HStoreIteratorGetCtx(st, &v, true)) != 0)
 	{
 		if (r == WHS_VALUE || r == WHS_ELEM)
 		{
@@ -2118,7 +2133,7 @@ hstore_hvals(PG_FUNCTION_ARGS)
 	funcctx = SRF_PERCALL_SETUP();
 	st = (SetReturningState *) funcctx->user_fctx;
 
-	while(st->it && (r = HStoreIteratorGet(&st->it, &v, true)) != 0)
+	while(st->it && (r = HStoreIteratorGetCtx(st, &v, true)) != 0)
 	{
 		if (r == WHS_VALUE || r == WHS_ELEM)
 		{
@@ -2329,7 +2344,7 @@ hstore_each(PG_FUNCTION_ARGS)
 	funcctx = SRF_PERCALL_SETUP();
 	st = (SetReturningState *) funcctx->user_fctx;
 
-	while(st->it && (r = HStoreIteratorGet(&st->it, &v, true)) != 0)
+	while(st->it && (r = HStoreIteratorGetCtx(st, &v, true)) != 0)
 	{
 		Datum		res,
 					dvalues[2] = {0, 0};
@@ -2350,7 +2365,7 @@ hstore_each(PG_FUNCTION_ARGS)
 		{
 			item = HStoreValueToText(&v);
 			dvalues[0] = PointerGetDatum(item);
-			r = HStoreIteratorGet(&st->it, &v, true);
+			r = HStoreIteratorGetCtx(st, &v, true);
 			Assert(r == WHS_VALUE);
 			item = HStoreValueToText(&v);
 			if (item == NULL)
