@@ -821,7 +821,7 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 		uint32	n = v.array.nelems;
 
 		skipIdx = n;
-		if (level >= path_len || 
+		if (level >= path_len || path_nulls[level] || 
 			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &skipIdx) == false)
 		{
 			skipIdx = n;
@@ -894,7 +894,7 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 			r = HStoreIteratorGet(it, &k, false);
 			Assert(r == WHS_KEY);
 
-			if ( k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+			if ( path_nulls[level] == false && k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
 				 memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
 			{
 				r = HStoreIteratorGet(it, &v, true);
@@ -916,12 +916,16 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 
 		pushHStoreValue(st, WHS_BEGIN_HASH, &v);
 
+		if (level >= path_len || path_nulls[level])
+			done = true;
+
 		for(i=0; i<n; i++)
 		{
 			r = HStoreIteratorGet(it, &k, false);
 			Assert(r == WHS_KEY);
 
-			if (done == false && k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+			if (done == false &&
+				k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
 				memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
 			{
 				done = true;
@@ -1430,7 +1434,7 @@ replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path
 		uint32	n = v.array.nelems;
 
 		idx = n;
-		if (level >= path_len ||
+		if (level >= path_len || path_nulls[level] ||
 			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &idx) == false)
 		{
 			idx = n;
@@ -1483,6 +1487,9 @@ replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path
 		bool		done = false;
 
 		pushHStoreValue(st, WHS_BEGIN_HASH, &v);
+		
+		if (level >= path_len || path_nulls[level])
+			done = true;
 
 		for(i=0; i<n; i++)
 		{
@@ -1490,7 +1497,8 @@ replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path
 			Assert(r == WHS_KEY);
 			res = pushHStoreValue(st, r, &k);
 
-			if (done == false && level < path_len && k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+			if (done == false &&
+				k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
 				memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
 			{
 				if (level == path_len - 1)
@@ -1615,7 +1623,7 @@ concatPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_
 		uint32	n = v.array.nelems;
 
 		idx = n;
-		if (level >= path_len ||
+		if (level >= path_len || path_nulls[level] ||
 			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &idx) == false)
 		{
 			idx = n;
@@ -1662,6 +1670,9 @@ concatPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_
 		bool		done = false;
 
 		pushHStoreValue(st, WHS_BEGIN_HASH, &v);
+
+		if (level >= path_len || path_nulls[level])
+			done = true;
 
 		for(i=0; i<n; i++)
 		{

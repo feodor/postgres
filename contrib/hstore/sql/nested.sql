@@ -299,12 +299,14 @@ SELECT '0, 1, 2, {3,4}, {5=>five}'::hstore ? '{4,5}'::text[];
 
 SELECT 'a=>1'::hstore / '{x}';
 SELECT 'a=>1'::hstore / '{a}';
+SELECT 'a=>1'::hstore / '{NULL}';
 SELECT 'a=>1, b=>2, c=>3'::hstore / '{x}';
 SELECT 'a=>1, b=>2, c=>3'::hstore / '{a}';
 SELECT 'a=>1, b=>2, c=>3'::hstore / '{b}';
 SELECT 'a=>1, b=>2, c=>3'::hstore / '{c}';
 SELECT 'a=>1'::hstore / '{x,1}';
 SELECT 'a=>1'::hstore / '{a,1}';
+SELECT 'a=>1'::hstore / '{NULL,1}';
 SELECT 'a=>1, b=>2, c=>3'::hstore / '{x,1}';
 SELECT 'a=>1, b=>2, c=>3'::hstore / '{a,1}';
 SELECT 'a=>1, b=>2, c=>3'::hstore / '{b,1}';
@@ -369,6 +371,7 @@ SELECT 'a=>1, b=>2, c=>3'::hstore - -4;
 SELECT replace('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{n}', '{1,2,3}');
 SELECT replace('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{b,-1}', '{1,2,3}');
 SELECT replace('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d,1,0}', '{1,2,3}');
+SELECT replace('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d,NULL,0}', '{1,2,3}');
 
 --deep concat
 
@@ -380,6 +383,7 @@ SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, 
 SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d,1}', '{4,5}');
 SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d,1}', '4=>5');
 SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{d}', '2=>{4,5}');
+SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, '{NULL,1}', '4=>5');
 
 --cast 
 
