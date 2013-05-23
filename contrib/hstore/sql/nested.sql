@@ -448,6 +448,16 @@ SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{b,NU
 SELECT q FROM svals('a=>{b=>c, c=>b}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,1}') AS q;
 SELECT q FROM svals('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first'::hstore, '{NULL,1}') AS q;
 
+--each
+
+SELECT * FROM each('a=>b, c=>cc'::hstore) AS q;
+SELECT * FROM each('a, b, c, cc'::hstore) AS q;
+SELECT * FROM each('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first, n=>null'::hstore) AS q;
+
+SELECT * FROM each_hstore('a=>b, c=>cc'::hstore) AS q;
+SELECT * FROM each_hstore('a, b, c, cc'::hstore) AS q;
+SELECT * FROM each_hstore('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first, n=>null'::hstore) AS q;
+
 --decoration
 
 SET hstore.array_brackets=false;

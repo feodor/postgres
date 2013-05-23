@@ -2134,6 +2134,59 @@ SELECT q FROM svals('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first'::hsto
  2
 (2 rows)
 
+--each
+SELECT * FROM each('a=>b, c=>cc'::hstore) AS q;
+ key | value 
+-----+-------
+ a   | b
+ c   | cc
+(2 rows)
+
+SELECT * FROM each('a, b, c, cc'::hstore) AS q;
+ key | value 
+-----+-------
+     | a
+     | b
+     | c
+     | cc
+(4 rows)
+
+SELECT * FROM each('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first, n=>null'::hstore) AS q;
+ key |              value               
+-----+----------------------------------
+ 1   | first
+ a   | "1"=>"first", "b"=>"c", "c"=>"b"
+ b   | {"1", "2"}
+ c   | cc
+ n   | 
+(5 rows)
+
+SELECT * FROM each_hstore('a=>b, c=>cc'::hstore) AS q;
+ key | value  
+-----+--------
+ a   | {"b"}
+ c   | {"cc"}
+(2 rows)
+
+SELECT * FROM each_hstore('a, b, c, cc'::hstore) AS q;
+ key | value  
+-----+--------
+     | {"a"}
+     | {"b"}
+     | {"c"}
+     | {"cc"}
+(4 rows)
+
+SELECT * FROM each_hstore('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first, n=>null'::hstore) AS q;
+ key |              value               
+-----+----------------------------------
+ 1   | {"first"}
+ a   | "1"=>"first", "b"=>"c", "c"=>"b"
+ b   | {"1", "2"}
+ c   | {"cc"}
+ n   | 
+(5 rows)
+
 --decoration
 SET hstore.array_brackets=false;
 SET hstore.root_array_decorated=false;

@@ -149,3 +149,10 @@ RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_deep_concat'
 LANGUAGE C STRICT IMMUTABLE;
 
+CREATE FUNCTION each_hstore(IN hs hstore,
+	OUT key text,
+	OUT value hstore)
+RETURNS SETOF record
+AS 'MODULE_PATHNAME','hstore_each_hstore'
+LANGUAGE C STRICT IMMUTABLE;
+

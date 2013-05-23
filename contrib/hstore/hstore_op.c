@@ -2324,7 +2324,6 @@ hstore_hvals_path(PG_FUNCTION_ARGS)
 	SRF_RETURN_DONE(funcctx);
 }
 
-
 PG_FUNCTION_INFO_V1(hstore_each);
 Datum		hstore_each(PG_FUNCTION_ARGS);
 Datum
@@ -2354,17 +2353,19 @@ hstore_each(PG_FUNCTION_ARGS)
 
 		if (r == WHS_ELEM)
 		{
+			nulls[0] = true;
+
 			item = HStoreValueToText(&v);
 			if (item == NULL)
-				nulls[0] = true;
+				nulls[1] = true;
 			else
-				dvalues[0] = PointerGetDatum(item);
-			nulls[1] = true;
+				dvalues[1] = PointerGetDatum(item);
 		}
 		else if (r == WHS_KEY)
 		{
 			item = HStoreValueToText(&v);
 			dvalues[0] = PointerGetDatum(item);
+
 			r = HStoreIteratorGetCtx(st, &v, true);
 			Assert(r == WHS_VALUE);
 			item = HStoreValueToText(&v);
@@ -2372,6 +2373,71 @@ hstore_each(PG_FUNCTION_ARGS)
 				nulls[1] = true;
 			else
 				dvalues[1] = PointerGetDatum(item);
+		}
+		else
+		{
+			continue;
+		}
+
+		tuple = heap_form_tuple(funcctx->tuple_desc, dvalues, nulls);
+		res = HeapTupleGetDatum(tuple);
+
+		SRF_RETURN_NEXT(funcctx, PointerGetDatum(res));
+	}
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+PG_FUNCTION_INFO_V1(hstore_each_hstore);
+Datum		hstore_each_hstore(PG_FUNCTION_ARGS);
+Datum
+hstore_each_hstore(PG_FUNCTION_ARGS)
+{
+	FuncCallContext 	*funcctx;
+	SetReturningState	*st;
+	int					r;
+	HStoreValue			v;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		funcctx = SRF_FIRSTCALL_INIT();
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0), NULL, fcinfo);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	st = (SetReturningState *) funcctx->user_fctx;
+
+	while(st->it && (r = HStoreIteratorGetCtx(st, &v, true)) != 0)
+	{
+		Datum		res,
+					dvalues[2] = {0, 0};
+		bool		nulls[2] = {false, false};
+		text	   *item;
+		HStore		*hitem;
+		HeapTuple	tuple;
+
+		if (r == WHS_ELEM)
+		{
+			nulls[0] = true;
+
+			hitem = HStoreValueToHStore(&v);
+			if (hitem == NULL)
+				nulls[1] = true;
+			else
+				dvalues[1] = PointerGetDatum(hitem);
+		}
+		else if (r == WHS_KEY)
+		{
+			item = HStoreValueToText(&v);
+			dvalues[0] = PointerGetDatum(item);
+
+			r = HStoreIteratorGetCtx(st, &v, true);
+			Assert(r == WHS_VALUE);
+			hitem = HStoreValueToHStore(&v);
+			if (hitem == NULL)
+				nulls[1] = true;
+			else
+				dvalues[1] = PointerGetDatum(hitem);
 		}
 		else
 		{
