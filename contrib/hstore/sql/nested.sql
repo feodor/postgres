@@ -464,47 +464,47 @@ SELECT * FROM each_hstore('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first,
 
 --decoration
 
-SET hstore.array_brackets=false;
+SET hstore.array_square_brackets=false;
 SET hstore.root_array_decorated=false;
 SET hstore.root_hash_decorated=false;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
 
-SET hstore.array_brackets=false;
+SET hstore.array_square_brackets=false;
 SET hstore.root_array_decorated=false;
 SET hstore.root_hash_decorated=true;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
 
-SET hstore.array_brackets=false;
+SET hstore.array_square_brackets=false;
 SET hstore.root_array_decorated=true;
 SET hstore.root_hash_decorated=false;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
 
-SET hstore.array_brackets=false;
+SET hstore.array_square_brackets=false;
 SET hstore.root_array_decorated=true;
 SET hstore.root_hash_decorated=true;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
 
-SET hstore.array_brackets=true;
+SET hstore.array_square_brackets=true;
 SET hstore.root_array_decorated=false;
 SET hstore.root_hash_decorated=false;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
 
-SET hstore.array_brackets=true;
+SET hstore.array_square_brackets=true;
 SET hstore.root_array_decorated=false;
 SET hstore.root_hash_decorated=true;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
 
-SET hstore.array_brackets=true;
+SET hstore.array_square_brackets=true;
 SET hstore.root_array_decorated=true;
 SET hstore.root_hash_decorated=false;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
 
-SET hstore.array_brackets=true;
+SET hstore.array_square_brackets=true;
 SET hstore.root_array_decorated=true;
 SET hstore.root_hash_decorated=true;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, 'a, {b=>c}, [c, d, e]'::hstore AS a;
 
-RESET hstore.array_brackets;
+RESET hstore.array_square_brackets;
 RESET hstore.root_array_decorated;
 RESET hstore.root_hash_decorated;
 

@@ -24,7 +24,7 @@ PG_MODULE_MAGIC;
 HSTORE_POLLUTE(hstore_from_text, tconvert);
 
 /* GUC variables */
-static bool array_brackets = false;
+static bool array_square_brackets = false;
 static bool	root_array_decorated = true;
 static bool	root_hash_decorated = false;
 static bool	pretty_print_var = false;
@@ -932,7 +932,7 @@ isArrayBrackets(HStoreOutputKind kind)
 	switch(kind)
 	{
 		case HStoreOutput:
-			res = array_brackets;
+			res = array_square_brackets;
 			break;
 		case HStoreStrictOutput:
 			res = false;
@@ -1255,11 +1255,11 @@ void
 _PG_init(void)
 {
 	DefineCustomBoolVariable(
-		"hstore.array_brackets",
+		"hstore.array_square_brackets",
 		"[] brackets for array",
 		"Use [] brackets for array's decoration",
-		&array_brackets,
-		array_brackets,
+		&array_square_brackets,
+		array_square_brackets,
 		PGC_USERSET,
 		GUC_NOT_IN_SAMPLE,
 		NULL,
