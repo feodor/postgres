@@ -372,7 +372,9 @@ pg_upgrade.exe
      and then do the upgrade. You can use <command>pg_upgrade --check</>
      to perform only the checks, even if the old server is still
      running. <command>pg_upgrade --check</> will also outline any
-     manual adjustments you will need to make after the upgrade.
+     manual adjustments you will need to make after the upgrade.  If you
+     are going to be using link mode, you should use the <option>--link</>
+     option with <option>--check</option> to enable link-mode-specific checks.
      <command>pg_upgrade</> requires write permission in the current directory.
     </para>
 
@@ -442,7 +444,8 @@ psql --username postgres --file script.sql postgres
     <para>
      Because optimizer statistics are not transferred by <command>pg_upgrade</>, you will
      be instructed to run a command to regenerate that information at the end
-     of the upgrade.
+     of the upgrade.  You might need to set connection parameters to
+     match your new cluster.
     </para>
    </step>
 

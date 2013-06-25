@@ -400,7 +400,7 @@ ProcArrayEndTransaction(PGPROC *proc, TransactionId latestXid)
 		pgxact->xmin = InvalidTransactionId;
 		/* must be cleared with xid/xmin: */
 		pgxact->vacuumFlags &= ~PROC_VACUUM_STATE_MASK;
-		pgxact->delayChkpt = false; /* be sure this is cleared in abort */
+		pgxact->delayChkpt = false;		/* be sure this is cleared in abort */
 		proc->recoveryConflictPending = false;
 
 		/* Clear the subtransaction-XID cache too while holding the lock */
@@ -427,7 +427,7 @@ ProcArrayEndTransaction(PGPROC *proc, TransactionId latestXid)
 		pgxact->xmin = InvalidTransactionId;
 		/* must be cleared with xid/xmin: */
 		pgxact->vacuumFlags &= ~PROC_VACUUM_STATE_MASK;
-		pgxact->delayChkpt = false; /* be sure this is cleared in abort */
+		pgxact->delayChkpt = false;		/* be sure this is cleared in abort */
 		proc->recoveryConflictPending = false;
 
 		Assert(pgxact->nxids == 0);
@@ -467,6 +467,28 @@ ProcArrayClearTransaction(PGPROC *proc)
 	/* Clear the subtransaction-XID cache too */
 	pgxact->nxids = 0;
 	pgxact->overflowed = false;
+}
+
+/*
+ * ProcArrayInitRecovery -- initialize recovery xid mgmt environment
+ *
+ * Remember up to where the startup process initialized the CLOG and subtrans
+ * so we can ensure its initialized gaplessly up to the point where necessary
+ * while in recovery.
+ */
+void
+ProcArrayInitRecovery(TransactionId initializedUptoXID)
+{
+	Assert(standbyState == STANDBY_INITIALIZED);
+	Assert(TransactionIdIsNormal(initializedUptoXID));
+
+	/*
+	 * we set latestObservedXid to the xid SUBTRANS has been initialized upto
+	 * so we can extend it from that point onwards when we reach a consistent
+	 * state in ProcArrayApplyRecoveryInfo().
+	 */
+	latestObservedXid = initializedUptoXID;
+	TransactionIdRetreat(latestObservedXid);
 }
 
 /*
@@ -564,7 +586,10 @@ ProcArrayApplyRecoveryInfo(RunningTransactions running)
 	Assert(standbyState == STANDBY_INITIALIZED);
 
 	/*
-	 * OK, we need to initialise from the RunningTransactionsData record
+	 * OK, we need to initialise from the RunningTransactionsData record.
+	 *
+	 * NB: this can be reached at least twice, so make sure new code can deal
+	 * with that.
 	 */
 
 	/*
@@ -636,20 +661,32 @@ ProcArrayApplyRecoveryInfo(RunningTransactions running)
 	pfree(xids);
 
 	/*
+	 * latestObservedXid is set to the the point where SUBTRANS was started up
+	 * to, initialize subtrans from thereon, up to nextXid - 1.
+	 */
+	Assert(TransactionIdIsNormal(latestObservedXid));
+	while (TransactionIdPrecedes(latestObservedXid, running->nextXid))
+	{
+		ExtendCLOG(latestObservedXid);
+		ExtendSUBTRANS(latestObservedXid);
+
+		TransactionIdAdvance(latestObservedXid);
+	}
+
+	/* ----------
 	 * Now we've got the running xids we need to set the global values that
 	 * are used to track snapshots as they evolve further.
 	 *
-	 * - latestCompletedXid which will be the xmax for snapshots -
-	 * lastOverflowedXid which shows whether snapshots overflow - nextXid
+	 * - latestCompletedXid which will be the xmax for snapshots
+	 * - lastOverflowedXid which shows whether snapshots overflow
+	 * - nextXid
 	 *
 	 * If the snapshot overflowed, then we still initialise with what we know,
 	 * but the recovery snapshot isn't fully valid yet because we know there
 	 * are some subxids missing. We don't know the specific subxids that are
 	 * missing, so conservatively assume the last one is latestObservedXid.
+	 * ----------
 	 */
-	latestObservedXid = running->nextXid;
-	TransactionIdRetreat(latestObservedXid);
-
 	if (running->subxid_overflow)
 	{
 		standbyState = STANDBY_SNAPSHOT_PENDING;
@@ -718,6 +755,10 @@ ProcArrayApplyXidAssignment(TransactionId topxid,
 	int			i;
 
 	Assert(standbyState >= STANDBY_INITIALIZED);
+
+	/* can't do anything useful unless we have more state setup */
+	if (standbyState == STANDBY_INITIALIZED)
+		return;
 
 	max_xid = TransactionIdLatest(topxid, nsubxids, subxids);
 
@@ -1429,11 +1470,11 @@ GetSnapshotData(Snapshot snapshot)
 		 * depending upon when the snapshot was taken, or change normal
 		 * snapshot processing so it matches.
 		 *
-		 * Note: It is possible for recovery to end before we finish taking the
-		 * snapshot, and for newly assigned transaction ids to be added to the
-		 * ProcArray.  xmax cannot change while we hold ProcArrayLock, so those
-		 * newly added transaction ids would be filtered away, so we need not
-		 * be concerned about them.
+		 * Note: It is possible for recovery to end before we finish taking
+		 * the snapshot, and for newly assigned transaction ids to be added to
+		 * the ProcArray.  xmax cannot change while we hold ProcArrayLock, so
+		 * those newly added transaction ids would be filtered away, so we
+		 * need not be concerned about them.
 		 */
 		subcount = KnownAssignedXidsGetAndSetXmin(snapshot->subxip, &xmin,
 												  xmax);
@@ -1688,8 +1729,8 @@ GetRunningTransactionData(void)
 
 				/*
 				 * Top-level XID of a transaction is always less than any of
-				 * its subxids, so we don't need to check if any of the subxids
-				 * are smaller than oldestRunningXid
+				 * its subxids, so we don't need to check if any of the
+				 * subxids are smaller than oldestRunningXid
 				 */
 			}
 		}
@@ -1811,9 +1852,9 @@ GetVirtualXIDsDelayingChkpt(int *nvxids)
 
 	for (index = 0; index < arrayP->numProcs; index++)
 	{
-		int		pgprocno = arrayP->pgprocnos[index];
-		volatile PGPROC    *proc = &allProcs[pgprocno];
-		volatile PGXACT    *pgxact = &allPgXact[pgprocno];
+		int			pgprocno = arrayP->pgprocnos[index];
+		volatile PGPROC *proc = &allProcs[pgprocno];
+		volatile PGXACT *pgxact = &allPgXact[pgprocno];
 
 		if (pgxact->delayChkpt)
 		{
@@ -1849,32 +1890,30 @@ HaveVirtualXIDsDelayingChkpt(VirtualTransactionId *vxids, int nvxids)
 
 	LWLockAcquire(ProcArrayLock, LW_SHARED);
 
-	while (VirtualTransactionIdIsValid(*vxids))
+	for (index = 0; index < arrayP->numProcs; index++)
 	{
-		for (index = 0; index < arrayP->numProcs; index++)
-		{
-			int		pgprocno = arrayP->pgprocnos[index];
-			volatile PGPROC    *proc = &allProcs[pgprocno];
-			volatile PGXACT    *pgxact = &allPgXact[pgprocno];
-			VirtualTransactionId vxid;
+		int			pgprocno = arrayP->pgprocnos[index];
+		volatile PGPROC *proc = &allProcs[pgprocno];
+		volatile PGXACT *pgxact = &allPgXact[pgprocno];
+		VirtualTransactionId vxid;
 
-			GET_VXID_FROM_PGPROC(vxid, *proc);
-			if (VirtualTransactionIdIsValid(vxid))
+		GET_VXID_FROM_PGPROC(vxid, *proc);
+
+		if (pgxact->delayChkpt && VirtualTransactionIdIsValid(vxid))
+		{
+			int			i;
+
+			for (i = 0; i < nvxids; i++)
 			{
-				if (VirtualTransactionIdEquals(vxid, *vxids) &&
-					pgxact->delayChkpt)
+				if (VirtualTransactionIdEquals(vxid, vxids[i]))
 				{
 					result = true;
 					break;
 				}
 			}
+			if (result)
+				break;
 		}
-
-		if (result)
-			break;
-
-		/* The virtual transaction is gone now, wait for the next one */
-		vxids++;
 	}
 
 	LWLockRelease(ProcArrayLock);

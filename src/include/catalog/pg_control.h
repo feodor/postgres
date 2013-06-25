@@ -43,7 +43,7 @@ typedef struct CheckPoint
 	MultiXactOffset nextMultiOffset;	/* next free MultiXact offset */
 	TransactionId oldestXid;	/* cluster-wide minimum datfrozenxid */
 	Oid			oldestXidDB;	/* database with minimum datfrozenxid */
-	MultiXactId	oldestMulti;	/* cluster-wide minimum datminmxid */
+	MultiXactId oldestMulti;	/* cluster-wide minimum datminmxid */
 	Oid			oldestMultiDB;	/* database with minimum datminmxid */
 	pg_time_t	time;			/* time stamp of checkpoint */
 
@@ -67,7 +67,7 @@ typedef struct CheckPoint
 #define XLOG_RESTORE_POINT				0x70
 #define XLOG_FPW_CHANGE					0x80
 #define XLOG_END_OF_RECOVERY			0x90
-#define XLOG_HINT						0xA0
+#define XLOG_FPI						0xA0
 
 
 /*
@@ -127,7 +127,7 @@ typedef struct ControlFileData
 
 	CheckPoint	checkPointCopy; /* copy of last check point record */
 
-	XLogRecPtr  unloggedLSN;	/* current fake LSN value, for unlogged rels */
+	XLogRecPtr	unloggedLSN;	/* current fake LSN value, for unlogged rels */
 
 	/*
 	 * These two values determine the minimum point we must recover up to

@@ -698,8 +698,8 @@ nextval_internal(Oid relid)
 	/*
 	 * We must mark the buffer dirty before doing XLogInsert(); see notes in
 	 * SyncOneBuffer().  However, we don't apply the desired changes just yet.
-	 * This looks like a violation of the buffer update protocol, but it is
-	 * in fact safe because we hold exclusive lock on the buffer.  Any other
+	 * This looks like a violation of the buffer update protocol, but it is in
+	 * fact safe because we hold exclusive lock on the buffer.	Any other
 	 * process, including a checkpoint, that tries to examine the buffer
 	 * contents will block until we release the lock, and then will see the
 	 * final state that we install below.
@@ -1118,7 +1118,7 @@ read_seq_tuple(SeqTable elm, Relation rel, Buffer *buf, HeapTuple seqtuple)
 		HeapTupleHeaderSetXmax(seqtuple->t_data, InvalidTransactionId);
 		seqtuple->t_data->t_infomask &= ~HEAP_XMAX_COMMITTED;
 		seqtuple->t_data->t_infomask |= HEAP_XMAX_INVALID;
-		MarkBufferDirtyHint(*buf);
+		MarkBufferDirtyHint(*buf, true);
 	}
 
 	seq = (Form_pg_sequence) GETSTRUCT(seqtuple);
@@ -1226,8 +1226,8 @@ init_params(List *options, bool isInit,
 	}
 
 	/*
-	 * We must reset log_cnt when isInit or when changing any parameters
-	 * that would affect future nextval allocations.
+	 * We must reset log_cnt when isInit or when changing any parameters that
+	 * would affect future nextval allocations.
 	 */
 	if (isInit)
 		new->log_cnt = 0;

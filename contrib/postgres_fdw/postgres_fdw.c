@@ -133,7 +133,7 @@ typedef struct PgFdwScanState
 
 	/* extracted fdw_private data */
 	char	   *query;			/* text of SELECT command */
-	List	   *retrieved_attrs; /* list of retrieved attribute numbers */
+	List	   *retrieved_attrs;	/* list of retrieved attribute numbers */
 
 	/* for remote query execution */
 	PGconn	   *conn;			/* connection for the scan */
@@ -174,7 +174,7 @@ typedef struct PgFdwModifyState
 	char	   *query;			/* text of INSERT/UPDATE/DELETE command */
 	List	   *target_attrs;	/* list of target attribute numbers */
 	bool		has_returning;	/* is there a RETURNING clause? */
-	List	   *retrieved_attrs; /* attr numbers retrieved by RETURNING */
+	List	   *retrieved_attrs;	/* attr numbers retrieved by RETURNING */
 
 	/* info about parameters for prepared statement */
 	AttrNumber	ctidAttno;		/* attnum of input resjunk ctid column */
@@ -192,7 +192,7 @@ typedef struct PgFdwAnalyzeState
 {
 	Relation	rel;			/* relcache entry for the foreign table */
 	AttInMetadata *attinmeta;	/* attribute datatype conversion metadata */
-	List	   *retrieved_attrs; /* attr numbers retrieved by query */
+	List	   *retrieved_attrs;	/* attr numbers retrieved by query */
 
 	/* collected sample rows */
 	HeapTuple  *rows;			/* array of size targrows */
@@ -277,6 +277,7 @@ static TupleTableSlot *postgresExecForeignDelete(EState *estate,
 						  TupleTableSlot *planSlot);
 static void postgresEndForeignModify(EState *estate,
 						 ResultRelInfo *resultRelInfo);
+static int	postgresIsForeignRelUpdatable(Relation rel);
 static void postgresExplainForeignScan(ForeignScanState *node,
 						   ExplainState *es);
 static void postgresExplainForeignModify(ModifyTableState *mtstate,
@@ -355,6 +356,7 @@ postgres_fdw_handler(PG_FUNCTION_ARGS)
 	routine->ExecForeignUpdate = postgresExecForeignUpdate;
 	routine->ExecForeignDelete = postgresExecForeignDelete;
 	routine->EndForeignModify = postgresEndForeignModify;
+	routine->IsForeignRelUpdatable = postgresIsForeignRelUpdatable;
 
 	/* Support functions for EXPLAIN */
 	routine->ExplainForeignScan = postgresExplainForeignScan;
@@ -424,8 +426,8 @@ postgresGetForeignRelSize(PlannerInfo *root,
 
 	/*
 	 * If the table or the server is configured to use remote estimates,
-	 * identify which user to do remote access as during planning.  This
-	 * should match what ExecCheckRTEPerms() does.  If we fail due to lack of
+	 * identify which user to do remote access as during planning.	This
+	 * should match what ExecCheckRTEPerms() does.	If we fail due to lack of
 	 * permissions, the query would have failed at runtime anyway.
 	 */
 	if (fpinfo->use_remote_estimate)
@@ -447,7 +449,7 @@ postgresGetForeignRelSize(PlannerInfo *root,
 
 	/*
 	 * Identify which attributes will need to be retrieved from the remote
-	 * server.  These include all attrs needed for joins or final output, plus
+	 * server.	These include all attrs needed for joins or final output, plus
 	 * all attrs used in the local_conds.  (Note: if we end up using a
 	 * parameterized scan, it's possible that some of the join clauses will be
 	 * sent to the remote and thus we wouldn't really need to retrieve the
@@ -921,7 +923,7 @@ postgresBeginForeignScan(ForeignScanState *node, int eflags)
 	fsstate->query = strVal(list_nth(fsplan->fdw_private,
 									 FdwScanPrivateSelectSql));
 	fsstate->retrieved_attrs = (List *) list_nth(fsplan->fdw_private,
-												 FdwScanPrivateRetrievedAttrs);
+											   FdwScanPrivateRetrievedAttrs);
 
 	/* Create contexts for batches of tuples and per-tuple temp workspace. */
 	fsstate->batch_cxt = AllocSetContextCreate(estate->es_query_cxt,
@@ -1305,7 +1307,7 @@ postgresBeginForeignModify(ModifyTableState *mtstate,
 	fmstate->has_returning = intVal(list_nth(fdw_private,
 											 FdwModifyPrivateHasReturning));
 	fmstate->retrieved_attrs = (List *) list_nth(fdw_private,
-												 FdwModifyPrivateRetrievedAttrs);
+											 FdwModifyPrivateRetrievedAttrs);
 
 	/* Create context for per-tuple temp workspace. */
 	fmstate->temp_cxt = AllocSetContextCreate(estate->es_query_cxt,
@@ -1594,6 +1596,51 @@ postgresEndForeignModify(EState *estate,
 	/* Release remote connection */
 	ReleaseConnection(fmstate->conn);
 	fmstate->conn = NULL;
+}
+
+/*
+ * postgresIsForeignRelUpdatable
+ *		Determine whether a foreign table supports INSERT, UPDATE and/or
+ *		DELETE.
+ */
+static int
+postgresIsForeignRelUpdatable(Relation rel)
+{
+	bool		updatable;
+	ForeignTable *table;
+	ForeignServer *server;
+	ListCell   *lc;
+
+	/*
+	 * By default, all postgres_fdw foreign tables are assumed updatable. This
+	 * can be overridden by a per-server setting, which in turn can be
+	 * overridden by a per-table setting.
+	 */
+	updatable = true;
+
+	table = GetForeignTable(RelationGetRelid(rel));
+	server = GetForeignServer(table->serverid);
+
+	foreach(lc, server->options)
+	{
+		DefElem    *def = (DefElem *) lfirst(lc);
+
+		if (strcmp(def->defname, "updatable") == 0)
+			updatable = defGetBoolean(def);
+	}
+	foreach(lc, table->options)
+	{
+		DefElem    *def = (DefElem *) lfirst(lc);
+
+		if (strcmp(def->defname, "updatable") == 0)
+			updatable = defGetBoolean(def);
+	}
+
+	/*
+	 * Currently "updatable" means support for INSERT, UPDATE and DELETE.
+	 */
+	return updatable ?
+		(1 << CMD_INSERT) | (1 << CMD_UPDATE) | (1 << CMD_DELETE) : 0;
 }
 
 /*
@@ -1903,7 +1950,7 @@ create_cursor(ForeignScanState *node)
 	 * Notice that we pass NULL for paramTypes, thus forcing the remote server
 	 * to infer types for all parameters.  Since we explicitly cast every
 	 * parameter (see deparse.c), the "inference" is trivial and will produce
-	 * the desired result.  This allows us to avoid assuming that the remote
+	 * the desired result.	This allows us to avoid assuming that the remote
 	 * server has the same OIDs we do for the parameters' types.
 	 *
 	 * We don't use a PG_TRY block here, so be careful not to throw error
@@ -2488,7 +2535,7 @@ analyze_row_processor(PGresult *res, int row, PgFdwAnalyzeState *astate)
 		astate->rows[pos] = make_tuple_from_result_row(res, row,
 													   astate->rel,
 													   astate->attinmeta,
-													   astate->retrieved_attrs,
+													 astate->retrieved_attrs,
 													   astate->temp_cxt);
 
 		MemoryContextSwitchTo(oldcontext);

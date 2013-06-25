@@ -968,8 +968,8 @@ CreateFunction(CreateFunctionStmt *stmt, const char *queryString)
 						   GetUserId(),
 						   languageOid,
 						   languageValidator,
-						   prosrc_str, /* converted to text later */
-						   probin_str, /* converted to text later */
+						   prosrc_str,	/* converted to text later */
+						   probin_str,	/* converted to text later */
 						   false,		/* not an aggregate */
 						   isWindowFunc,
 						   security,
@@ -1626,18 +1626,18 @@ DropCastById(Oid castOid)
  */
 void
 IsThereFunctionInNamespace(const char *proname, int pronargs,
-						   oidvector proargtypes, Oid nspOid)
+						   oidvector *proargtypes, Oid nspOid)
 {
 	/* check for duplicate name (more friendly than unique-index failure) */
 	if (SearchSysCacheExists3(PROCNAMEARGSNSP,
 							  CStringGetDatum(proname),
-							  PointerGetDatum(&proargtypes),
+							  PointerGetDatum(proargtypes),
 							  ObjectIdGetDatum(nspOid)))
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_FUNCTION),
 				 errmsg("function %s already exists in schema \"%s\"",
 						funcname_signature_string(proname, pronargs,
-												  NIL, proargtypes.values),
+												  NIL, proargtypes->values),
 						get_namespace_name(nspOid))));
 }
 

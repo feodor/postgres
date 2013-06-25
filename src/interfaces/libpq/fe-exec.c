@@ -279,7 +279,7 @@ PQsetResultAttrs(PGresult *res, int numAttributes, PGresAttDesc *attDescs)
  *	 PG_COPYRES_ATTRS - Copy the source result's attributes
  *
  *	 PG_COPYRES_TUPLES - Copy the source result's tuples.  This implies
- *	 copying the attrs, seeeing how the attrs are needed by the tuples.
+ *	 copying the attrs, seeing how the attrs are needed by the tuples.
  *
  *	 PG_COPYRES_EVENTS - Copy the source result's events.
  *
@@ -1181,7 +1181,7 @@ PQsendQueryParams(PGconn *conn,
 	if (nParams < 0 || nParams > 65535)
 	{
 		printfPQExpBuffer(&conn->errorMessage,
-						libpq_gettext("number of parameters must be between 0 and 65535\n"));
+		libpq_gettext("number of parameters must be between 0 and 65535\n"));
 		return 0;
 	}
 
@@ -1227,7 +1227,7 @@ PQsendPrepare(PGconn *conn,
 	if (nParams < 0 || nParams > 65535)
 	{
 		printfPQExpBuffer(&conn->errorMessage,
-						libpq_gettext("number of parameters must be between 0 and 65535\n"));
+		libpq_gettext("number of parameters must be between 0 and 65535\n"));
 		return 0;
 	}
 
@@ -1322,7 +1322,7 @@ PQsendQueryPrepared(PGconn *conn,
 	if (nParams < 0 || nParams > 65535)
 	{
 		printfPQExpBuffer(&conn->errorMessage,
-						libpq_gettext("number of parameters must be between 0 and 65535\n"));
+		libpq_gettext("number of parameters must be between 0 and 65535\n"));
 		return 0;
 	}
 

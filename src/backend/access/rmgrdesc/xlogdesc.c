@@ -1,14 +1,14 @@
 /*-------------------------------------------------------------------------
  *
  * xlogdesc.c
- *    rmgr descriptor routines for access/transam/xlog.c
+ *	  rmgr descriptor routines for access/transam/xlog.c
  *
  * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
  * IDENTIFICATION
- *    src/backend/access/rmgrdesc/xlogdesc.c
+ *	  src/backend/access/rmgrdesc/xlogdesc.c
  *
  *-------------------------------------------------------------------------
  */
@@ -45,7 +45,7 @@ xlog_desc(StringInfo buf, uint8 xl_info, char *rec)
 						 "tli %u; prev tli %u; fpw %s; xid %u/%u; oid %u; multi %u; offset %u; "
 						 "oldest xid %u in DB %u; oldest multi %u in DB %u; "
 						 "oldest running xid %u; %s",
-						 (uint32) (checkpoint->redo >> 32), (uint32) checkpoint->redo,
+				(uint32) (checkpoint->redo >> 32), (uint32) checkpoint->redo,
 						 checkpoint->ThisTimeLineID,
 						 checkpoint->PrevTimeLineID,
 						 checkpoint->fullPageWrites ? "true" : "false",
@@ -82,10 +82,11 @@ xlog_desc(StringInfo buf, uint8 xl_info, char *rec)
 		appendStringInfo(buf, "restore point: %s", xlrec->rp_name);
 
 	}
-	else if (info == XLOG_HINT)
+	else if (info == XLOG_FPI)
 	{
-		BkpBlock *bkp = (BkpBlock *) rec;
-		appendStringInfo(buf, "page hint: %s block %u",
+		BkpBlock   *bkp = (BkpBlock *) rec;
+
+		appendStringInfo(buf, "full-page image: %s block %u",
 						 relpathperm(bkp->node, bkp->fork),
 						 bkp->block);
 	}

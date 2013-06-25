@@ -62,7 +62,7 @@
 #include "utils/tqual.h"
 
 
-static Oid AlterObjectNamespace_internal(Relation rel, Oid objid, Oid nspOid);
+static Oid	AlterObjectNamespace_internal(Relation rel, Oid objid, Oid nspOid);
 
 /*
  * Raise an error to the effect that an object of the given name is already
@@ -71,7 +71,7 @@ static Oid AlterObjectNamespace_internal(Relation rel, Oid objid, Oid nspOid);
 static void
 report_name_conflict(Oid classId, const char *name)
 {
-	char   *msgfmt;
+	char	   *msgfmt;
 
 	switch (classId)
 	{
@@ -100,7 +100,7 @@ report_name_conflict(Oid classId, const char *name)
 static void
 report_namespace_conflict(Oid classId, const char *name, Oid nspOid)
 {
-	char   *msgfmt;
+	char	   *msgfmt;
 
 	Assert(OidIsValid(nspOid));
 
@@ -168,6 +168,7 @@ AlterObjectRename_internal(Relation rel, Oid objectId, const char *new_name)
 	Datum	   *values;
 	bool	   *nulls;
 	bool	   *replaces;
+	NameData	nameattrdata;
 
 	oldtup = SearchSysCache1(oidCacheId, ObjectIdGetDatum(objectId));
 	if (!HeapTupleIsValid(oldtup))
@@ -221,16 +222,16 @@ AlterObjectRename_internal(Relation rel, Oid objectId, const char *new_name)
 	}
 
 	/*
-     * Check for duplicate name (more friendly than unique-index failure).
-     * Since this is just a friendliness check, we can just skip it in cases
-     * where there isn't suitable support.
-     */
+	 * Check for duplicate name (more friendly than unique-index failure).
+	 * Since this is just a friendliness check, we can just skip it in cases
+	 * where there isn't suitable support.
+	 */
 	if (classId == ProcedureRelationId)
 	{
 		Form_pg_proc proc = (Form_pg_proc) GETSTRUCT(oldtup);
 
 		IsThereFunctionInNamespace(new_name, proc->pronargs,
-								   proc->proargtypes, proc->pronamespace);
+								   &proc->proargtypes, proc->pronamespace);
 	}
 	else if (classId == CollationRelationId)
 	{
@@ -273,7 +274,8 @@ AlterObjectRename_internal(Relation rel, Oid objectId, const char *new_name)
 	values = palloc0(RelationGetNumberOfAttributes(rel) * sizeof(Datum));
 	nulls = palloc0(RelationGetNumberOfAttributes(rel) * sizeof(bool));
 	replaces = palloc0(RelationGetNumberOfAttributes(rel) * sizeof(bool));
-	values[Anum_name - 1] = PointerGetDatum(new_name);
+	namestrcpy(&nameattrdata, new_name);
+	values[Anum_name - 1] = NameGetDatum(&nameattrdata);
 	replaces[Anum_name - 1] = true;
 	newtup = heap_modify_tuple(oldtup, RelationGetDescr(rel),
 							   values, nulls, replaces);
@@ -355,9 +357,9 @@ ExecRenameStmt(RenameStmt *stmt)
 		case OBJECT_TSPARSER:
 		case OBJECT_TSTEMPLATE:
 			{
-				ObjectAddress	address;
-				Relation		catalog;
-				Relation		relation;
+				ObjectAddress address;
+				Relation	catalog;
+				Relation	relation;
 
 				address = get_object_address(stmt->renameType,
 											 stmt->object, stmt->objarg,
@@ -377,7 +379,7 @@ ExecRenameStmt(RenameStmt *stmt)
 		default:
 			elog(ERROR, "unrecognized rename stmt type: %d",
 				 (int) stmt->renameType);
-			return InvalidOid;			/* keep compiler happy */
+			return InvalidOid;	/* keep compiler happy */
 	}
 }
 
@@ -609,7 +611,7 @@ AlterObjectNamespace_internal(Relation rel, Oid objid, Oid nspOid)
 		Form_pg_proc proc = (Form_pg_proc) GETSTRUCT(tup);
 
 		IsThereFunctionInNamespace(NameStr(proc->proname), proc->pronargs,
-								   proc->proargtypes, nspOid);
+								   &proc->proargtypes, nspOid);
 	}
 	else if (classId == CollationRelationId)
 	{
@@ -699,7 +701,7 @@ ExecAlterOwnerStmt(AlterOwnerStmt *stmt)
 			return AlterEventTriggerOwner(strVal(linitial(stmt->object)),
 										  newowner);
 
-		/* Generic cases */
+			/* Generic cases */
 		case OBJECT_AGGREGATE:
 		case OBJECT_COLLATION:
 		case OBJECT_CONVERSION:
@@ -716,7 +718,7 @@ ExecAlterOwnerStmt(AlterOwnerStmt *stmt)
 				Relation	catalog;
 				Relation	relation;
 				Oid			classId;
-				ObjectAddress	address;
+				ObjectAddress address;
 
 				address = get_object_address(stmt->objectType,
 											 stmt->object,
@@ -804,13 +806,13 @@ AlterObjectOwner_internal(Relation rel, Oid objectId, Oid new_ownerId)
 		/* Superusers can bypass permission checks */
 		if (!superuser())
 		{
-			AclObjectKind	aclkind = get_object_aclkind(classId);
+			AclObjectKind aclkind = get_object_aclkind(classId);
 
 			/* must be owner */
 			if (!has_privs_of_role(GetUserId(), old_ownerId))
 			{
-				char   *objname;
-				char	namebuf[NAMEDATALEN];
+				char	   *objname;
+				char		namebuf[NAMEDATALEN];
 
 				if (Anum_name != InvalidAttrNumber)
 				{
@@ -833,7 +835,7 @@ AlterObjectOwner_internal(Relation rel, Oid objectId, Oid new_ownerId)
 			/* New owner must have CREATE privilege on namespace */
 			if (OidIsValid(namespaceId))
 			{
-				AclResult   aclresult;
+				AclResult	aclresult;
 
 				aclresult = pg_namespace_aclcheck(namespaceId, new_ownerId,
 												  ACL_CREATE);
@@ -861,7 +863,7 @@ AlterObjectOwner_internal(Relation rel, Oid objectId, Oid new_ownerId)
 								 Anum_acl, RelationGetDescr(rel), &isnull);
 			if (!isnull)
 			{
-				Acl    *newAcl;
+				Acl		   *newAcl;
 
 				newAcl = aclnewowner(DatumGetAclP(datum),
 									 old_ownerId, new_ownerId);
