@@ -199,6 +199,24 @@ select 'aa=>"NuLl"'::hstore;
  "aa"=>"NuLl"
 (1 row)
 
+select 'aa=>nul'::hstore;
+   hstore    
+-------------
+ "aa"=>"nul"
+(1 row)
+
+select 'aa=>NuL'::hstore;
+   hstore    
+-------------
+ "aa"=>"NuL"
+(1 row)
+
+select 'aa=>"NuL"'::hstore;
+   hstore    
+-------------
+ "aa"=>"NuL"
+(1 row)
+
 select e'\\=a=>q=w'::hstore;
    hstore    
 -------------

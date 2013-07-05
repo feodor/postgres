@@ -39,6 +39,9 @@ select 'aa=>"bb" ,cc=>dd'::hstore;
 select 'aa=>null'::hstore;
 select 'aa=>NuLl'::hstore;
 select 'aa=>"NuLl"'::hstore;
+select 'aa=>nul'::hstore;
+select 'aa=>NuL'::hstore;
+select 'aa=>"NuL"'::hstore;
 
 select e'\\=a=>q=w'::hstore;
 select e'"=a"=>q\\=w'::hstore;

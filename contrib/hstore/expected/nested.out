@@ -558,9 +558,9 @@ SELECT slice(hstore 'aa=>1, b=>{2=>1}, c=>{1,2}', ARRAY['b','c']);
 
 --to array
 SELECT %% 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL';
-               ?column?                
----------------------------------------
- {b,"{\"a\", NULL}",aa,1,cq,l,fg,NULL}
+                ?column?                
+----------------------------------------
+ {b,"{\"a\", \"n\"}",aa,1,cq,l,fg,NULL}
 (1 row)
 
 SELECT %% 'aa,1, cq,l, b,g, fg,NULL';
@@ -570,9 +570,9 @@ SELECT %% 'aa,1, cq,l, b,g, fg,NULL';
 (1 row)
 
 SELECT hstore_to_matrix( 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL');
-               hstore_to_matrix                
------------------------------------------------
- {{b,"{\"a\", NULL}"},{aa,1},{cq,l},{fg,NULL}}
+                hstore_to_matrix                
+------------------------------------------------
+ {{b,"{\"a\", \"n\"}"},{aa,1},{cq,l},{fg,NULL}}
 (1 row)
 
 SELECT hstore_to_matrix( 'aa,1, cq,l, b,g, fg,NULL');

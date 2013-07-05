@@ -11,8 +11,10 @@ static int	scanbuflen;
 
 static void addstring(bool init, char *s, int l);
 static void addchar(bool init, char s);
+static int checkSpecialVal(void); /* examine scanstring for the special value */
 
 static bool	inputJSON = false;
+
 
 %}
 
@@ -82,7 +84,7 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 									return STRING_P;
 								}
 
-<xNONQUOTED>({any}|[\>\"\:])+		{ 
+<xNONQUOTED>({any}|[\>\"\:])+	{ 
 									addstring(false, yytext, yyleng); 
 								}
 
@@ -91,7 +93,7 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 <xNONQUOTED>[ \t\n\r\f]+		{ 
 									yylval->str = scanstring;
 									BEGIN INITIAL;
-									return pg_strncasecmp("null", scanstring.val, scanstring.len) ? STRING_P : NULL_P;
+									return checkSpecialVal();
 								}
 
 <xNONQUOTED>\=					{	/* =<<EOF>> */
@@ -105,20 +107,20 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 									yylval->str = scanstring;
 									yyless(0);
 									BEGIN INITIAL;
-									return pg_strncasecmp("null", scanstring.val, scanstring.len) ? STRING_P : NULL_P;
+									return checkSpecialVal();
 								}
 
 <xNONQUOTED><<EOF>>				{ 
 									yylval->str = scanstring;
 									BEGIN INITIAL;
-									return pg_strncasecmp("null", scanstring.val, scanstring.len) ? STRING_P : NULL_P;
+									return checkSpecialVal();
 								}
 
 <xNONQUOTED>\=\>				{
 									yylval->str = scanstring;
 									yyless(0);
 									BEGIN INITIAL;
-									return pg_strncasecmp("null", scanstring.val, scanstring.len) ? STRING_P : NULL_P;
+									return checkSpecialVal();
 								}
 									
 
@@ -161,7 +163,26 @@ yyerror(const char *message)
 	}
 }
 
+static int
+checkSpecialVal(void)
+{
+	int res = STRING_P;
 
+	if (scanstring.len == 1)
+	{
+		if (*scanstring.val == 't')
+			res = TRUE_P;
+		else if (*scanstring.val == 'f')
+			res = FALSE_P;
+	}
+	else if (scanstring.len == 4)
+	{
+		if (pg_strncasecmp("null", scanstring.val, scanstring.len) == 0)
+			res = NULL_P;
+	}
+
+	return res;
+}
 /*
  * Called before any actual parsing is done
  */
