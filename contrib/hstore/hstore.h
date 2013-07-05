@@ -20,16 +20,29 @@ typedef struct
 	uint32		entry;
 } HEntry;
 
-#define HENTRY_ISFIRST	0x80000000
-#define HENTRY_ISNULL	0x40000000
-#define HENTRY_ISNEST	0x20000000
-#define HENTRY_POSMASK 	0x1FFFFFFF
+#define HENTRY_ISFIRST		0x80000000
+#define HENTRY_ISSTRING 	(0x00000000) /* keep binary compatibility */
+#define HENTRY_ISNUMERIC	(0x10000000)
+#define HENTRY_ISNEST		(0x20000000)
+#define HENTRY_ISNULL		(0x40000000) /* keep binary compatibility */
+#define HENTRY_ISBOOL		(0x10000000 | 0x20000000)
+#define HENTRY_ISTRUE		(0x10000000 | 0x20000000 | 0x40000000)
+
+/* (0x20000000 | 0x40000000) and (0x10000000 | 0x40000000) are reserved for future use */ 
+
+#define HENTRY_POSMASK 	0x0FFFFFFF
+#define HENTRY_TYPEMASK	(~(HENTRY_POSMASK | HENTRY_ISFIRST))
 
 /* note possible multiple evaluations, also access to prior array element */
-#define HSE_ISFIRST(he_) (((he_).entry & HENTRY_ISFIRST) != 0)
-#define HSE_ISNULL(he_) (((he_).entry & HENTRY_ISNULL) != 0)
-#define HSE_ISNEST(he_) (((he_).entry & HENTRY_ISNEST) != 0)
-#define HSE_ISSTRING(he_) (((he_).entry & HENTRY_ISNEST) == 0)
+#define HSE_ISFIRST(he_) 		(((he_).entry & HENTRY_ISFIRST) != 0)
+#define HSE_ISSTRING(he_)		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISSTRING)
+#define HSE_ISNUMERIC(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNUMERIC)
+#define HSE_ISNEST(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNEST)
+#define HSE_ISNULL(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNULL)
+#define HSE_ISBOOL(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HSE_ISBOOL)
+#define HSE_ISBOOL_TRUE(he_) 	(((he_).entry & HENTRY_TYPEMASK) == HSE_ISTRUE)
+#define HSE_ISBOOL_FALSE(he_) 	(HSE_ISBOOL(he_) && !HSE_ISTRUE(he_))
+
 #define HSE_ENDPOS(he_) ((he_).entry & HENTRY_POSMASK)
 #define HSE_OFF(he_) (HSE_ISFIRST(he_) ? 0 : HSE_ENDPOS((&(he_))[-1]))
 #define HSE_LEN(he_) (HSE_ISFIRST(he_)	\
@@ -39,8 +52,8 @@ typedef struct
 /*
  * determined by the size of "endpos" (ie HENTRY_POSMASK)
  */
-#define HSTORE_MAX_KEY_LEN 		0x1FFFFFFF
-#define HSTORE_MAX_VALUE_LEN 	0x1FFFFFFF
+#define HSTORE_MAX_KEY_LEN 		HENTRY_POSMASK
+#define HSTORE_MAX_VALUE_LEN 	HENTRY_POSMASK
 
 typedef struct
 {

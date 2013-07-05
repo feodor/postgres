@@ -231,18 +231,15 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 
 				if (HSE_ISSTRING(*v))
 				{
-					if (HSE_ISNULL(*v))
-					{
-						r.type = hsvNullString;
-						r.size = sizeof(HEntry);
-					}
-					else
-					{
-						r.type = hsvString;
-						r.string.val = data + HSE_OFF(*v);
-						r.string.len = HSE_LEN(*v);
-						r.size = sizeof(HEntry) + r.string.len;
-					}
+					r.type = hsvString;
+					r.string.val = data + HSE_OFF(*v);
+					r.string.len = HSE_LEN(*v);
+					r.size = sizeof(HEntry) + r.string.len;
+				}
+				else if (HSE_ISNULL(*v))
+				{
+					r.type = hsvNullString;
+					r.size = sizeof(HEntry);
 				}
 				else
 				{
@@ -313,18 +310,15 @@ getHStoreValue(char *buffer, uint32 flags, int32 i)
 
 	if (HSE_ISSTRING(*e))
 	{
-		if (HSE_ISNULL(*e))
-		{
-			r.type = hsvNullString;
-			r.size = sizeof(HEntry);
-		}
-		else
-		{
-			r.type = hsvString;
-			r.string.val = data + HSE_OFF(*e);
-			r.string.len = HSE_LEN(*e);
-			r.size = sizeof(HEntry) + r.string.len;
-		}
+		r.type = hsvString;
+		r.string.val = data + HSE_OFF(*e);
+		r.string.len = HSE_LEN(*e);
+		r.size = sizeof(HEntry) + r.string.len;
+	}
+	else if (HSE_ISNULL(*e))
+	{
+		r.type = hsvNullString;
+		r.size = sizeof(HEntry);
 	}
 	else
 	{
@@ -432,18 +426,17 @@ formAnswer(HStoreIterator **it, HStoreValue *v, HEntry *e, bool skipNested)
 {
 	if (HSE_ISSTRING(*e))
 	{
-		if (HSE_ISNULL(*e))
-		{
-			v->type = hsvNullString;
-			v->size = sizeof(HEntry);
-		}
-		else
-		{
-			v->type = hsvString;
-			v->string.val = (*it)->data + HSE_OFF(*e);
-			v->string.len = HSE_LEN(*e);
-			v->size = sizeof(HEntry) + v->string.len;
-		}
+		v->type = hsvString;
+		v->string.val = (*it)->data + HSE_OFF(*e);
+		v->string.len = HSE_LEN(*e);
+		v->size = sizeof(HEntry) + v->string.len;
+
+		return false;
+	}
+	else if (HSE_ISNULL(*e))
+	{
+		v->type = hsvNullString;
+		v->size = sizeof(HEntry);
 
 		return false;
 	} 
