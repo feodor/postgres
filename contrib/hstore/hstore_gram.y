@@ -170,6 +170,7 @@ makeHStorePair(string *key, HStoreValue *value) {
 }
 
 %token	<str>			DELIMITER_P NULL_P STRING_P TRUE_P FALSE_P
+						NUMERIC_P
 
 %type	<hvalue>		result hstore value 
 %type	<str>			key
@@ -211,6 +212,7 @@ value:
 	| STRING_P						{ $$ = makeHStoreValueString(NULL, &$1); }
 	| TRUE_P						{ $$ = makeHStoreValueString(NULL, &$1); }
 	| FALSE_P						{ $$ = makeHStoreValueString(NULL, &$1); }
+	| NUMERIC_P						{ $$ = makeHStoreValueString(NULL, &$1); }
 	| hstore						{ $$ = $1; } 
 	;
 
@@ -223,6 +225,7 @@ key:
 	STRING_P						{ $$ = $1; }
 	| TRUE_P						{ $$ = $1; }
 	| FALSE_P						{ $$ = $1; }
+	| NUMERIC_P						{ $$ = $1; }
 	| NULL_P						{ $$ = $1; }
 	;
 

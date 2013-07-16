@@ -799,27 +799,79 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(rettuple));
 }
 
-static bool
+bool
 stringIsNumber(char *string, int len) {
+	enum {
+		SIN_FIRSTINT,
+		SIN_ZEROINT,
+		SIN_INT,
+		SIN_SCALE,
+		SIN_MSIGN,
+		SIN_MANTISSA
+	} sinState;
+	char	*c;
+	bool	r;
 
-	if (!(string[0] == '0' && isdigit((unsigned char) string[1])) && strspn(string, "+-0123456789Ee.") == len)
+	if (*string == '-' || *string == '+')
 	{
-		char	*endptr = "junk";
-		long	lval;
-		double	dval;
-
-		lval =  strtol(string, &endptr, 10);
-		(void) lval;
-		if (*endptr == '\0')
-			return true;
-
-		dval = strtod(string, &endptr);
-		(void) dval;
-		if (*endptr == '\0')
-			return true;
+		string++;
+		len--;
 	}
 
-	return false;
+	c = string;
+	r = true;
+	sinState = SIN_FIRSTINT;
+
+	while(r && c - string < len)
+	{
+		switch(sinState)
+		{
+			case SIN_FIRSTINT:
+				if (*c == '0')
+					sinState = SIN_ZEROINT;
+				else if (isdigit(*c))
+					sinState = SIN_INT;
+				else
+					r = false;
+				break;
+			case SIN_ZEROINT:
+				if (*c == '.')
+					sinState = SIN_SCALE;
+				else
+					r = false;
+				break;
+			case SIN_INT:
+				if (*c == '.')
+					sinState = SIN_SCALE;
+				else if (*c == 'e' || *c == 'E')
+					sinState = SIN_MSIGN;
+				else if (!isdigit(*c))
+					r = false;
+				break;
+			case SIN_SCALE:
+				if (*c == 'e' || *c == 'E')
+					sinState = SIN_MSIGN;
+				else if (!isdigit(*c))
+					r = false;
+				break;
+			case SIN_MSIGN:
+				if (*c == '-' || *c == '+' || isdigit(*c))
+					sinState = SIN_MANTISSA;
+				else
+					r = false;
+				break;
+			case SIN_MANTISSA:
+				if (!isdigit(*c))
+					r = false;
+				break;
+			default:
+				abort();
+		}
+
+		c++;
+	}
+
+	return r;
 }
 
 static void

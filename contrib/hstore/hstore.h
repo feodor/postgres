@@ -158,6 +158,8 @@ extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags,
 
 extern HStoreValue* getHStoreValue(char *buffer, uint32 flags, int32 i);
 
+extern bool stringIsNumber(char *string, int len);
+
 typedef enum HStoreOutputKind {
 	HStoreOutput,
 	HStoreStrictOutput,

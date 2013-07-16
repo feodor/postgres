@@ -180,6 +180,10 @@ checkSpecialVal(void)
 		if (pg_strncasecmp("null", scanstring.val, scanstring.len) == 0)
 			res = NULL_P;
 	}
+	else if (stringIsNumber(scanstring.val, scanstring.len))
+	{
+		res = NUMERIC_P;
+	}
 
 	return res;
 }
