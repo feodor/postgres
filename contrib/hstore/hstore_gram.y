@@ -69,6 +69,44 @@ makeHStoreValueString(HStoreValue* v, string *s)
 }
 
 static HStoreValue*
+makeHStoreValueNumeric(HStoreValue* v, string *s)
+{
+	Numeric n = NULL;
+
+	PG_TRY();
+	{
+		n = DatumGetNumeric(DirectFunctionCall3(numeric_in, CStringGetDatum(s->val), 0, -1));
+	}
+	PG_CATCH();
+	{
+		n = NULL;
+	}
+	PG_END_TRY();
+
+	v = makeHStoreValueString(v, s);
+
+	if (/* XXX */ 0 && n != NULL)
+	{
+		v->type = hsvNumeric;
+		v->numeric = n;
+		v->size = sizeof(HEntry) + VARSIZE_ANY(n);
+	}
+
+	return v;
+}
+
+static HStoreValue*
+makeHStoreValueBool(bool val) {
+	HStoreValue *v = palloc(sizeof(*v));
+
+	v->type = hsvBool;
+	v->boolean = val;
+	v->size = sizeof(HEntry);
+
+	return v;
+}
+
+static HStoreValue*
 makeHStoreValueArray(List *list)
 {
 	HStoreValue	*v = palloc(sizeof(*v));
@@ -162,6 +200,7 @@ makeHStorePair(string *key, HStoreValue *value) {
 
 %union {
 	string 			str;
+	Numeric			numeric;
 	List			*elems; 		/* list of HStoreValue */
 	List			*pairs; 		/* list of HStorePair */
 
@@ -187,7 +226,7 @@ result:
 	pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
 	| value_list					{ *((HStoreValue**)result) = makeHStoreValueArray($1); }
 	| value							{ 	
-										if ($1->type == hsvString)
+										if ($1->type == hsvString || $1->type == hsvBool || $1->type == hsvNumeric)
 											*((HStoreValue**)result) = makeHStoreValueArray(lappend(NIL, $1));
 										else if ($1->type == hsvNullString)
 											*((HStoreValue**)result) = NULL;
@@ -210,9 +249,11 @@ hstore:
 value:
 	NULL_P							{ $$ = makeHStoreValueString(NULL, NULL); }
 	| STRING_P						{ $$ = makeHStoreValueString(NULL, &$1); }
+	/* XXX | TRUE_P						{ $$ = makeHStoreValueBool(true); }
+	| FALSE_P						{ $$ = makeHStoreValueBool(false); } */
 	| TRUE_P						{ $$ = makeHStoreValueString(NULL, &$1); }
 	| FALSE_P						{ $$ = makeHStoreValueString(NULL, &$1); }
-	| NUMERIC_P						{ $$ = makeHStoreValueString(NULL, &$1); }
+	| NUMERIC_P						{ $$ = makeHStoreValueNumeric(NULL, &$1); }
 	| hstore						{ $$ = $1; } 
 	;
 
@@ -221,6 +262,9 @@ value_list:
 	| value_list ',' value			{ $$ = lappend($1, $3); } 
 	;
 
+/*
+ * key is always a string, not a bool or numeric
+ */
 key:
 	STRING_P						{ $$ = $1; }
 	| TRUE_P						{ $$ = $1; }

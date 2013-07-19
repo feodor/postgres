@@ -7,6 +7,7 @@
 #include "fmgr.h"
 #include "lib/stringinfo.h"
 #include "utils/array.h"
+#include "utils/numeric.h"
 
 /*
  * HEntry: there is one of these for each key _and_ value in an hstore
@@ -90,6 +91,8 @@ typedef struct HStoreValue HStoreValue;
 struct HStoreValue {
 	enum {
 		hsvNullString,
+		hsvNumeric,
+		hsvBool,
 		hsvString,
 		hsvArray,
 		hsvHash,
@@ -99,6 +102,8 @@ struct HStoreValue {
 	uint32		size; /* estimation size of node (including subnodes) */
 
 	union {
+		Numeric			numeric;
+		bool			boolean;
 		struct {
 			uint32		len;
 			char 		*val; /* could be not null-terminated */

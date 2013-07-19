@@ -164,7 +164,7 @@ yyerror(const char *message)
 }
 
 static int
-checkSpecialVal(void)
+checkSpecialVal()
 {
 	int res = STRING_P;
 
@@ -182,6 +182,8 @@ checkSpecialVal(void)
 	}
 	else if (stringIsNumber(scanstring.val, scanstring.len))
 	{
+		/* for numeric_in() call we need to make a correct C-string */
+		addchar(false, '\0');
 		res = NUMERIC_P;
 	}
 
@@ -247,20 +249,21 @@ addstring(bool init, char *s, int l) {
 
 static void
 addchar(bool init, char s) {
-	if (init) {
+	if (init)
+	{
 		scanstring.total = 32;
 		scanstring.val = palloc(scanstring.total);
 		scanstring.len = 0;
 	}
-
-	if (s != '\0') {
-		if(scanstring.len + 2 >= scanstring.total) {
-			scanstring.total*=2;
-			scanstring.val=repalloc(scanstring.val, scanstring.total);
-		}
-
-		scanstring.val[ scanstring.len++ ] = s;
+	else if(scanstring.len + 1 >= scanstring.total)
+	{
+		scanstring.total*=2;
+		scanstring.val=repalloc(scanstring.val, scanstring.total);
 	}
+
+	scanstring.val[ scanstring.len ] = s;
+	if (s != '\0')
+		scanstring.len++;
 }
 
 HStoreValue* 
