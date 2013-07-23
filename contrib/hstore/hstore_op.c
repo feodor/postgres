@@ -311,7 +311,7 @@ HStoreValueToHStore(HStoreValue *v)
 	{
 		out = NULL;
 	}
-	else if (v->type == hsvString)
+	else if (v->type == hsvString || v->type == hsvBool || v->type == hsvNumeric)
 	{
 		ToHStoreState	*state = NULL;
 		HStoreValue		*res;
@@ -464,9 +464,8 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
-										v->array.elems[i].string.val, 
-										v->array.elems[i].string.len) != NULL)
+		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound, 
+											   v->array.elems + i) != NULL)
 		{
 			res = true;
 			break;
@@ -508,9 +507,8 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
-										v->array.elems[i].string.val, 
-										v->array.elems[i].string.len) == NULL)
+		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound, 
+											   v->array.elems + i) == NULL)
 		{
 			res = false;
 			break;
@@ -1382,8 +1380,8 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 		
 	for (i = 0; i < a->array.nelems; ++i)
 	{
-		HStoreValue	*v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
-									  a->array.elems[i].string.val, a->array.elems[i].string.len);
+		HStoreValue	*v = findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
+															a->array.elems + i);
 
 		if (v)
 		{
@@ -2490,8 +2488,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 
 			Assert(r2 == WHS_KEY);
 
-			v = findUncompressedHStoreValue((*it1)->buffer, HS_FLAG_HSTORE, &lowbound,
-											v2.string.val, v2.string.len);
+			v = findUncompressedHStoreValueByValue((*it1)->buffer, HS_FLAG_HSTORE, &lowbound, &v2);
 
 			if (v == NULL)
 			{
@@ -2507,7 +2504,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 				res = false;
 				break;
 			}
-			else if (v->type == hsvString || v->type == hsvNullString)
+			else if (v->type == hsvString || v->type == hsvNullString || v->type == hsvBool || v->type == hsvNumeric)
 			{
 				if (compareHStoreValue(v, &v2) != 0)
 				{
@@ -2543,16 +2540,9 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 
 			Assert(r2 == WHS_ELEM);
 
-			if (v2.type == hsvString || v2.type == hsvNullString)
+			if (v2.type == hsvString || v2.type == hsvNullString || v2.type == hsvBool || v2.type == hsvNumeric)
 			{
-				if (v2.type == hsvNullString)
-				{
-					v2.string.val = NULL;
-					v2.string.len = 0;
-				}
-
-				v = findUncompressedHStoreValue((*it1)->buffer, HS_FLAG_ARRAY, NULL,
-												v2.string.val, v2.string.len);
+				v = findUncompressedHStoreValueByValue((*it1)->buffer, HS_FLAG_ARRAY, NULL, &v2);
 				if (v == NULL)
 				{
 					res = false;

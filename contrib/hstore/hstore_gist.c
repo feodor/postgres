@@ -126,9 +126,23 @@ crc32_HStoreValue(HStoreValue *v, uint32 r)
 			break;
 	}
 
-	Assert(v->type == hsvString);
 	crc = crc32_buf(crc, &flag, 1);
-	crc = crc32_buf(crc, v->string.val, v->string.len);
+
+	switch(v->type)
+	{
+		case hsvString:
+			crc = crc32_buf(crc, v->string.val, v->string.len);
+			break;
+		case hsvBool:
+			flag = (v->boolean) ? 't' : 'f';
+			crc = crc32_buf(crc, &flag, 1);
+			break;
+		case hsvNumeric:
+			crc = crc32_buf(crc, (char*)v->numeric, VARSIZE_ANY(v->numeric));
+			break;
+		default:
+			elog(PANIC, "impossible value %d", v->type);
+	}
 
 	return crc32_fini(crc);
 }

@@ -37,6 +37,9 @@ makeitemFromValue(HStoreValue *v, char flag)
 
 	switch(v->type)
 	{
+		case hsvBool:
+		case hsvNumeric:
+			/* XXX */
 		case hsvNullString:
 			item = makeitem(NULL, 0, NULLFLAG);
 			break;

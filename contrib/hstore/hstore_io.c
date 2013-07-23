@@ -99,7 +99,7 @@ recvHStoreValue(StringInfo buf, HStoreValue *v, uint32 level, int c)
 		recvHStore(buf, v, level + 1);
 	}
 	else
-	{
+	{	/* XXX */
 		v->type = hsvString;
 
 		v->string.val = pq_getmsgtext(buf, c, &c);
@@ -566,25 +566,39 @@ hstore_from_record(PG_FUNCTION_ARGS)
 			/*
 			 * Convert the column value to text
 			 */
-			if (column_info->column_type != column_type)
+			if (column_type == BOOLOID)
 			{
-				bool		typIsVarlena;
-
-				getTypeOutputInfo(column_type,
-								  &column_info->typiofunc,
-								  &typIsVarlena);
-				fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
-							  fcinfo->flinfo->fn_mcxt);
-				column_info->column_type = column_type;
+				v.hash.pairs[i].value.type = hsvBool;
+				v.hash.pairs[i].value.boolean = DatumGetBool(values[i]);
+				v.hash.pairs[i].value.size = sizeof(HEntry);
 			}
+			else if (0 && column_type == NUMERICOID)
+			{	/* XXX float... int... */
+				v.hash.pairs[i].value.type = hsvNumeric;
+				v.hash.pairs[i].value.numeric = DatumGetNumeric(values[i]); 
+				v.hash.pairs[i].value.size = 2*sizeof(HEntry) + VARSIZE_ANY(v.hash.pairs[i].value.numeric);
+			}
+			else
+			{
+				if (column_info->column_type != column_type)
+				{
+					bool		typIsVarlena;
 
-			value = OutputFunctionCall(&column_info->proc, values[i]);
+					getTypeOutputInfo(column_type,
+									  &column_info->typiofunc,
+									  &typIsVarlena);
+					fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
+								  fcinfo->flinfo->fn_mcxt);
+					column_info->column_type = column_type;
+				}
 
-			v.hash.pairs[i].value.type = hsvString;
-			v.hash.pairs[i].value.size = sizeof(HEntry);
-			v.hash.pairs[i].value.string.val = value;
-			v.hash.pairs[i].value.string.len = hstoreCheckValLen(strlen(value));
-			v.hash.pairs[i].value.size = sizeof(HEntry) + v.hash.pairs[i].value.string.len;
+				value = OutputFunctionCall(&column_info->proc, values[i]);
+
+				v.hash.pairs[i].value.type = hsvString;
+				v.hash.pairs[i].value.string.val = value;
+				v.hash.pairs[i].value.string.len = hstoreCheckValLen(strlen(value));
+				v.hash.pairs[i].value.size = sizeof(HEntry) + v.hash.pairs[i].value.string.len;
+			}
 		}
 
 		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
@@ -780,6 +794,10 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 
 			if (v->type == hsvString)
 				s = pnstrdup(v->string.val, v->string.len);
+			else if (v->type == hsvBool)
+				s = pnstrdup((v->boolean) ? "t" : "f", 1);
+			else if (v->type == hsvNumeric)
+				s = DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
 			else if (v->type == hsvBinary)
 				s = hstoreToCString(NULL, v->binary.data, v->binary.len, HStoreOutput, pretty_print_var);
 			else
@@ -1148,6 +1166,14 @@ HStoreValueToText(HStoreValue *v)
 	else if (v->type == hsvString)
 	{
 		out = cstring_to_text_with_len(v->string.val, v->string.len);
+	}
+	else if (v->type == hsvBool)
+	{
+		out = cstring_to_text_with_len((v->boolean) ? "t" : "f", 1);
+	}
+	else if (v->type == hsvNumeric)
+	{
+		out = cstring_to_text(DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
 	}
 	else
 	{
