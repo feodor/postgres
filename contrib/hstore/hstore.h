@@ -91,10 +91,10 @@ typedef struct HStoreValue HStoreValue;
 
 struct HStoreValue {
 	enum {
-		hsvNullString,
+		hsvNull,
+		hsvString,
 		hsvNumeric,
 		hsvBool,
-		hsvString,
 		hsvArray,
 		hsvHash,
 		hsvBinary  /* binary form of hsvArray/hsvHash */

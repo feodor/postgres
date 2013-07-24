@@ -91,7 +91,7 @@ recvHStoreValue(StringInfo buf, HStoreValue *v, uint32 level, int c)
 
 	if (c == -1)
 	{
-		v->type = hsvNullString;
+		v->type = hsvNull;
 		v->size = sizeof(HEntry);
 	} 
 	else if (hentry & (HS_FLAG_ARRAY | HS_FLAG_HSTORE))
@@ -203,7 +203,7 @@ hstore_from_text(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(1))
 	{
-		pair.value.type = hsvNullString;
+		pair.value.type = hsvNull;
 		pair.value.size = sizeof(HEntry);
 	}
 	else
@@ -315,7 +315,7 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 
 		if (!value_nulls || value_nulls[i])
 		{
-			v.hash.pairs[i].value.type = hsvNullString;
+			v.hash.pairs[i].value.type = hsvNull;
 			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
@@ -403,7 +403,7 @@ hstore_from_array(PG_FUNCTION_ARGS)
 
 		if (in_nulls[i * 2 + 1])
 		{
-			v.hash.pairs[i].value.type = hsvNullString;
+			v.hash.pairs[i].value.type = hsvNull;
 			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
@@ -558,7 +558,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 
 		if (!nulls || nulls[i])
 		{
-			v.hash.pairs[i].value.type = hsvNullString;
+			v.hash.pairs[i].value.type = hsvNull;
 			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
@@ -777,7 +777,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			column_info->column_type = column_type;
 		}
 
-		if (v == NULL || v->type == hsvNullString)
+		if (v == NULL || v->type == hsvNull)
 		{
 			/*
 			 * need InputFunctionCall to happen even for nulls, so that domain
@@ -1101,7 +1101,7 @@ reout:
 				if (type == WHS_VALUE)
 				{
 					first = false;
-					putEscapedString(out, kind, (v.type == hsvNullString) ? NULL : v.string.val,  v.string.len);
+					putEscapedString(out, kind, (v.type == hsvNull) ? NULL : v.string.val,  v.string.len);
 				}
 				else
 				{
@@ -1122,7 +1122,7 @@ reout:
 				}
 
 				printIndent(out, enable_pretty_print, level);
-				putEscapedString(out, kind, (v.type == hsvNullString) ? NULL : v.string.val,  v.string.len);
+				putEscapedString(out, kind, (v.type == hsvNull) ? NULL : v.string.val,  v.string.len);
 				break;
 			case WHS_END_ARRAY:
 				level--;
@@ -1159,7 +1159,7 @@ HStoreValueToText(HStoreValue *v)
 {
 	text		*out;
 
-	if (v == NULL || v->type == hsvNullString)
+	if (v == NULL || v->type == hsvNull)
 	{
 		out = NULL;
 	}
@@ -1244,7 +1244,7 @@ hstore_send(PG_FUNCTION_ARGS)
 					break;
 				case WHS_ELEM:
 				case WHS_VALUE:
-					if (v.type == hsvNullString)
+					if (v.type == hsvNull)
 					{
 						pq_sendint(&buf, -1, 4);
 					}

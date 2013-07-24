@@ -49,7 +49,7 @@ makeHStoreValueString(HStoreValue* v, string *s)
 
 	if (s == NULL)
 	{
-		v->type = hsvNullString;
+		v->type = hsvNull;
 		v->size = sizeof(HEntry);
 	}
 	else if (s->len > HENTRY_POSMASK)
@@ -228,7 +228,7 @@ result:
 	| value							{ 	
 										if ($1->type == hsvString || $1->type == hsvBool || $1->type == hsvNumeric)
 											*((HStoreValue**)result) = makeHStoreValueArray(lappend(NIL, $1));
-										else if ($1->type == hsvNullString)
+										else if ($1->type == hsvNull)
 											*((HStoreValue**)result) = NULL;
 										else
 											*((HStoreValue**)result) = $1;

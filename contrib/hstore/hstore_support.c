@@ -57,7 +57,7 @@ compareHStoreValue(HStoreValue *a, HStoreValue *b)
 	{
 		switch(a->type)
 		{
-			case hsvNullString:
+			case hsvNull:
 				return 0;
 			case hsvString:
 				return compareHStoreStringValue(a, b, NULL);
@@ -195,9 +195,9 @@ findUncompressedHStoreValueByValue(char *buffer, uint32 flags, uint32 *lowbound,
 		for(i=(lowbound) ? *lowbound : 0; i<(header & HS_COUNT_MASK); i++) {
 			HEntry	*e = array + i;
 
-			if (HSE_ISNULL(*e) && key->type == hsvNullString) 
+			if (HSE_ISNULL(*e) && key->type == hsvNull) 
 			{
-				r.type = hsvNullString;
+				r.type = hsvNull;
 				if (lowbound)
 					*lowbound = i;
 				r.size = sizeof(HEntry);
@@ -299,7 +299,7 @@ findUncompressedHStoreValueByValue(char *buffer, uint32 flags, uint32 *lowbound,
 				}
 				else if (HSE_ISNULL(*v))
 				{
-					r.type = hsvNullString;
+					r.type = hsvNull;
 					r.size = sizeof(HEntry);
 				}
 				else
@@ -336,7 +336,7 @@ findUncompressedHStoreValue(char *buffer, uint32 flags, uint32 *lowbound, char *
 
 	if (key == NULL)
 	{
-		v.type = hsvNullString;
+		v.type = hsvNull;
 	}
 	else
 	{
@@ -409,7 +409,7 @@ getHStoreValue(char *buffer, uint32 flags, int32 i)
 	}
 	else if (HSE_ISNULL(*e))
 	{
-		r.type = hsvNullString;
+		r.type = hsvNull;
 		r.size = sizeof(HEntry);
 	}
 	else
@@ -437,7 +437,7 @@ walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32
 			cb(cb_arg, v, WHS_BEGIN_ARRAY, level);
 			for(i=0; i<v->array.nelems; i++)
 			{
-				if (v->array.elems[i].type == hsvNullString || v->array.elems[i].type == hsvString ||
+				if (v->array.elems[i].type == hsvNull || v->array.elems[i].type == hsvString ||
 					v->array.elems[i].type == hsvBool || v->array.elems[i].type == hsvNumeric ||
 					v->array.elems[i].type == hsvBinary)
 					cb(cb_arg, v->array.elems + i, WHS_ELEM, level);
@@ -453,7 +453,7 @@ walkUncompressedHStoreDo(HStoreValue *v, walk_hstore_cb cb, void *cb_arg, uint32
 			{
 				cb(cb_arg, &v->hash.pairs[i].key, WHS_KEY, level);
 				
-				if (v->hash.pairs[i].value.type == hsvNullString || v->hash.pairs[i].value.type == hsvString ||
+				if (v->hash.pairs[i].value.type == hsvNull || v->hash.pairs[i].value.type == hsvString ||
 					v->hash.pairs[i].value.type == hsvBool || v->hash.pairs[i].value.type == hsvNumeric ||
 					v->hash.pairs[i].value.type == hsvBinary)
 					cb(cb_arg, &v->hash.pairs[i].value, WHS_VALUE, level);
@@ -545,7 +545,7 @@ formAnswer(HStoreIterator **it, HStoreValue *v, HEntry *e, bool skipNested)
 	}
 	else if (HSE_ISNULL(*e))
 	{
-		v->type = hsvNullString;
+		v->type = hsvNull;
 		v->size = sizeof(HEntry);
 
 		return false;
@@ -687,7 +687,7 @@ putHEntryString(CompressState *state, HStoreValue* value, uint32 level, uint32 i
 
 	switch(value->type)
 	{
-		case hsvNullString:
+		case hsvNull:
 			curLevelState->array[i].entry |= HENTRY_ISNULL;
 
 			if (i>0)
@@ -993,7 +993,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			(*state)->v.hash.pairs = palloc(sizeof(*(*state)->v.hash.pairs) * (*state)->size);
 			break;
 		case WHS_ELEM:
-			Assert(v->type == hsvNullString || v->type == hsvString || v->type == hsvBool || v->type == hsvNumeric || 
+			Assert(v->type == hsvNull || v->type == hsvString || v->type == hsvBool || v->type == hsvNumeric || 
 				   v->type == hsvBinary); 
 			appendArray(*state, v);
 			break;
@@ -1002,7 +1002,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			appendKey(*state, v);
 			break;
 		case WHS_VALUE:
-			Assert(v->type == hsvNullString || v->type == hsvString || v->type == hsvBool || v->type == hsvNumeric || 
+			Assert(v->type == hsvNull || v->type == hsvString || v->type == hsvBool || v->type == hsvNumeric || 
 				   v->type == hsvBinary); 
 			appendValue(*state, v);
 			break;

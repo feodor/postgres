@@ -307,7 +307,7 @@ HStoreValueToHStore(HStoreValue *v)
 {
 	HStore			*out;
 
-	if (v == NULL || v->type == hsvNullString)
+	if (v == NULL || v->type == hsvNull)
 	{
 		out = NULL;
 	}
@@ -532,7 +532,7 @@ hstore_defined(PG_FUNCTION_ARGS)
 		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
 										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
-	PG_RETURN_BOOL(!(v == NULL || v->type == hsvNullString));
+	PG_RETURN_BOOL(!(v == NULL || v->type == hsvNull));
 }
 
 
@@ -939,7 +939,7 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 					res = deletePathDo(it, path_elems, path_nulls, path_len, st, level + 1);
 					if (res == NULL)
 					{
-						v.type = hsvNullString;
+						v.type = hsvNull;
 						pushHStoreValue(st, WHS_VALUE, &v);
 					}
 				}
@@ -1576,7 +1576,7 @@ hstore_replace(PG_FUNCTION_ARGS)
 
 	if (HS_ROOT_COUNT(newval) == 0)
 	{
-		value.type = hsvNullString;
+		value.type = hsvNull;
 		value.size = sizeof(HEntry);
 	}
 	else
@@ -1793,7 +1793,7 @@ hstore_akeys(PG_FUNCTION_ARGS)
 	{
 		skipNested = true;
 
-		if ((r == WHS_ELEM && v.type != hsvNullString) || r == WHS_KEY)
+		if ((r == WHS_ELEM && v.type != hsvNull) || r == WHS_KEY)
 			d[i++] = PointerGetDatum(HStoreValueToText(&v)); 
 	}
 
@@ -2253,7 +2253,7 @@ getNextValsPath(SetReturningState *st)
 		{
 			if (st->path[st->level].varKind != pathAny)
 			{
-				st->path[st->level].v.type = hsvNullString;
+				st->path[st->level].v.type = hsvNull;
 				st->level--;
 			}
 			break;
@@ -2261,7 +2261,7 @@ getNextValsPath(SetReturningState *st)
 		else
 		{
 			if (st->path[st->level].varKind != pathAny)
-				st->path[st->level].v.type = hsvNullString;
+				st->path[st->level].v.type = hsvNull;
 			st->level++;
 			st->path[st->level].v = *v;
 			st->path[st->level].i = 0;
@@ -2504,7 +2504,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 				res = false;
 				break;
 			}
-			else if (v->type == hsvString || v->type == hsvNullString || v->type == hsvBool || v->type == hsvNumeric)
+			else if (v->type == hsvString || v->type == hsvNull || v->type == hsvBool || v->type == hsvNumeric)
 			{
 				if (compareHStoreValue(v, &v2) != 0)
 				{
@@ -2540,7 +2540,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 
 			Assert(r2 == WHS_ELEM);
 
-			if (v2.type == hsvString || v2.type == hsvNullString || v2.type == hsvBool || v2.type == hsvNumeric)
+			if (v2.type == hsvString || v2.type == hsvNull || v2.type == hsvBool || v2.type == hsvNumeric)
 			{
 				v = findUncompressedHStoreValueByValue((*it1)->buffer, HS_FLAG_ARRAY, NULL, &v2);
 				if (v == NULL)

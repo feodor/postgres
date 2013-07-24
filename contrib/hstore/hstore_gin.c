@@ -40,7 +40,7 @@ makeitemFromValue(HStoreValue *v, char flag)
 		case hsvBool:
 		case hsvNumeric:
 			/* XXX */
-		case hsvNullString:
+		case hsvNull:
 			item = makeitem(NULL, 0, NULLFLAG);
 			break;
 		case hsvString:

@@ -180,7 +180,7 @@ ghstore_compress(PG_FUNCTION_ARGS)
 
 			while((r = HStoreIteratorGet(&it, &v, false)) != 0)
 			{
-				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
+				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNull)
 				{
 					int   h = crc32_HStoreValue(&v, r);
 
@@ -585,7 +585,7 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 
 				while((r = HStoreIteratorGet(&it, &v, false)) != 0)
 				{
-					if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNullString)
+					if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNull)
 					{
 						int   crc = crc32_HStoreValue(&v, r);
 
