@@ -564,7 +564,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		else
 		{
 			/*
-			 * Convert the column value to text
+			 * Convert the column value to hstore's values
 			 */
 			if (column_type == BOOLOID)
 			{

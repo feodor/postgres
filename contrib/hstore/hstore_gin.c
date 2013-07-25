@@ -6,6 +6,7 @@
 #include "access/gin.h"
 #include "access/skey.h"
 #include "catalog/pg_type.h"
+#include "utils/builtins.h"
 
 #include "hstore.h"
 
@@ -34,14 +35,19 @@ static text *
 makeitemFromValue(HStoreValue *v, char flag)
 {
 	text		*item;
+	char		*cstr;
 
 	switch(v->type)
 	{
-		case hsvBool:
-		case hsvNumeric:
-			/* XXX */
 		case hsvNull:
 			item = makeitem(NULL, 0, NULLFLAG);
+			break;
+		case hsvBool:
+			item = makeitem((v->boolean) ? " t" : " f", 2, flag);
+			break;
+		case hsvNumeric:
+			cstr = DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
+			item = makeitem(cstr, strlen(cstr), flag);
 			break;
 		case hsvString:
 			item = makeitem(v->string.val, v->string.len, flag);
