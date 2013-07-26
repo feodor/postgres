@@ -168,7 +168,13 @@ checkSpecialVal()
 {
 	int res = STRING_P;
 
-	if (scanstring.len == 1)
+	if (stringIsNumber(scanstring.val, scanstring.len))
+	{
+		/* for numeric_in() call we need to make a correct C-string */
+		addchar(false, '\0');
+		res = NUMERIC_P;
+	}
+	else if (scanstring.len == 1)
 	{
 		if (*scanstring.val == 't')
 			res = TRUE_P;
@@ -179,12 +185,6 @@ checkSpecialVal()
 	{
 		if (pg_strncasecmp("null", scanstring.val, scanstring.len) == 0)
 			res = NULL_P;
-	}
-	else if (stringIsNumber(scanstring.val, scanstring.len))
-	{
-		/* for numeric_in() call we need to make a correct C-string */
-		addchar(false, '\0');
-		res = NUMERIC_P;
 	}
 
 	return res;

@@ -41,7 +41,7 @@ typedef struct
 #define HSE_ISNUMERIC(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNUMERIC)
 #define HSE_ISNEST(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNEST)
 #define HSE_ISNULL(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNULL)
-#define HSE_ISBOOL(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISBOOL)
+#define HSE_ISBOOL(he_) 		(((he_).entry & HENTRY_TYPEMASK & HENTRY_ISBOOL) == HENTRY_ISBOOL)
 #define HSE_ISBOOL_TRUE(he_) 	(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISTRUE)
 #define HSE_ISBOOL_FALSE(he_) 	(HSE_ISBOOL(he_) && !HSE_ISBOOL_TRUE(he_))
 

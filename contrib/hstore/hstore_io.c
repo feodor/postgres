@@ -572,7 +572,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 				v.hash.pairs[i].value.boolean = DatumGetBool(values[i]);
 				v.hash.pairs[i].value.size = sizeof(HEntry);
 			}
-			else if (0 && column_type == NUMERICOID)
+			else if (column_type == NUMERICOID)
 			{	/* XXX float... int... */
 				v.hash.pairs[i].value.type = hsvNumeric;
 				v.hash.pairs[i].value.numeric = DatumGetNumeric(values[i]); 
@@ -914,54 +914,79 @@ printCR(StringInfo out, bool enable)
 static void
 putEscapedString(StringInfo out, HStoreOutputKind kind, char *string, uint32 len)
 {
-	if (string)
+	switch(kind)
 	{
-		switch(kind)
-		{
-			case HStoreOutput:
-				do
-				{
-					char       *ptr = string;
+		case HStoreOutput:
+		case HStoreStrictOutput:
+			do
+			{
+				char       *ptr = string;
 
-					appendStringInfoCharMacro(out, '"');
-					while (ptr - string < len)
-					{
-						if (*ptr == '"' || *ptr == '\\')
-							appendStringInfoCharMacro(out, '\\');
-						appendStringInfoCharMacro(out, *ptr);
-						ptr++;
-					}
-					appendStringInfoCharMacro(out, '"');
-				} while(0);
-				break;
-			case JsonOutput:
-				escape_json(out, pnstrdup(string, len));
-				break;
-			case JsonLooseOutput:
-				do 
+				appendStringInfoCharMacro(out, '"');
+				while (ptr - string < len)
 				{
-					char *s = pnstrdup(string, len);
+					if (*ptr == '"' || *ptr == '\\')
+						appendStringInfoCharMacro(out, '\\');
+					appendStringInfoCharMacro(out, *ptr);
+					ptr++;
+				}
+				appendStringInfoCharMacro(out, '"');
+			} while(0);
+			break;
+		case JsonOutput:
+			escape_json(out, pnstrdup(string, len));
+			break;
+		case JsonLooseOutput:
+			do 
+			{
+				char *s = pnstrdup(string, len);
 
-					if (len == 1 && *string == 't')
-						appendStringInfoString(out, "true");
-					else if (len == 1 && *string == 'f')
-						appendStringInfoString(out, "false");
-					else if (len > 0 && stringIsNumber(s, len))
-						appendBinaryStringInfo(out, string, len);
-					else
-						escape_json(out, s);
-				} while(0);
-				break;
-			default:
-				elog(PANIC, "Unknown kind");
-		}
-	}
-	else
-	{
-		appendBinaryStringInfo(out, (kind == HStoreOutput) ? "NULL" : "null", 4);
+				if (len == 1 && *string == 't')
+					appendStringInfoString(out, "true");
+				else if (len == 1 && *string == 'f')
+					appendStringInfoString(out, "false");
+				else if (len > 0 && stringIsNumber(s, len))
+					appendBinaryStringInfo(out, string, len);
+				else
+					escape_json(out, s);
+			} while(0);
+			break;
+		default:
+			elog(PANIC, "Unknown kind");
 	}
 }
 
+static void
+putEscapedValue(StringInfo out, HStoreOutputKind kind, HStoreValue *v)
+{
+	switch(v->type)
+	{
+		case hsvNull:
+			appendBinaryStringInfo(out, (kind == HStoreOutput|| kind == HStoreStrictOutput) ? "NULL" : "null", 4);
+			break;
+		case hsvString:
+			putEscapedString(out, kind, v->string.val, v->string.len);
+			break;
+		case hsvBool:
+			putEscapedString(out, kind, (v->boolean) ? "t" : "f", 1);
+			break;
+			if (kind == HStoreOutput || kind == HStoreStrictOutput)
+				appendBinaryStringInfo(out, (v->boolean) ? "t" : "f", 1);
+			/* JsonOutput / JsonLooseOutput */
+			else if (v->boolean)
+				appendBinaryStringInfo(out, "true", 4);
+			else
+				appendBinaryStringInfo(out, "false", 5);
+			break;
+		case hsvNumeric:
+			appendStringInfoCharMacro(out, '"');
+			appendStringInfoString(out, DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
+			appendStringInfoCharMacro(out, '"');
+			break;
+		default:
+			elog(PANIC, "Unknown type");
+	}
+}
 static bool
 needBrackets(int level, bool isArray, HStoreOutputKind kind)
 {
@@ -1088,12 +1113,12 @@ reout:
 				if (kind == JsonLooseOutput)
 				{
 					kind = JsonOutput;
-					putEscapedString(out, kind, v.string.val,  v.string.len);
+					putEscapedValue(out, kind, &v);
 					kind = JsonLooseOutput;
 				}
 				else
 				{
-					putEscapedString(out, kind, v.string.val,  v.string.len);
+					putEscapedValue(out, kind, &v);
 				}
 				appendBinaryStringInfo(out, (kind == HStoreOutput) ? "=>" : ": ", 2);
 
@@ -1101,7 +1126,7 @@ reout:
 				if (type == WHS_VALUE)
 				{
 					first = false;
-					putEscapedString(out, kind, (v.type == hsvNull) ? NULL : v.string.val,  v.string.len);
+					putEscapedValue(out, kind, &v);
 				}
 				else
 				{
@@ -1122,7 +1147,7 @@ reout:
 				}
 
 				printIndent(out, enable_pretty_print, level);
-				putEscapedString(out, kind, (v.type == hsvNull) ? NULL : v.string.val,  v.string.len);
+				putEscapedValue(out, kind, &v);
 				break;
 			case WHS_END_ARRAY:
 				level--;

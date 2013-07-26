@@ -736,6 +736,12 @@ SELECT 'n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore %> 'd' %> '1'
 SELECT '1,2,3,{a,b}'::hstore %> '1';
  ?column? 
 ----------
+ 
+(1 row)
+
+SELECT '"1",2,3,{a,b}'::hstore %> '1';
+ ?column? 
+----------
  {"1"}
 (1 row)
 

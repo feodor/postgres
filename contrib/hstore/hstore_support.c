@@ -555,7 +555,7 @@ formAnswer(HStoreIterator **it, HStoreValue *v, HEntry *e, bool skipNested)
 		v->type = hsvBinary;
 		v->binary.data = (*it)->data + INTALIGN(HSE_OFF(*e));
 		v->binary.len = HSE_LEN(*e) - (INTALIGN(HSE_OFF(*e)) - HSE_OFF(*e));
-		v->size = v->binary.len + sizeof(HEntry);
+		v->size = v->binary.len + 2*sizeof(HEntry);
 
 		return false;
 	}
@@ -706,6 +706,10 @@ putHEntryString(CompressState *state, HStoreValue* value, uint32 level, uint32 i
 			break;
 		case hsvBool:
 			curLevelState->array[i].entry |= (value->boolean) ? HENTRY_ISTRUE : HENTRY_ISFALSE;
+
+			if (i>0)
+				curLevelState->array[i].entry |=
+					curLevelState->array[i - 1].entry & HENTRY_POSMASK;
 			break;
 		case hsvNumeric:
 			{
@@ -728,11 +732,12 @@ putHEntryString(CompressState *state, HStoreValue* value, uint32 level, uint32 i
 				memcpy(state->ptr, value->numeric, numlen);
 				state->ptr += numlen;
 
+				curLevelState->array[i].entry |= HENTRY_ISNUMERIC;
 				if (i == 0)
-					curLevelState->array[i].entry |= numlen;
+					curLevelState->array[i].entry |= addlen + numlen;
 				else
 					curLevelState->array[i].entry |= 
-						(curLevelState->array[i - 1].entry & HENTRY_POSMASK) + numlen;
+						(curLevelState->array[i - 1].entry & HENTRY_POSMASK) + addlen + numlen;
 				break;
 			}
 		case hsvBinary:

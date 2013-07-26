@@ -69,9 +69,10 @@ makeHStoreValueString(HStoreValue* v, string *s)
 }
 
 static HStoreValue*
-makeHStoreValueNumeric(HStoreValue* v, string *s)
+makeHStoreValueNumeric(string *s)
 {
-	Numeric n = NULL;
+	Numeric 	n = NULL;
+	HStoreValue	*v;
 
 	PG_TRY();
 	{
@@ -83,13 +84,13 @@ makeHStoreValueNumeric(HStoreValue* v, string *s)
 	}
 	PG_END_TRY();
 
-	v = makeHStoreValueString(v, s);
+	v = makeHStoreValueString(NULL, s);
 
-	if (/* XXX */ 0 && n != NULL)
+	if (n != NULL)
 	{
 		v->type = hsvNumeric;
 		v->numeric = n;
-		v->size = sizeof(HEntry) + VARSIZE_ANY(n);
+		v->size = 2*sizeof(HEntry) + VARSIZE_ANY(n);
 	}
 
 	return v;
@@ -249,11 +250,9 @@ hstore:
 value:
 	NULL_P							{ $$ = makeHStoreValueString(NULL, NULL); }
 	| STRING_P						{ $$ = makeHStoreValueString(NULL, &$1); }
-	/* XXX | TRUE_P						{ $$ = makeHStoreValueBool(true); }
-	| FALSE_P						{ $$ = makeHStoreValueBool(false); } */
-	| TRUE_P						{ $$ = makeHStoreValueString(NULL, &$1); }
-	| FALSE_P						{ $$ = makeHStoreValueString(NULL, &$1); }
-	| NUMERIC_P						{ $$ = makeHStoreValueNumeric(NULL, &$1); }
+	| TRUE_P						{ $$ = makeHStoreValueBool(true); }
+	| FALSE_P						{ $$ = makeHStoreValueBool(false); }
+	| NUMERIC_P						{ $$ = makeHStoreValueNumeric(&$1); }
 	| hstore						{ $$ = $1; } 
 	;
 

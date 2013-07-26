@@ -1099,6 +1099,33 @@ hstore_delete_idx(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(out);
 }
 
+static void
+convertScalarToString(HStoreValue *v)
+{
+	switch(v->type) {
+		case hsvNull:
+			elog(ERROR, "key in hstore type could not be a NULL");
+			break;
+		case hsvBool:
+			v->type = hsvString;
+			v->string.val = pnstrdup((v->boolean) ? "t" : "f", 1);
+			v->string.len = 1;
+			v->size = sizeof(HEntry) + v->string.len;
+			break;
+		case hsvNumeric:
+			v->type = hsvString;
+			v->string.val = DatumGetCString(
+							DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
+			v->string.len = strlen(v->string.val);
+			v->size = sizeof(HEntry) + v->string.len;
+			break;
+		case hsvString:
+			break;
+		default:
+			elog(PANIC,"Could not convert to string");
+	}
+}
+
 static HStoreValue *
 IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toState)
 {
@@ -1223,6 +1250,7 @@ IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toSta
 			{
 				if (rk1 == WHS_BEGIN_HASH)
 				{
+					convertScalarToString(&v2);
 					pushHStoreValue(toState, WHS_KEY, &v2);
 					r2 = HStoreIteratorGet(it2, &v2, true);
 					Assert(r2 == WHS_ELEM);
