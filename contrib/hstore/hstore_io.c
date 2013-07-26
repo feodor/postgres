@@ -968,8 +968,6 @@ putEscapedValue(StringInfo out, HStoreOutputKind kind, HStoreValue *v)
 			putEscapedString(out, kind, v->string.val, v->string.len);
 			break;
 		case hsvBool:
-			putEscapedString(out, kind, (v->boolean) ? "t" : "f", 1);
-			break;
 			if (kind == HStoreOutput || kind == HStoreStrictOutput)
 				appendBinaryStringInfo(out, (v->boolean) ? "t" : "f", 1);
 			/* JsonOutput / JsonLooseOutput */
@@ -979,9 +977,7 @@ putEscapedValue(StringInfo out, HStoreOutputKind kind, HStoreValue *v)
 				appendBinaryStringInfo(out, "false", 5);
 			break;
 		case hsvNumeric:
-			appendStringInfoCharMacro(out, '"');
 			appendStringInfoString(out, DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
-			appendStringInfoCharMacro(out, '"');
 			break;
 		default:
 			elog(PANIC, "Unknown type");
