@@ -90,9 +90,8 @@ static Query *fireRIRrules(Query *parsetree, List *activeRIRs,
  * such a list in a stored rule to include references to dropped columns.
  * (If the column is not explicitly referenced anywhere else in the query,
  * the dependency mechanism won't consider it used by the rule and so won't
- * prevent the column drop.)  To support get_rte_attribute_is_dropped(),
- * we replace join alias vars that reference dropped columns with NULL Const
- * nodes.
+ * prevent the column drop.)  To support get_rte_attribute_is_dropped(), we
+ * replace join alias vars that reference dropped columns with null pointers.
  *
  * (In PostgreSQL 8.0, we did not do this processing but instead had
  * get_rte_attribute_is_dropped() recurse to detect dropped columns in joins.
@@ -159,8 +158,8 @@ AcquireRewriteLocks(Query *parsetree, bool forUpdatePushedDown)
 
 				/*
 				 * Scan the join's alias var list to see if any columns have
-				 * been dropped, and if so replace those Vars with NULL
-				 * Consts.
+				 * been dropped, and if so replace those Vars with null
+				 * pointers.
 				 *
 				 * Since a join has only two inputs, we can expect to see
 				 * multiple references to the same input RTE; optimize away
@@ -171,16 +170,20 @@ AcquireRewriteLocks(Query *parsetree, bool forUpdatePushedDown)
 				curinputrte = NULL;
 				foreach(ll, rte->joinaliasvars)
 				{
-					Var		   *aliasvar = (Var *) lfirst(ll);
+					Var		   *aliasitem = (Var *) lfirst(ll);
+					Var		   *aliasvar = aliasitem;
+
+					/* Look through any implicit coercion */
+					aliasvar = (Var *) strip_implicit_coercions((Node *) aliasvar);
 
 					/*
 					 * If the list item isn't a simple Var, then it must
 					 * represent a merged column, ie a USING column, and so it
 					 * couldn't possibly be dropped, since it's referenced in
-					 * the join clause.  (Conceivably it could also be a NULL
-					 * constant already?  But that's OK too.)
+					 * the join clause.  (Conceivably it could also be a null
+					 * pointer already?  But that's OK too.)
 					 */
-					if (IsA(aliasvar, Var))
+					if (aliasvar && IsA(aliasvar, Var))
 					{
 						/*
 						 * The elements of an alias list have to refer to
@@ -204,15 +207,11 @@ AcquireRewriteLocks(Query *parsetree, bool forUpdatePushedDown)
 						if (get_rte_attribute_is_dropped(curinputrte,
 														 aliasvar->varattno))
 						{
-							/*
-							 * can't use vartype here, since that might be a
-							 * now-dropped type OID, but it doesn't really
-							 * matter what type the Const claims to be.
-							 */
-							aliasvar = (Var *) makeNullConst(INT4OID, -1, InvalidOid);
+							/* Replace the join alias item with a NULL */
+							aliasitem = NULL;
 						}
 					}
-					newaliasvars = lappend(newaliasvars, aliasvar);
+					newaliasvars = lappend(newaliasvars, aliasitem);
 				}
 				rte->joinaliasvars = newaliasvars;
 				break;
@@ -1866,7 +1865,7 @@ fireRules(Query *parsetree,
  * Caller should have verified that the relation is a view, and therefore
  * we should find an ON SELECT action.
  */
-static Query *
+Query *
 get_view_query(Relation view)
 {
 	int			i;
@@ -1927,11 +1926,16 @@ view_has_instead_trigger(Relation view, CmdType event)
 
 /*
  * view_is_auto_updatable -
- *	  Test if the specified view can be automatically updated. This will
- *	  either return NULL (if the view can be updated) or a message string
- *	  giving the reason that it cannot be.
+ *    Retrive the view definition and options and then determine if the view
+ *    can be auto-updated by calling view_query_is_auto_updatable().  Returns
+ *    NULL or a message string giving the reason the view is not auto
+ *    updateable.  See view_query_is_auto_updatable() for details.
  *
- * Caller must have verified that relation is a view!
+ *    The only view option which affects if a view can be auto-updated, today,
+ *    is the security_barrier option.  If other options are added later, they
+ *    will also need to be handled here.
+ *
+ * Caller must have verified that the relation is a view!
  *
  * Note that the checks performed here are local to this view.	We do not
  * check whether the view's underlying base relation is updatable; that
@@ -1940,10 +1944,32 @@ view_has_instead_trigger(Relation view, CmdType event)
  * Also note that we don't check for INSTEAD triggers or rules here; those
  * also prevent auto-update, but they must be checked for by the caller.
  */
-static const char *
+const char *
 view_is_auto_updatable(Relation view)
 {
 	Query	   *viewquery = get_view_query(view);
+	bool		security_barrier = RelationIsSecurityView(view);
+
+	return view_query_is_auto_updatable(viewquery, security_barrier);
+}
+
+
+/*
+ * view_query_is_auto_updatable -
+ *	  Test if the specified view definition can be automatically updated, given
+ *    the view's options (currently only security_barrier affects a view's
+ *    auto-updatable status).
+ *
+ *    This will either return NULL (if the view can be updated) or a message
+ *    string giving the reason that it cannot be.
+ *
+ * Note that the checks performed here are only based on the view
+ * definition. We do not check whether any base relations referred to by
+ * the view are updatable.
+ */
+const char *
+view_query_is_auto_updatable(Query *viewquery, bool security_barrier)
+{
 	RangeTblRef *rtr;
 	RangeTblEntry *base_rte;
 	Bitmapset  *bms;
@@ -1995,9 +2021,9 @@ view_is_auto_updatable(Relation view)
 	/*
 	 * For now, we also don't support security-barrier views, because of the
 	 * difficulty of keeping upper-level qual expressions away from
-	 * lower-level data.  This might get relaxed in future.
+	 * lower-level data.  This might get relaxed in the future.
 	 */
-	if (RelationIsSecurityView(view))
+	if (security_barrier)
 		return gettext_noop("Security-barrier views are not automatically updatable.");
 
 	/*
@@ -2532,8 +2558,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 	 * only adjust their varnos to reference the new target (just the same as
 	 * we did with the view targetlist).
 	 *
-	 * For INSERT, the view's quals can be ignored for now.  When we implement
-	 * WITH CHECK OPTION, this might be a good place to collect them.
+	 * For INSERT, the view's quals can be ignored in the main query.
 	 */
 	if (parsetree->commandType != CMD_INSERT &&
 		viewquery->jointree->quals != NULL)
@@ -2542,6 +2567,76 @@ rewriteTargetView(Query *parsetree, Relation view)
 
 		ChangeVarNodes(viewqual, base_rt_index, new_rt_index, 0);
 		AddQual(parsetree, (Node *) viewqual);
+	}
+
+	/*
+	 * For INSERT/UPDATE, if the view has the WITH CHECK OPTION, or any parent
+	 * view specified WITH CASCADED CHECK OPTION, add the quals from the view
+	 * to the query's withCheckOptions list.
+	 */
+	if (parsetree->commandType != CMD_DELETE)
+	{
+		bool		has_wco = RelationHasCheckOption(view);
+		bool		cascaded = RelationHasCascadedCheckOption(view);
+
+		/*
+		 * If the parent view has a cascaded check option, treat this view as
+		 * if it also had a cascaded check option.
+		 *
+		 * New WithCheckOptions are added to the start of the list, so if there
+		 * is a cascaded check option, it will be the first item in the list.
+		 */
+		if (parsetree->withCheckOptions != NIL)
+		{
+			WithCheckOption *parent_wco =
+				(WithCheckOption *) linitial(parsetree->withCheckOptions);
+
+			if (parent_wco->cascaded)
+			{
+				has_wco = true;
+				cascaded = true;
+			}
+		}
+
+		/*
+		 * Add the new WithCheckOption to the start of the list, so that
+		 * checks on inner views are run before checks on outer views, as
+		 * required by the SQL standard.
+		 *
+		 * If the new check is CASCADED, we need to add it even if this view
+		 * has no quals, since there may be quals on child views.  A LOCAL
+		 * check can be omitted if this view has no quals.
+		 */
+		if (has_wco && (cascaded || viewquery->jointree->quals != NULL))
+		{
+			WithCheckOption *wco;
+
+			wco = makeNode(WithCheckOption);
+			wco->viewname = pstrdup(RelationGetRelationName(view));
+			wco->qual = NULL;
+			wco->cascaded = cascaded;
+
+			parsetree->withCheckOptions = lcons(wco,
+												parsetree->withCheckOptions);
+
+			if (viewquery->jointree->quals != NULL)
+			{
+				wco->qual = (Node *) copyObject(viewquery->jointree->quals);
+				ChangeVarNodes(wco->qual, base_rt_index, new_rt_index, 0);
+
+				/*
+				 * Make sure that the query is marked correctly if the added
+				 * qual has sublinks.  We can skip this check if the query is
+				 * already marked, or if the command is an UPDATE, in which
+				 * case the same qual will have already been added to the
+				 * query's WHERE clause, and AddQual will have already done
+				 * this check.
+				 */
+				if (!parsetree->hasSubLinks &&
+					parsetree->commandType != CMD_UPDATE)
+					parsetree->hasSubLinks = checkExprHasSubLink(wco->qual);
+			}
+		}
 	}
 
 	return parsetree;

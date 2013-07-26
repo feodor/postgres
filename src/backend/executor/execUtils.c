@@ -105,7 +105,7 @@ CreateExecutorState(void)
 	 * Initialize all fields of the Executor State structure
 	 */
 	estate->es_direction = ForwardScanDirection;
-	estate->es_snapshot = SnapshotNow;
+	estate->es_snapshot = InvalidSnapshot;	/* caller must initialize this */
 	estate->es_crosscheck_snapshot = InvalidSnapshot;	/* no crosscheck */
 	estate->es_range_table = NIL;
 	estate->es_plannedstmt = NULL;
@@ -649,9 +649,9 @@ get_last_attnums(Node *node, ProjectionInfo *projInfo)
 	}
 
 	/*
-	 * Don't examine the arguments of Aggrefs or WindowFuncs, because those do
-	 * not represent expressions to be evaluated within the overall
-	 * targetlist's econtext.
+	 * Don't examine the arguments or filters of Aggrefs or WindowFuncs,
+	 * because those do not represent expressions to be evaluated within the
+	 * overall targetlist's econtext.
 	 */
 	if (IsA(node, Aggref))
 		return false;

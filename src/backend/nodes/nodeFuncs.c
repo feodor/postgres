@@ -572,6 +572,65 @@ relabel_to_typmod(Node *expr, int32 typmod)
 }
 
 /*
+ * strip_implicit_coercions: remove implicit coercions at top level of tree
+ *
+ * This doesn't modify or copy the input expression tree, just return a
+ * pointer to a suitable place within it.
+ *
+ * Note: there isn't any useful thing we can do with a RowExpr here, so
+ * just return it unchanged, even if it's marked as an implicit coercion.
+ */
+Node *
+strip_implicit_coercions(Node *node)
+{
+	if (node == NULL)
+		return NULL;
+	if (IsA(node, FuncExpr))
+	{
+		FuncExpr   *f = (FuncExpr *) node;
+
+		if (f->funcformat == COERCE_IMPLICIT_CAST)
+			return strip_implicit_coercions(linitial(f->args));
+	}
+	else if (IsA(node, RelabelType))
+	{
+		RelabelType *r = (RelabelType *) node;
+
+		if (r->relabelformat == COERCE_IMPLICIT_CAST)
+			return strip_implicit_coercions((Node *) r->arg);
+	}
+	else if (IsA(node, CoerceViaIO))
+	{
+		CoerceViaIO *c = (CoerceViaIO *) node;
+
+		if (c->coerceformat == COERCE_IMPLICIT_CAST)
+			return strip_implicit_coercions((Node *) c->arg);
+	}
+	else if (IsA(node, ArrayCoerceExpr))
+	{
+		ArrayCoerceExpr *c = (ArrayCoerceExpr *) node;
+
+		if (c->coerceformat == COERCE_IMPLICIT_CAST)
+			return strip_implicit_coercions((Node *) c->arg);
+	}
+	else if (IsA(node, ConvertRowtypeExpr))
+	{
+		ConvertRowtypeExpr *c = (ConvertRowtypeExpr *) node;
+
+		if (c->convertformat == COERCE_IMPLICIT_CAST)
+			return strip_implicit_coercions((Node *) c->arg);
+	}
+	else if (IsA(node, CoerceToDomain))
+	{
+		CoerceToDomain *c = (CoerceToDomain *) node;
+
+		if (c->coercionformat == COERCE_IMPLICIT_CAST)
+			return strip_implicit_coercions((Node *) c->arg);
+	}
+	return node;
+}
+
+/*
  * expression_returns_set
  *	  Test whether an expression returns a set result.
  *
@@ -1556,6 +1615,8 @@ expression_tree_walker(Node *node,
 		case T_SortGroupClause:
 			/* primitive node types with no expression subnodes */
 			break;
+		case T_WithCheckOption:
+			return walker(((WithCheckOption *) node)->qual, context);
 		case T_Aggref:
 			{
 				Aggref	   *expr = (Aggref *) node;
@@ -1570,6 +1631,8 @@ expression_tree_walker(Node *node,
 				if (expression_tree_walker((Node *) expr->aggdistinct,
 										   walker, context))
 					return true;
+				if (walker((Node *) expr->aggfilter, context))
+					return true;
 			}
 			break;
 		case T_WindowFunc:
@@ -1579,6 +1642,8 @@ expression_tree_walker(Node *node,
 				/* recurse directly on List */
 				if (expression_tree_walker((Node *) expr->args,
 										   walker, context))
+					return true;
+				if (walker((Node *) expr->aggfilter, context))
 					return true;
 			}
 			break;
@@ -1869,6 +1934,8 @@ query_tree_walker(Query *query,
 
 	if (walker((Node *) query->targetList, context))
 		return true;
+	if (walker((Node *) query->withCheckOptions, context))
+		return true;
 	if (walker((Node *) query->returningList, context))
 		return true;
 	if (walker((Node *) query->jointree, context))
@@ -2070,6 +2137,15 @@ expression_tree_mutator(Node *node,
 		case T_RangeTblRef:
 		case T_SortGroupClause:
 			return (Node *) copyObject(node);
+		case T_WithCheckOption:
+			{
+				WithCheckOption	   *wco = (WithCheckOption *) node;
+				WithCheckOption	   *newnode;
+
+				FLATCOPY(newnode, wco, WithCheckOption);
+				MUTATE(newnode->qual, wco->qual, Node *);
+				return (Node *) newnode;
+			}
 		case T_Aggref:
 			{
 				Aggref	   *aggref = (Aggref *) node;
@@ -2079,6 +2155,7 @@ expression_tree_mutator(Node *node,
 				MUTATE(newnode->args, aggref->args, List *);
 				MUTATE(newnode->aggorder, aggref->aggorder, List *);
 				MUTATE(newnode->aggdistinct, aggref->aggdistinct, List *);
+				MUTATE(newnode->aggfilter, aggref->aggfilter, Expr *);
 				return (Node *) newnode;
 			}
 			break;
@@ -2089,6 +2166,7 @@ expression_tree_mutator(Node *node,
 
 				FLATCOPY(newnode, wfunc, WindowFunc);
 				MUTATE(newnode->args, wfunc->args, List *);
+				MUTATE(newnode->aggfilter, wfunc->aggfilter, Expr *);
 				return (Node *) newnode;
 			}
 			break;
@@ -2583,6 +2661,7 @@ query_tree_mutator(Query *query,
 	}
 
 	MUTATE(query->targetList, query->targetList, List *);
+	MUTATE(query->withCheckOptions, query->withCheckOptions, List *);
 	MUTATE(query->returningList, query->returningList, List *);
 	MUTATE(query->jointree, query->jointree, FromExpr *);
 	MUTATE(query->setOperations, query->setOperations, Node *);
@@ -2950,6 +3029,8 @@ raw_expression_tree_walker(Node *node,
 				if (walker(fcall->args, context))
 					return true;
 				if (walker(fcall->agg_order, context))
+					return true;
+				if (walker(fcall->agg_filter, context))
 					return true;
 				if (walker(fcall->over, context))
 					return true;
