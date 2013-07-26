@@ -185,6 +185,13 @@ checkSpecialVal()
 	{
 		if (pg_strncasecmp("null", scanstring.val, scanstring.len) == 0)
 			res = NULL_P;
+		else if (pg_strncasecmp("true", scanstring.val, scanstring.len) == 0)
+			res = TRUE_P;
+	}
+	else if (scanstring.len == 5)
+	{
+		if (pg_strncasecmp("false", scanstring.val, scanstring.len) == 0)
+			res = FALSE_P;
 	}
 
 	return res;
