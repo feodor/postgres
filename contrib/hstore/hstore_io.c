@@ -847,6 +847,8 @@ stringIsNumber(char *string, int len) {
 			case SIN_FIRSTINT:
 				if (*c == '0')
 					sinState = SIN_ZEROINT;
+				else if (*c == '.')
+					sinState = SIN_SCALE;
 				else if (isdigit(*c))
 					sinState = SIN_INT;
 				else
@@ -888,6 +890,9 @@ stringIsNumber(char *string, int len) {
 
 		c++;
 	}
+
+	if (sinState == SIN_MSIGN)
+		r = false;
 
 	return r;
 }

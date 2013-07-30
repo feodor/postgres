@@ -7,7 +7,7 @@ OBJS = hstore_io.o hstore_op.o hstore_gist.o hstore_gin.o hstore_compat.o \
 EXTENSION = hstore
 DATA = hstore--1.2.sql hstore--1.0--1.1.sql hstore--1.1--1.2.sql hstore--unpackaged--1.0.sql
 
-REGRESS = hstore nested
+REGRESS = hstore nested types
 
 EXTRA_CLEAN = y.tab.c y.tab.h \
 				hstore_gram.c hstore_scan.c hstore_gram.h
