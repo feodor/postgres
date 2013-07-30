@@ -84,13 +84,16 @@ makeHStoreValueNumeric(string *s)
 	}
 	PG_END_TRY();
 
-	v = makeHStoreValueString(NULL, s);
-
 	if (n != NULL)
 	{
+		v = palloc(sizeof(*v));
 		v->type = hsvNumeric;
 		v->numeric = n;
 		v->size = 2*sizeof(HEntry) + VARSIZE_ANY(n);
+	}
+	else
+	{
+		v = makeHStoreValueString(NULL, s);
 	}
 
 	return v;
