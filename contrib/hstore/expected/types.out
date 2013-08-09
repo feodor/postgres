@@ -370,3 +370,51 @@ SELECT 'foo=>1e2000'::hstore;
  "foo"=>"1e2000"
 (1 row)
 
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 'foo';
+   ?column?    
+---------------
+ 1000000000000
+(1 row)
+
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 'bar';
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 0;
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 1;
+   ?column?    
+---------------
+ 1000000000000
+(1 row)
+
+SELECT 'foo, 1e12, bar, x'::hstore ^> 'foo';
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT 'foo, 1e12, bar, x'::hstore ^> 'bar';
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT 'foo, 1e12, bar, x'::hstore ^> 0;
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT 'foo, 1e12, bar, x'::hstore ^> 1;
+   ?column?    
+---------------
+ 1000000000000
+(1 row)
+

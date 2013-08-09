@@ -3,6 +3,17 @@
 -- complain if script is sourced in psql, rather than via CREATE EXTENSION
 \echo Use "ALTER EXTENSION hstore UPDATE TO '1.2'" to load this file. \quit
 
+CREATE FUNCTION fetchval_numeric(hstore,text)
+RETURNS numeric
+AS 'MODULE_PATHNAME','hstore_fetchval_numeric'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR ^> (
+	LEFTARG = hstore,
+	RIGHTARG = text,
+	PROCEDURE = fetchval_numeric
+);
+
 CREATE FUNCTION fetchval(hstore,int)
 RETURNS text
 AS 'MODULE_PATHNAME','hstore_fetchval_n'
@@ -12,6 +23,17 @@ CREATE OPERATOR -> (
 	LEFTARG = hstore,
 	RIGHTARG = int,
 	PROCEDURE = fetchval
+);
+
+CREATE FUNCTION fetchval_numeric(hstore,int)
+RETURNS numeric
+AS 'MODULE_PATHNAME','hstore_fetchval_n_numeric'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR ^> (
+	LEFTARG = hstore,
+	RIGHTARG = int,
+	PROCEDURE = fetchval_numeric
 );
 
 CREATE FUNCTION fetchval(hstore,text[])
@@ -94,7 +116,7 @@ RETURNS bool
 AS 'MODULE_PATHNAME','hstore_exists_path'
 LANGUAGE C STRICT IMMUTABLE;
 
-CREATE OPERATOR ? (
+CREATE OPERATOR #? (
 	LEFTARG = hstore,
 	RIGHTARG = text[],
 	PROCEDURE = exist,
@@ -107,7 +129,7 @@ RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_delete_path'
 LANGUAGE C STRICT IMMUTABLE;
 
-CREATE OPERATOR / (
+CREATE OPERATOR #- (
 	LEFTARG = hstore,
 	RIGHTARG = text[],
 	PROCEDURE = delete_path

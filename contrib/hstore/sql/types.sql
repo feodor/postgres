@@ -66,3 +66,13 @@ SELECT 'foo=>-.1e-1'::hstore;
 
 SELECT 'foo=>1e2000'::hstore;
 
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 'foo';
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 'bar';
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 0;
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 1;
+
+SELECT 'foo, 1e12, bar, x'::hstore ^> 'foo';
+SELECT 'foo, 1e12, bar, x'::hstore ^> 'bar';
+SELECT 'foo, 1e12, bar, x'::hstore ^> 0;
+SELECT 'foo, 1e12, bar, x'::hstore ^> 1;
+
