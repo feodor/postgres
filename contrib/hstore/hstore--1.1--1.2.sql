@@ -14,6 +14,17 @@ CREATE OPERATOR ^> (
 	PROCEDURE = fetchval_numeric
 );
 
+CREATE FUNCTION fetchval_boolean(hstore,text)
+RETURNS boolean
+AS 'MODULE_PATHNAME','hstore_fetchval_boolean'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR ?> (
+	LEFTARG = hstore,
+	RIGHTARG = text,
+	PROCEDURE = fetchval_boolean
+);
+
 CREATE FUNCTION fetchval(hstore,int)
 RETURNS text
 AS 'MODULE_PATHNAME','hstore_fetchval_n'
@@ -36,6 +47,17 @@ CREATE OPERATOR ^> (
 	PROCEDURE = fetchval_numeric
 );
 
+CREATE FUNCTION fetchval_boolean(hstore,int)
+RETURNS boolean
+AS 'MODULE_PATHNAME','hstore_fetchval_n_boolean'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR ?> (
+	LEFTARG = hstore,
+	RIGHTARG = int,
+	PROCEDURE = fetchval_boolean
+);
+
 CREATE FUNCTION fetchval(hstore,text[])
 RETURNS text
 AS 'MODULE_PATHNAME','hstore_fetchval_path'
@@ -56,6 +78,17 @@ CREATE OPERATOR #^> (
 	LEFTARG = hstore,
 	RIGHTARG = text[],
 	PROCEDURE = fetchval_numeric
+);
+
+CREATE FUNCTION fetchval_boolean(hstore,text[])
+RETURNS boolean
+AS 'MODULE_PATHNAME','hstore_fetchval_path_boolean'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR #?> (
+	LEFTARG = hstore,
+	RIGHTARG = text[],
+	PROCEDURE = fetchval_boolean
 );
 
 CREATE FUNCTION fetchval_hstore(hstore,text)
