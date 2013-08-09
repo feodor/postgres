@@ -147,6 +147,30 @@ hstore_fetchval(PG_FUNCTION_ARGS)
 		PG_RETURN_TEXT_P(out);
 }
 
+PG_FUNCTION_INFO_V1(hstore_fetchval_numeric);
+Datum		hstore_fetchval_numeric(PG_FUNCTION_ARGS);
+Datum
+hstore_fetchval_numeric(PG_FUNCTION_ARGS)
+{
+	HStore	   	*hs = PG_GETARG_HS(0);
+	text	   	*key = PG_GETARG_TEXT_PP(1);
+	HStoreValue	*v = NULL;
+
+	if (!HS_ISEMPTY(hs))
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+
+	if (v && v->type == hsvNumeric)
+	{
+		Numeric		out = palloc(VARSIZE_ANY(v->numeric));
+
+		memcpy(out, v->numeric, VARSIZE_ANY(v->numeric));
+		PG_RETURN_NUMERIC(out);
+	}
+
+	PG_RETURN_NULL();
+}
+
 PG_FUNCTION_INFO_V1(hstore_fetchval_n);
 Datum		hstore_fetchval_n(PG_FUNCTION_ARGS);
 Datum
@@ -164,6 +188,29 @@ hstore_fetchval_n(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	else
 		PG_RETURN_TEXT_P(out);
+}	
+
+PG_FUNCTION_INFO_V1(hstore_fetchval_n_numeric);
+Datum		hstore_fetchval_n_numeric(PG_FUNCTION_ARGS);
+Datum
+hstore_fetchval_n_numeric(PG_FUNCTION_ARGS)
+{
+	HStore	   	*hs = PG_GETARG_HS(0);
+	int	   		i = PG_GETARG_INT32(1);
+	HStoreValue	*v = NULL;
+
+	if (!HS_ISEMPTY(hs))
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, i);
+
+	if (v && v->type == hsvNumeric)
+	{
+		Numeric		out = palloc(VARSIZE_ANY(v->numeric));
+
+		memcpy(out, v->numeric, VARSIZE_ANY(v->numeric));
+		PG_RETURN_NUMERIC(out);
+	}
+
+	PG_RETURN_NULL();
 }	
 
 static bool
