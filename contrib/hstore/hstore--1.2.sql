@@ -94,6 +94,17 @@ CREATE OPERATOR #> (
 	PROCEDURE = fetchval
 );
 
+CREATE FUNCTION fetchval_numeric(hstore,text[])
+RETURNS numeric
+AS 'MODULE_PATHNAME','hstore_fetchval_path_numeric'
+LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR #^> (
+	LEFTARG = hstore,
+	RIGHTARG = text[],
+	PROCEDURE = fetchval_numeric
+);
+
 CREATE FUNCTION fetchval_hstore(hstore,text)
 RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_fetchval_hstore'

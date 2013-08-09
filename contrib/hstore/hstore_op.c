@@ -349,6 +349,29 @@ hstore_fetchval_path(PG_FUNCTION_ARGS)
 		PG_RETURN_TEXT_P(out);
 }
 
+PG_FUNCTION_INFO_V1(hstore_fetchval_path_numeric);
+Datum		hstore_fetchval_path_numeric(PG_FUNCTION_ARGS);
+Datum
+hstore_fetchval_path_numeric(PG_FUNCTION_ARGS)
+{
+	HStore	   	*hs = PG_GETARG_HS(0);
+	ArrayType	*path = PG_GETARG_ARRAYTYPE_P(1);
+	HStoreValue	*v = NULL;
+
+	if (!HS_ISEMPTY(hs))
+		v = hstoreDeepFetch(hs, path);
+
+	if (v && v->type == hsvNumeric)
+	{
+		Numeric		out = palloc(VARSIZE_ANY(v->numeric));
+
+		memcpy(out, v->numeric, VARSIZE_ANY(v->numeric));
+		PG_RETURN_NUMERIC(out);
+	}
+
+	PG_RETURN_NULL();
+}
+
 static HStore *
 HStoreValueToHStore(HStoreValue *v)
 {

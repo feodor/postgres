@@ -76,3 +76,5 @@ SELECT 'foo, 1e12, bar, x'::hstore ^> 'bar';
 SELECT 'foo, 1e12, bar, x'::hstore ^> 0;
 SELECT 'foo, 1e12, bar, x'::hstore ^> 1;
 
+SELECT 'foo=>{x, 1e-12}'::hstore #^> '{foo, 0}';
+SELECT 'foo=>{x, 1e-12}'::hstore #^> '{foo, 1}';
