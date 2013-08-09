@@ -167,7 +167,7 @@ RETURNS bool
 AS 'MODULE_PATHNAME','hstore_exists_path'
 LANGUAGE C STRICT IMMUTABLE;
 
-CREATE OPERATOR ? (
+CREATE OPERATOR #? (
 	LEFTARG = hstore,
 	RIGHTARG = text[],
 	PROCEDURE = exist,
@@ -260,7 +260,7 @@ CREATE OPERATOR - (
 	PROCEDURE = delete
 );
 
-CREATE OPERATOR / (
+CREATE OPERATOR #- (
 	LEFTARG = hstore,
 	RIGHTARG = text[],
 	PROCEDURE = delete_path
