@@ -116,6 +116,7 @@ makeHStoreValueArray(List *list)
 	HStoreValue	*v = palloc(sizeof(*v));
 
 	v->type = hsvArray;
+	v->array.scalar = false;
 	v->array.nelems = list_length(list);
 	v->size = sizeof(uint32) /* header */ + sizeof(HEntry) /* parent's entry */ + sizeof(HEntry) - 1 /*alignment*/;
 
@@ -215,7 +216,7 @@ makeHStorePair(string *key, HStoreValue *value) {
 %token	<str>			DELIMITER_P NULL_P STRING_P TRUE_P FALSE_P
 						NUMERIC_P
 
-%type	<hvalue>		result hstore value 
+%type	<hvalue>		result hstore value scalar_value 
 %type	<str>			key
 
 %type	<pair>			pair
@@ -228,14 +229,15 @@ makeHStorePair(string *key, HStoreValue *value) {
 
 result: 
 	pair_list						{ *((HStoreValue**)result) = makeHStoreValuePairs($1); }
-	| value_list					{ *((HStoreValue**)result) = makeHStoreValueArray($1); }
-	| value							{ 	
-										if ($1->type == hsvString || $1->type == hsvBool || $1->type == hsvNumeric)
-											*((HStoreValue**)result) = makeHStoreValueArray(lappend(NIL, $1));
-										else if ($1->type == hsvNull)
+	| hstore						{ 	
+										if ($1->type == hsvNull)
 											*((HStoreValue**)result) = NULL;
 										else
 											*((HStoreValue**)result) = $1;
+									}
+	| scalar_value					{ 
+										*((HStoreValue**)result) = makeHStoreValueArray(lappend(NIL, $1));
+										(*((HStoreValue**)result))->array.scalar = true;
 									}
 	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
@@ -250,12 +252,16 @@ hstore:
 	| '[' ']'						{ $$ = makeHStoreValueString(NULL, NULL); }
 	;
 
-value:
+scalar_value:
 	NULL_P							{ $$ = makeHStoreValueString(NULL, NULL); }
 	| STRING_P						{ $$ = makeHStoreValueString(NULL, &$1); }
 	| TRUE_P						{ $$ = makeHStoreValueBool(true); }
 	| FALSE_P						{ $$ = makeHStoreValueBool(false); }
 	| NUMERIC_P						{ $$ = makeHStoreValueNumeric(&$1); }
+	;
+
+value:
+	scalar_value					{ $$ = $1; }
 	| hstore						{ $$ = $1; } 
 	;
 

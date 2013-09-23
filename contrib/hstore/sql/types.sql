@@ -71,10 +71,10 @@ SELECT 'foo=>1e12, bar=>x'::hstore ^> 'bar';
 SELECT 'foo=>1e12, bar=>x'::hstore ^> 0;
 SELECT 'foo=>1e12, bar=>x'::hstore ^> 1;
 
-SELECT 'foo, 1e12, bar, x'::hstore ^> 'foo';
-SELECT 'foo, 1e12, bar, x'::hstore ^> 'bar';
-SELECT 'foo, 1e12, bar, x'::hstore ^> 0;
-SELECT 'foo, 1e12, bar, x'::hstore ^> 1;
+SELECT '[foo, 1e12, bar, x]'::hstore ^> 'foo';
+SELECT '[foo, 1e12, bar, x]'::hstore ^> 'bar';
+SELECT '[foo, 1e12, bar, x]'::hstore ^> 0;
+SELECT '[foo, 1e12, bar, x]'::hstore ^> 1;
 
 SELECT 'foo=>{x, 1e-12}'::hstore #^> '{foo, 0}';
 SELECT 'foo=>{x, 1e-12}'::hstore #^> '{foo, 1}';
@@ -84,10 +84,10 @@ SELECT 'foo=>t, bar=>x'::hstore ?> 'bar';
 SELECT 'foo=>t, bar=>x'::hstore ?> 0;
 SELECT 'foo=>t, bar=>x'::hstore ?> 1;
 
-SELECT 'foo, t, bar, x'::hstore ?> 'foo';
-SELECT 'foo, t, bar, x'::hstore ?> 'bar';
-SELECT 'foo, t, bar, x'::hstore ?> 0;
-SELECT 'foo, t, bar, x'::hstore ?> 1;
+SELECT '[foo, t, bar, x]'::hstore ?> 'foo';
+SELECT '[foo, t, bar, x]'::hstore ?> 'bar';
+SELECT '[foo, t, bar, x]'::hstore ?> 0;
+SELECT '[foo, t, bar, x]'::hstore ?> 1;
 
 SELECT 'foo=>{x, t}'::hstore #?> '{foo, 0}';
 SELECT 'foo=>{x, t}'::hstore #?> '{foo, 1}';
@@ -97,10 +97,10 @@ SELECT 'foo=>f, bar=>x'::hstore ?> 'bar';
 SELECT 'foo=>f, bar=>x'::hstore ?> 0;
 SELECT 'foo=>f, bar=>x'::hstore ?> 1;
 
-SELECT 'foo, f, bar, x'::hstore ?> 'foo';
-SELECT 'foo, f, bar, x'::hstore ?> 'bar';
-SELECT 'foo, f, bar, x'::hstore ?> 0;
-SELECT 'foo, f, bar, x'::hstore ?> 1;
+SELECT '[foo, f, bar, x]'::hstore ?> 'foo';
+SELECT '[foo, f, bar, x]'::hstore ?> 'bar';
+SELECT '[foo, f, bar, x]'::hstore ?> 0;
+SELECT '[foo, f, bar, x]'::hstore ?> 1;
 
 SELECT 'foo=>{x, f}'::hstore #?> '{foo, 0}';
 SELECT 'foo=>{x, f}'::hstore #?> '{foo, 1}';

@@ -25,7 +25,6 @@ HSTORE_POLLUTE(hstore_from_text, tconvert);
 
 /* GUC variables */
 static bool array_square_brackets = false;
-static bool	root_array_decorated = true;
 static bool	root_hash_decorated = false;
 static bool	pretty_print_var = false;
 
@@ -989,20 +988,20 @@ putEscapedValue(StringInfo out, HStoreOutputKind kind, HStoreValue *v)
 	}
 }
 static bool
-needBrackets(int level, bool isArray, HStoreOutputKind kind)
+needBrackets(int level, bool isArray, HStoreOutputKind kind, bool isScalar)
 {
 	bool res;
 
-	if (level == 0)
+	if (isArray && isScalar)
+	{
+		res = false;
+	}
+	else if (level == 0)
 	{
 		switch(kind)
 		{
 			case HStoreOutput:
-				if ((isArray == true && root_array_decorated == false) || 
-					(isArray == false && root_hash_decorated == false))
-					res = false;
-				else
-					res = true;
+				res = (isArray || root_hash_decorated) ? true : false;
 				break;
 			case HStoreStrictOutput:
 				res = isArray;
@@ -1077,7 +1076,7 @@ reout:
 				}
 				first = true;
 
-				if (needBrackets(level, true, kind))
+				if (needBrackets(level, true, kind, v.array.scalar))
 				{
 					printIndent(out, enable_pretty_print, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? '[' : '{');
@@ -1093,7 +1092,7 @@ reout:
 				}
 				first = true;
 
-				if (needBrackets(level, false, kind))
+				if (needBrackets(level, false, kind, false))
 				{
 					printIndent(out, enable_pretty_print, level);
 					appendStringInfoCharMacro(out, '{');
@@ -1153,7 +1152,7 @@ reout:
 			case WHS_END_ARRAY:
 				level--;
 				printCR(out, enable_pretty_print);
-				if (needBrackets(level, true, kind))
+				if (needBrackets(level, true, kind, v.array.scalar))
 				{
 					printIndent(out, enable_pretty_print, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? ']' : '}');
@@ -1163,7 +1162,7 @@ reout:
 			case WHS_END_HASH:
 				level--;
 				printCR(out, enable_pretty_print);
-				if (needBrackets(level, false, kind))
+				if (needBrackets(level, false, kind, false))
 				{
 					printIndent(out, enable_pretty_print, level);
 					appendStringInfoCharMacro(out, '}');
@@ -1364,19 +1363,6 @@ _PG_init(void)
 		"Use [] brackets for array's decoration",
 		&array_square_brackets,
 		array_square_brackets,
-		PGC_USERSET,
-		GUC_NOT_IN_SAMPLE,
-		NULL,
-		NULL,
-		NULL
-	);
-
-	DefineCustomBoolVariable(
-		"hstore.root_array_decorated",
-		"Enables brackets decoration for root array",
-		"Enables brackets decoration for root array",
-		&root_array_decorated,
-		root_array_decorated,
 		PGC_USERSET,
 		GUC_NOT_IN_SAMPLE,
 		NULL,

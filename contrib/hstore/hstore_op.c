@@ -45,6 +45,7 @@ arrayToHStoreSortedArray(ArrayType *a)
 
 	v = palloc(sizeof(*v));
 	v->type = hsvArray;
+	v->array.scalar = false;
 
 	v->array.elems = palloc(sizeof(*v->hash.pairs) * key_count);
 
@@ -1392,9 +1393,18 @@ IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toSta
 	}
 	else if ((rk1 & (WHS_VALUE | WHS_ELEM)) != 0)
 	{
-		res = pushHStoreValue(toState, r2, &v2);
-		while((r2 = HStoreIteratorGet(it2, &v2, true)) != 0)
+		if (v2.type == hsvArray && v2.array.scalar)
+		{
+			Assert(v2.array.nelems == 1);
+			r2 = HStoreIteratorGet(it2, &v2, false);
+			pushHStoreValue(toState, r1, &v2);
+		}
+		else
+		{
 			res = pushHStoreValue(toState, r2, &v2);
+			while((r2 = HStoreIteratorGet(it2, &v2, true)) != 0)
+				res = pushHStoreValue(toState, r2, &v2);
+		}
 	}
 	else
 	{
@@ -1879,7 +1889,7 @@ hstore_deep_concat(PG_FUNCTION_ARGS)
 	int				path_len;
 	HStoreIterator	*it1, *it2;
 	ToHStoreState	*st = NULL;
- 
+
 	Assert(ARR_ELEMTYPE(path) == TEXTOID);
 
 	if (ARR_NDIM(path) > 1)

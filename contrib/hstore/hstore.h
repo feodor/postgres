@@ -65,19 +65,22 @@ typedef struct
 } HStore;
 
 /*
- * it's not possible to get more than 2^29 items into an hstore,
+ * it's not possible to get more than 2^28 items into an hstore,
  * so we reserve the top few bits of the size field. See hstore_compat.c
  * for one reason why.	Some bits are left for future use here.
  */
 #define HS_FLAG_NEWVERSION 		0x80000000
 #define HS_FLAG_ARRAY			0x40000000
 #define HS_FLAG_HSTORE			0x20000000
+#define HS_FLAG_SCALAR			0x10000000
 
-#define HS_COUNT_MASK			0x1FFFFFFF
+#define HS_COUNT_MASK			0x0FFFFFFF
 
 #define HS_ISEMPTY(hsp_)		(VARSIZE(hsp_) <= VARHDRSZ)
 #define HS_ROOT_COUNT(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))
 #define HS_ROOT_IS_HASH(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_HSTORE))
+#define HS_ROOT_IS_ARRAY(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_ARRAY))
+#define HS_ROOT_IS_SCALAR(hsp_) (HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_SCALAR))
 
 /* DatumGetHStoreP includes support for reading old-format hstore values */
 extern HStore *hstoreUpgrade(Datum orig);
@@ -113,6 +116,7 @@ struct HStoreValue {
 		struct {
 			int			nelems;
 			HStoreValue	*elems;
+			bool		scalar; /* scalar actually shares representation with array */
 		} array;
 
 		struct {
@@ -231,6 +235,7 @@ typedef struct HStoreIterator
 	uint32					type;
 	uint32					nelems;
 	HEntry					*array;
+	bool					isScalar;
 	char					*data;
 	char					*buffer; /* unparsed buffer */
 

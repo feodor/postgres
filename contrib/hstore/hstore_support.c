@@ -481,12 +481,14 @@ walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg)
 static void
 parseBuffer(HStoreIterator *it, char *buffer)
 {
-	it->type = (*(uint32*)buffer) & (HS_FLAG_ARRAY | HS_FLAG_HSTORE);
-	it->nelems = (*(uint32*)buffer) & HS_COUNT_MASK;
+	uint32	header = *(uint32*)buffer; 
+
+	it->type = header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE);
+	it->nelems = header & HS_COUNT_MASK;
 	it->buffer = buffer;
 
-	buffer += sizeof(uint32);
 
+	buffer += sizeof(uint32);
 	it->array = (HEntry*)buffer;
 
 	it->state = hsi_start;
@@ -495,6 +497,8 @@ parseBuffer(HStoreIterator *it, char *buffer)
 	{
 		case HS_FLAG_ARRAY:
 			it->data = buffer + it->nelems * sizeof(HEntry);
+			it->isScalar = (header & HS_FLAG_SCALAR) ? true : false;
+			Assert(it->isScalar == false || it->nelems == 1);
 			break;
 		case HS_FLAG_HSTORE:
 			it->data = buffer + it->nelems * sizeof(HEntry) * 2;
@@ -603,6 +607,7 @@ HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested)
 			v->type = hsvArray;
 			v->array.nelems = (*it)->nelems;
 			res = WHS_BEGIN_ARRAY;
+			v->array.scalar = (*it)->isScalar;
 			break;
 		case HS_FLAG_ARRAY | hsi_elem:
 			if ((*it)->i >= (*it)->nelems)
@@ -816,6 +821,13 @@ compressCallback(void *arg, HStoreValue* value, uint32 flags, uint32 level)
 		{
 			*curLevelState->header = value->array.nelems | HS_FLAG_ARRAY ;
 			state->ptr += sizeof(HEntry) * value->array.nelems;
+
+			if (value->array.scalar)
+			{
+				Assert(value->array.nelems == 1);
+				Assert(level == 0);
+				*curLevelState->header |= HS_FLAG_SCALAR;
+			}
 		}
 		else
 		{
@@ -985,6 +997,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			(*state)->v.type = hsvArray;
 			(*state)->v.size = 3*sizeof(HEntry);
 			(*state)->v.array.nelems = 0;
+			(*state)->v.array.scalar = (v && v->array.scalar) ? true : false;
 			(*state)->size = (v && v->type == hsvArray) ? v->array.nelems : 4;
 			(*state)->v.array.elems = palloc(sizeof(*(*state)->v.array.elems) * (*state)->size);
 			break;
