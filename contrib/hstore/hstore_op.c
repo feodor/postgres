@@ -442,8 +442,13 @@ HStoreValueToHStore(HStoreValue *v)
 		ToHStoreState	*state = NULL;
 		HStoreValue		*res;
 		int				r;
+		HStoreValue		scalarArray;
 
-		pushHStoreValue(&state, WHS_BEGIN_ARRAY, NULL);
+		scalarArray.type = hsvArray;
+		scalarArray.array.scalar = true;
+		scalarArray.array.nelems = 1;
+
+		pushHStoreValue(&state, WHS_BEGIN_ARRAY, &scalarArray);
 		pushHStoreValue(&state, WHS_ELEM, v);
 		res = pushHStoreValue(&state, WHS_END_ARRAY, NULL);
 

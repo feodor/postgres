@@ -998,7 +998,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			(*state)->v.size = 3*sizeof(HEntry);
 			(*state)->v.array.nelems = 0;
 			(*state)->v.array.scalar = (v && v->array.scalar) ? true : false;
-			(*state)->size = (v && v->type == hsvArray) ? v->array.nelems : 4;
+			(*state)->size = (v && v->type == hsvArray && v->array.nelems > 0) ? v->array.nelems : 4;
 			(*state)->v.array.elems = palloc(sizeof(*(*state)->v.array.elems) * (*state)->size);
 			break;
 		case WHS_BEGIN_HASH:
@@ -1007,7 +1007,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 			(*state)->v.type = hsvHash;
 			(*state)->v.size = 3*sizeof(HEntry);
 			(*state)->v.hash.npairs = 0;
-			(*state)->size = (v && v->type == hsvHash) ? v->hash.npairs : 4;
+			(*state)->size = (v && v->type == hsvHash && v->hash.npairs > 0) ? v->hash.npairs : 4;
 			(*state)->v.hash.pairs = palloc(sizeof(*(*state)->v.hash.pairs) * (*state)->size);
 			break;
 		case WHS_ELEM:
