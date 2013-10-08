@@ -28,7 +28,7 @@ static bool array_square_brackets = false;
 static bool	root_hash_decorated = false;
 static bool	pretty_print_var = false;
 
-static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level);
+static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level, uint32 header);
 
 static size_t
 hstoreCheckKeyLen(size_t len)
@@ -86,46 +86,56 @@ hstore_in(PG_FUNCTION_ARGS)
 static void
 recvHStoreValue(StringInfo buf, HStoreValue *v, uint32 level, int c)
 {
-	uint32  hentry = c;
+	uint32  hentry = c & HENTRY_TYPEMASK;
 
-	if (c == -1)
+	if (c == -1 /* compatibility */ || hentry == HENTRY_ISNULL)
 	{
 		v->type = hsvNull;
 		v->size = sizeof(HEntry);
 	} 
-	else if (hentry & (HS_FLAG_ARRAY | HS_FLAG_HSTORE))
+	else if (hentry == HENTRY_ISHASH || hentry == HENTRY_ISARRAY || hentry == HENTRY_ISCALAR)
 	{
-		recvHStore(buf, v, level + 1);
+		recvHStore(buf, v, level + 1, (uint32)c);
 	}
-	else
-	{	/* XXX */
+	else if (hentry == HENTRY_ISFALSE || hentry == HENTRY_ISTRUE)
+	{
+		v->type = hsvBool;
+		v->size = sizeof(HEntry);
+		v->boolean = (hentry == HENTRY_ISFALSE) ? false : true;
+	} 
+	else if (hentry == HENTRY_ISNUMERIC)
+	{
+		v->type = hsvNumeric;
+		v->numeric = DatumGetNumeric(DirectFunctionCall3(numeric_recv, PointerGetDatum(buf), 
+														 Int32GetDatum(0), Int32GetDatum(-1)));
+		v->size = sizeof(HEntry) * 2 + VARSIZE_ANY(v->numeric);
+	}
+	else if (hentry == HENTRY_ISSTRING)
+	{
 		v->type = hsvString;
-
 		v->string.val = pq_getmsgtext(buf, c, &c);
 		v->string.len = hstoreCheckKeyLen(c);
 		v->size = sizeof(HEntry) + v->string.len;
 	}
+	else
+	{
+		elog(ERROR, "bogus input");
+	}
 }
 
 static void
-recvHStore(StringInfo buf, HStoreValue *v, uint32 level)
+recvHStore(StringInfo buf, HStoreValue *v, uint32 level, uint32 header)
 {
-	uint32	header = pq_getmsgint(buf, 4);
+	uint32	hentry;
 	uint32	i;
 
-	if (level == 0 && (header & HS_COUNT_MASK) == 0)
-	{
-		/* empty value */
-		v->type = hsvHash;
-		v->hash.npairs = 0;
-		return;
-	}
+	hentry = header & HENTRY_TYPEMASK;
 
-	if (level == 0 && (header & (HS_FLAG_ARRAY | HS_FLAG_HSTORE)) == 0)
-		header |= HS_FLAG_HSTORE; /* old version */
+	if (level == 0 && hentry == 0)
+		hentry = HENTRY_ISHASH; /* old version */
 
 	v->size = 3 * sizeof(HEntry);
-	if (header & HS_FLAG_HSTORE)
+	if (hentry == HENTRY_ISHASH)
 	{
 		v->type = hsvHash;
 		v->hash.npairs = header & HS_COUNT_MASK;
@@ -147,10 +157,15 @@ recvHStore(StringInfo buf, HStoreValue *v, uint32 level)
 			ORDER_PAIRS(v->hash.pairs, v->hash.npairs, v->size -= ptr->key.size + ptr->value.size);
 		}
 	}
-	else if (header & HS_FLAG_ARRAY)
+	else if (hentry == HENTRY_ISARRAY || hentry == HENTRY_ISCALAR)
 	{
 		v->type = hsvArray;
 		v->array.nelems = header & HS_COUNT_MASK;
+		v->array.scalar = (hentry == HENTRY_ISCALAR) ? true : false;
+
+		if (v->array.scalar && v->array.nelems != 1)
+			elog(NOTICE, "bogus input");
+
 		if (v->array.nelems > 0)
 		{
 			v->array.elems = palloc(sizeof(*v->array.elems) * v->array.nelems);
@@ -176,7 +191,7 @@ hstore_recv(PG_FUNCTION_ARGS)
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
 	HStoreValue	v;
 
-	recvHStore(buf, &v, 0);
+	recvHStore(buf, &v, 0, pq_getmsgint(buf, 4));
 
 	PG_RETURN_POINTER(hstoreDump(&v));
 }
@@ -1248,6 +1263,8 @@ hstore_send(PG_FUNCTION_ARGS)
 		HStoreIterator	*it;
 		int				type;
 		HStoreValue		v;
+		uint32			flag;
+		bytea			*nbuf;
 
 		enlargeStringInfo(&buf, VARSIZE_ANY(in) /* just estimation */);
 
@@ -1258,25 +1275,37 @@ hstore_send(PG_FUNCTION_ARGS)
 			switch(type)
 			{
 				case WHS_BEGIN_ARRAY:
-					pq_sendint(&buf, v.array.nelems | HS_FLAG_ARRAY, 4);
+					flag = (v.array.scalar) ? HENTRY_ISCALAR : HENTRY_ISARRAY;
+					pq_sendint(&buf, v.array.nelems | flag, 4);
 					break;
 				case WHS_BEGIN_HASH:
-					pq_sendint(&buf, v.hash.npairs | HS_FLAG_HSTORE, 4);
+					pq_sendint(&buf, v.hash.npairs | HENTRY_ISHASH, 4);
 					break;
 				case WHS_KEY:
-					pq_sendint(&buf, v.string.len, 4);
+					pq_sendint(&buf, v.string.len | HENTRY_ISSTRING, 4);
 					pq_sendtext(&buf, v.string.val, v.string.len);
 					break;
 				case WHS_ELEM:
 				case WHS_VALUE:
-					if (v.type == hsvNull)
+					switch(v.type)
 					{
-						pq_sendint(&buf, -1, 4);
-					}
-					else
-					{
-						pq_sendint(&buf, v.string.len, 4);
-						pq_sendtext(&buf, v.string.val, v.string.len);
+						case hsvNull:
+							pq_sendint(&buf, HENTRY_ISNULL, 4);
+							break;
+						case hsvString:
+							pq_sendint(&buf, v.string.len | HENTRY_ISSTRING, 4);
+							pq_sendtext(&buf, v.string.val, v.string.len);
+							break;
+						case hsvBool:
+							pq_sendint(&buf, (v.boolean) ? HENTRY_ISTRUE : HENTRY_ISFALSE, 4);
+							break;
+						case hsvNumeric:
+							nbuf = DatumGetByteaP(DirectFunctionCall1(numeric_send, NumericGetDatum(v.numeric)));
+							pq_sendint(&buf, VARSIZE_ANY(nbuf) | HENTRY_ISNUMERIC, 4);
+							pq_sendbytes(&buf, (char*)nbuf, VARSIZE_ANY(nbuf));
+							break;
+						default:
+							elog(PANIC, "Wrong type: %u", v.type);
 					}
 					break;
 				case WHS_END_ARRAY:
