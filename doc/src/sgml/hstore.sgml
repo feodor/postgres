@@ -277,6 +277,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
     <thead>
      <row>
       <entry>Operator</entry>
+      <entry>Returns</entry>
       <entry>Description</entry>
       <entry>Example</entry>
       <entry>Result</entry>
@@ -286,6 +287,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
     <tbody>
      <row>
       <entry><type>hstore</> <literal>-&gt;</> <type>text</></entry>
+      <entry><type>text</></entry>
       <entry>get value for key (<literal>NULL</> if not present)</entry>
       <entry><literal>'a=&gt;x, b=&gt;y'::hstore -&gt; 'a'</literal></entry>
       <entry><literal>x</literal></entry>
@@ -293,6 +295,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>-&gt;</> <type>text[]</></entry>
+      <entry><type>text[]</></entry>
       <entry>get values for keys (<literal>NULL</> if not present)</entry>
       <entry><literal>'a=&gt;x, b=&gt;y, c=&gt;z'::hstore -&gt; ARRAY['c','a']</literal></entry>
       <entry><literal>{"z","x"}</literal></entry>
@@ -300,6 +303,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>||</> <type>hstore</></entry>
+      <entry><type>hstore</></entry>
       <entry>concatenate <type>hstore</>s</entry>
       <entry><literal>'a=&gt;b, c=&gt;d'::hstore || 'c=&gt;x, d=&gt;q'::hstore</literal></entry>
       <entry><literal>"a"=&gt;"b", "c"=&gt;"x", "d"=&gt;"q"</literal></entry>
@@ -307,6 +311,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>?</> <type>text</></entry>
+      <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain key?</entry>
       <entry><literal>'a=&gt;1'::hstore ? 'a'</literal></entry>
       <entry><literal>t</literal></entry>
@@ -314,6 +319,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>?&amp;</> <type>text[]</></entry>
+      <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain all specified keys?</entry>
       <entry><literal>'a=&gt;1,b=&gt;2'::hstore ?&amp; ARRAY['a','b']</literal></entry>
       <entry><literal>t</literal></entry>
@@ -321,6 +327,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>?|</> <type>text[]</></entry>
+      <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain any of the specified keys?</entry>
       <entry><literal>'a=&gt;1,b=&gt;2'::hstore ?| ARRAY['b','c']</literal></entry>
       <entry><literal>t</literal></entry>
@@ -328,6 +335,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>@&gt;</> <type>hstore</></entry>
+      <entry><type>boolean</></entry>
       <entry>does left operand contain right?</entry>
       <entry><literal>'a=&gt;b, b=&gt;1, c=&gt;NULL'::hstore @&gt; 'b=&gt;1'</literal></entry>
       <entry><literal>t</literal></entry>
@@ -335,6 +343,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>&lt;@</> <type>hstore</></entry>
+      <entry><type>boolean</></entry>
       <entry>is left operand contained in right?</entry>
       <entry><literal>'a=&gt;c'::hstore &lt;@ 'a=&gt;b, b=&gt;1, c=&gt;NULL'</literal></entry>
       <entry><literal>f</literal></entry>
@@ -342,6 +351,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>-</> <type>text</></entry>
+      <entry><type>hstore</></entry>
       <entry>delete key from left operand</entry>
       <entry><literal>'a=&gt;1, b=&gt;2, c=&gt;3'::hstore - 'b'::text</literal></entry>
       <entry><literal>"a"=&gt;"1", "c"=&gt;"3"</literal></entry>
@@ -349,6 +359,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>-</> <type>text[]</></entry>
+      <entry><type>hstore</></entry>
       <entry>delete keys from left operand</entry>
       <entry><literal>'a=&gt;1, b=&gt;2, c=&gt;3'::hstore - ARRAY['a','b']</literal></entry>
       <entry><literal>"c"=&gt;"3"</literal></entry>
@@ -356,6 +367,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>-</> <type>hstore</></entry>
+      <entry><type>hstore</></entry>
       <entry>delete matching pairs from left operand</entry>
       <entry><literal>'a=&gt;1, b=&gt;2, c=&gt;3'::hstore - 'a=&gt;4, b=&gt;2'::hstore</literal></entry>
       <entry><literal>"a"=&gt;"1", "c"=&gt;"3"</literal></entry>
@@ -363,6 +375,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>record</> <literal>#=</> <type>hstore</></entry>
+      <entry><type>record</></entry>
       <entry>replace fields in <type>record</> with matching values from <type>hstore</></entry>
       <entry>see Examples section</entry>
       <entry></entry>
@@ -370,6 +383,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><literal>%%</> <type>hstore</></entry>
+      <entry><type>text[]</></entry>
       <entry>convert <type>hstore</> to array of alternating keys and values</entry>
       <entry><literal>%% 'a=&gt;foo, b=&gt;bar'::hstore</literal></entry>
       <entry><literal>{a,foo,b,bar}</literal></entry>
@@ -377,6 +391,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><literal>%#</> <type>hstore</></entry>
+      <entry><type>text[]</></entry>
       <entry>convert <type>hstore</> to two-dimensional key/value array</entry>
       <entry><literal>%# 'a=&gt;foo, b=&gt;bar'::hstore</literal></entry>
       <entry><literal>{{a,foo},{b,bar}}</literal></entry>
