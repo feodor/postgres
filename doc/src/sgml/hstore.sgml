@@ -52,28 +52,63 @@
   <title><type>hstore</> External Representation</title>
 
   <para>
-
    The text representation of an <type>hstore</>, used for input and output,
-   includes zero or more <replaceable>key</> <literal>=&gt;</>
-   <replaceable>value</> pairs separated by commas. Some examples:
+   may be formatted as scalar values, hash-like values, array-like values, and
+   nested array and hash values. Scalar values are simply strings, numeric
+   values, booleans, or <literal>NULL</>. Strings continaining whitespace,
+   commas, <literal>=</>s or <literal>&gt;</>s must be double-quoted. To
+   include a double quote or a backslash in a key or value, escape it with a
+   backslash. The <literal>NULL</> keyword is case-insensitive. Double-quote
+   the <literal>NULL</> to treat it as the ordinary string <quote>NULL</quote>.
+   Some examples:
 
-<synopsis>
-k =&gt; v
-foo =&gt; bar, baz =&gt; whatever
-"1-a" =&gt; "anything at all"
-</synopsis>
+<programlisting>
+=% SELECT 'foo'::hstore, '"hi \"bob\""'::hstore, '1.0'::hstore, 'true'::hstore, NULL::hstore;
+ hstore |    hstore    | hstore | hstore | hstore 
+--------+--------------+--------+--------+--------
+ "foo"  | "hi \"bob\"" | 1.0    | t      | 
+</programlisting>
 
-   The order of the pairs is not significant (and may not be reproduced on
-   output). Whitespace between pairs or around the <literal>=&gt;</> sign is
-   ignored. Double-quote keys and values that include whitespace, commas,
-   <literal>=</>s or <literal>&gt;</>s. To include a double quote or a
-   backslash in a key or value, escape it with a backslash.
   </para>
 
   <para>
-   Each key in an <type>hstore</> is unique. If you declare an <type>hstore</>
-   with duplicate keys, only one will be stored in the <type>hstore</> and
-   there is no guarantee as to which will be kept:
+   Arrays of values of any supported type may be constructed as
+   comma-separated lists, bracketed by square brackets or curly braces. Some
+   examples:
+
+<programlisting>
+=% SELECT '{k,v}'::hstore, '[1.0, "hi there", false, null]'::hstore;
+   hstore   |           hstore           
+------------+----------------------------
+ {"k", "v"} | {1.0, "hi there", f, NULL}
+</programlisting>
+
+  </para>
+
+  <para>
+   Hashes includes zero or more
+   <replaceable>key</> <literal>=&gt;</> <replaceable>value</> pairs separated
+   by commas, optionally brackted by curly braces. Keys must be strings and
+   may not be <literal>NULL</>; values may be any <type>hstore</> type,
+   including <literal>NULL</>. Examples:
+
+<programlisting>
+=% SELECT 'k =&gt; v'::hstore
+-%      , '{foo =&gt; "hi there"}'::hstore
+-%      , '{one =&gt; 1, two =&gt; 2.0, three =&gt; true, four =&gt; null}'::hstore;
+  hstore  |      hstore       |                     hstore                     
+----------+-------------------+------------------------------------------------
+ "k"=&gt;"v" | "foo"=&gt;"hi there" | "one"=&gt;1, "two"=&gt;2.0, "four"=&gt;NULL, "three"=&gt;t
+</programlisting>
+
+   The order of the pairs is not significant (and may not be reproduced on
+   output).
+  </para>
+
+  <para>
+   Each key in an <type>hstore</> hash is unique. If you declare an
+   <type>hstore</> hash with duplicate keys, only one will be stored in
+   the <type>hstore</> and there is no guarantee as to which will be kept:
 
 <programlisting>
 SELECT 'a=&gt;1,a=&gt;2'::hstore;
@@ -84,15 +119,58 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
   </para>
 
   <para>
-   A value (but not a key) can be an SQL <literal>NULL</>. For example:
+   Hashes and arrays may be arbitrarily nested. In this case, brackets are
+   required for hash values. Here's an example adapted from the
+   <ulink url="http://geojson.org/geojson-spec.html">GeoJSON spec</ulink>:
 
 <programlisting>
-key =&gt; NULL
-</programlisting>
-
-   The <literal>NULL</> keyword is case-insensitive. Double-quote the
-   <literal>NULL</> to treat it as the ordinary string <quote>NULL</quote>.
-  </para>
+=% SET hstore.pretty_print=true;
+=% SELECT '{
+  "type" =&gt; "Feature",
+  "bbox" =&gt; [-180.0, -90.0, 180.0, 90.0],
+  "geometry" =&gt; {
+    "type" =&gt; "Polygon",
+    "coordinates" =&gt; [[
+      [-180.0, 10.0], [20.0, 90.0], [180.0, -5.0], [-30.0, -90.0]
+      ]]
+    }
+}'::hstore;
+            hstore            
+------------------------------
+     "bbox"=>                +
+     {                       +
+         -180.0,             +
+         -90.0,              +
+         180.0,              +
+         90.0                +
+     },                      +
+     "type"=>"Feature",      +
+     "geometry"=>            +
+     {                       +
+         "type"=>"Polygon",  +
+         "coordinates"=>     +
+         {                   +
+             {               +
+                 {           +
+                     -180.0, +
+                     10.0    +
+                 },          +
+                 {           +
+                     20.0,   +
+                     90.0    +
+                 },          +
+                 {           +
+                     180.0,  +
+                     -5.0    +
+                 },          +
+                 {           +
+                     -30.0,  +
+                     -90.0   +
+                 }           +
+             }               +
+         }                   +
+     }                       +
+ </programlisting>
 
   <note>
   <para>
@@ -112,6 +190,74 @@ key =&gt; NULL
    On output, double quotes always surround keys and values, even when it's
    not strictly necessary.
   </para>
+
+ </sect2>
+
+ <sect2>
+  <title>Ouput Format Configuration Parameters</title>
+
+   <para>
+    There are several configuration parameters that control the output formatting of
+    <type>hstore</> values.
+   </para>
+
+  <variablelist>
+   <varlistentry>
+    <term>
+     <varname>hstore.array_square_brackets</varname> (<type>boolean</type>)
+    </term>
+    <indexterm>
+     <primary><varname>hstore.array_square_brackets</> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      <varname>hstore.array_square_brackets</varname> controls whether arrays
+      are wrapped in square brackets or curly braces. When set to <literal>true</>,
+      brackets will be used. When set to <literal>false</> (the default),
+      curly braces are used. Use of square brackets increases compatability
+      with Perl hashes, and better distinguish arrays from hashes (which
+      simplifies parsing, as weel).
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>
+     <varname>hstore.root_hash_decorated</varname> (<type>boolean</type>)
+    </term>
+    <indexterm>
+     <primary><varname>hstore.root_hash_decorated</> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      <varname>hstore.root_hash_decorated</varname> controls whether
+      root-level hash values are wrapped in braces. By default they are not,
+      to preserve compatability with earlier versions of <type>hstore</a>.
+      Nested hashes must always be wrapped in braces, which means that they
+      are represented differently depending on the context. Set this parameter
+      to <literal>true</> to require that all hash values be wrapped in braces.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term>
+     <varname>hstore.pretty_print</varname> (<type>boolean</type>)
+    </term>
+    <indexterm>
+     <primary><varname>hstore.pretty_print</> configuration parameter</primary>
+    </indexterm>
+    <listitem>
+     <para>
+      By default, the text representation of <type>hstore</a> values includes no
+      whitespace between the values it contains. Set <varname>hstore.pretty_print</varname>
+      to <literal>true</> to add newlines between values and to indent nested
+      hashes and arrays.
+     </para>
+    </listitem>
+   </varlistentry>
+
+  </variablelist>
 
  </sect2>
 
