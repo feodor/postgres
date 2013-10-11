@@ -2930,3 +2930,58 @@ hstore_hash(PG_FUNCTION_ARGS)
 	PG_FREE_IF_COPY(hs, 0);
 	PG_RETURN_DATUM(hval);
 }
+
+PG_FUNCTION_INFO_V1(hstore_typeof);
+Datum		hstore_typeof(PG_FUNCTION_ARGS);
+Datum
+hstore_typeof(PG_FUNCTION_ARGS)
+{
+	HStore	   		*hs = PG_GETARG_HS(0);
+	HStoreIterator	*it;
+	HStoreValue		v;
+	uint32			r;
+
+	if (HS_ISEMPTY(hs))
+		PG_RETURN_NULL();
+
+	it = HStoreIteratorInit(VARDATA(hs));
+	r = HStoreIteratorGet(&it, &v, false);
+
+	switch(r)
+	{
+		case WHS_BEGIN_ARRAY:
+			if (v.array.scalar)
+			{
+				Assert(v.array.nelems == 1);
+				r = HStoreIteratorGet(&it, &v, false);
+				Assert(r == WHS_ELEM);
+
+				switch(v.type)
+				{
+					case hsvNull:
+						PG_RETURN_TEXT_P(cstring_to_text("null"));
+					case hsvBool:
+						PG_RETURN_TEXT_P(cstring_to_text("bool"));
+					case hsvNumeric:
+						PG_RETURN_TEXT_P(cstring_to_text("numeric"));
+					case hsvString:
+						PG_RETURN_TEXT_P(cstring_to_text("string"));
+					default:
+						elog(ERROR, "bogus hstore");
+				}
+			}
+			else
+			{
+				PG_RETURN_TEXT_P(cstring_to_text("array"));
+			}
+		case WHS_BEGIN_HASH:
+			PG_RETURN_TEXT_P(cstring_to_text("hash"));
+		case 0:
+			PG_RETURN_NULL();
+		default:
+			elog(ERROR, "bogus hstore");
+	}
+
+	PG_RETURN_NULL();
+}
+

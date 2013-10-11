@@ -510,6 +510,11 @@ RETURNS SETOF record
 AS 'MODULE_PATHNAME','hstore_each_hstore'
 LANGUAGE C STRICT IMMUTABLE;
 
+CREATE FUNCTION hstore_typeof(hstore)
+RETURNS text 
+AS 'MODULE_PATHNAME','hstore_typeof'
+LANGUAGE C STRICT IMMUTABLE;
+
 CREATE FUNCTION populate_record(anyelement,hstore)
 RETURNS anyelement
 AS 'MODULE_PATHNAME', 'hstore_populate_record'

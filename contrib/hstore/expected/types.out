@@ -550,3 +550,63 @@ SELECT 'foo=>{x, f}'::hstore #?> '{foo, 1}';
  f
 (1 row)
 
+SELECT hstore_typeof('a=>b') AS hash;
+ hash 
+------
+ hash
+(1 row)
+
+SELECT hstore_typeof('{a=>b}') AS hash;
+ hash 
+------
+ hash
+(1 row)
+
+SELECT hstore_typeof('{a, b}') AS array;
+ array 
+-------
+ array
+(1 row)
+
+SELECT hstore_typeof('{{a=>b}}') AS array;
+ array 
+-------
+ array
+(1 row)
+
+SELECT hstore_typeof('[a, b]') AS array;
+ array 
+-------
+ array
+(1 row)
+
+SELECT hstore_typeof('') AS "NULL";
+ NULL 
+------
+ 
+(1 row)
+
+SELECT hstore_typeof('NULL') AS "null";
+ null 
+------
+ null
+(1 row)
+
+SELECT hstore_typeof('1.0') AS numeric;
+ numeric 
+---------
+ numeric
+(1 row)
+
+SELECT hstore_typeof('t') AS bool;
+ bool 
+------
+ bool
+(1 row)
+
+SELECT hstore_typeof('f') AS bool;
+ bool 
+------
+ bool
+(1 row)
+
