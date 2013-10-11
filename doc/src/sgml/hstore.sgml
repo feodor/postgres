@@ -8,11 +8,44 @@
  </indexterm>
 
  <para>
-  This module implements the <type>hstore</> data type for storing sets of
-  key/value pairs within a single <productname>PostgreSQL</> value.
+  This module implements the <type>hstore</> data type for storing arbitrarily
+  nested key/value pairs and arrays within a single <productname>PostgreSQL</> value.
   This can be useful in various scenarios, such as rows with many attributes
-  that are rarely examined, or semi-structured data.  Keys and values are
-  simply text strings.
+  that are rarely examined, or semi-structured data. Keys are strings, while values
+  can be strings, numbers, booleans, or <literal>NULL</>.
+ </para>
+
+ <para>
+  The <type>hstore</> type is similar to the core <type>json</> data type, but,
+  in the current implementation, differs in a few key ways:
+ </para>
+
+ <itemizedlist>
+
+  <listitem>
+   <para>
+    It's faster. <type>hstore</> is stored in a binary representation, whereas
+    <type>json</> is stored as text, and so needs to be parsed every time it's
+    accessed.
+   </para>
+  </listitem>
+
+  <listitem>
+   <para>
+    Better index support. <type>hstore</> can be used in
+    <link linkend="GiST"><acronym>GiST</></link> and
+    <link linkend="GIN"><acronym>GIN</></link> indexes to allow searches
+    on keys or even key paths.
+   </para>
+  </listitem>
+
+ </itemizedlist>
+
+ <para>
+  That said, <type>hstore</> includes interfaces to transparently convert values
+  to and from <type>json</>. These allow the best of both worlds: store and
+  query <type>hstore</> values, but convert them to <type>json</> when fetching
+  them, for easy parsing in your client application code.
  </para>
 
  <sect2>
