@@ -58,9 +58,11 @@
    values, booleans, or <literal>NULL</>. Strings continaining whitespace,
    commas, <literal>=</>s or <literal>&gt;</>s must be double-quoted. To
    include a double quote or a backslash in a key or value, escape it with a
-   backslash. The <literal>NULL</> keyword is case-insensitive. Double-quote
-   the <literal>NULL</> to treat it as the ordinary string <quote>NULL</quote>.
-   Some examples:
+   backslash. Boolean values may be represnted as <literal>true</>, <literal>t</>,
+   <literal>false</>, or <literal>f</>. Use quotation marks to represent thes
+   values as strings. The <literal>NULL</> keyword is case-insensitive.
+   Double-quote the <literal>NULL</> to treat it as the ordinary string
+   <quote>NULL</quote>. Some examples:
 
 <programlisting>
 =% SELECT 'foo'::hstore, '"hi \"bob\""'::hstore, '1.0'::hstore, 'true'::hstore, NULL::hstore;
@@ -294,6 +296,94 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
      </row>
 
      <row>
+      <entry><type>hstore</> <literal>-&gt;</> <type>integer</></entry>
+      <entry><type>text</></entry>
+      <entry>get value for array index (<literal>NULL</> if not present)</entry>
+      <entry><literal>'{foo,bar,baz}'::hstore -&gt; 1</literal></entry>
+      <entry><literal>bar</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>^&gt;</> <type>text</></entry>
+      <entry><type>numeric</></entry>
+      <entry>get numeric value for key (<literal>NULL</> if not numeric or not present)</entry>
+      <entry><literal>'a=&gt;42.0, b=&gt;y'::hstore ^&gt; 'a'</literal></entry>
+      <entry><literal>42.0</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>^&gt;</> <type>integer</></entry>
+      <entry><type>numeric</></entry>
+      <entry>get numeric value for array index (<literal>NULL</> if not numeric or not present)</entry>
+      <entry><literal>'{foo,null,44}'::hstore ^&gt; 2</literal></entry>
+      <entry><literal>44</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>?&gt;</> <type>text</></entry>
+      <entry><type>numeric</></entry>
+      <entry>get boolean value for key (<literal>NULL</> if not boolean or not present)</entry>
+      <entry><literal>'a =&gt; 42.0, b =&gt; true'::hstore ?&gt; 'b'</literal></entry>
+      <entry><literal>t</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>?&gt;</> <type>integer</></entry>
+      <entry><type>numeric</></entry>
+      <entry>get boolean value for array index (<literal>NULL</> if not boolean or not present)</entry>
+      <entry><literal>'{false,null,44}'::hstore ?&gt; 0</literal></entry>
+      <entry><literal>f</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>#&gt;</> <type>text[]</></entry>
+      <entry><type>text</></entry>
+      <entry>get value for key path (<literal>NULL</> if not present)</entry>
+      <entry><literal>'foo =&gt; {bar =&gt; yellow}'::hstore #&gt; '{foo,bar}'</literal></entry>
+      <entry><literal>yellow</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>#^&gt;</> <type>text[]</></entry>
+      <entry><type>numeric</></entry>
+      <entry>get numeric value for key path (<literal>NULL</> if not numeric or not present)</entry>
+      <entry><literal>'foo =&gt; {bar =&gt; 99}'::hstore #^&gt; '{foo,bar}'</literal></entry>
+      <entry><literal>99</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>#?&gt;</> <type>text[]</></entry>
+      <entry><type>boolean</></entry>
+      <entry>get boolean value for key path (<literal>NULL</> if not booelan or not present)</entry>
+      <entry><literal>'foo =&gt; {bar =&gt; true}'::hstore #?&gt; '{foo,bar}'</literal></entry>
+      <entry><literal>t</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>%&gt;</> <type>text</></entry>
+      <entry><type>hstore</></entry>
+      <entry>get hstore value for key (<literal>NULL</> if not present)</entry>
+      <entry><literal>'foo =&gt; {bar =&gt; 99}'::hstore %&gt; 'foo'</literal></entry>
+      <entry><literal>"bar"=&gt;99</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>%&gt;</> <type>integer</></entry>
+      <entry><type>hstore</></entry>
+      <entry>get hstore value array index (<literal>NULL</> if not present)</entry>
+      <entry><literal>'[1, 2, {foo=>hi}]'::hstore %> 2'</literal></entry>
+      <entry><literal>"foo"=&gt;"hi"</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>#%&gt;</> <type>text[]</></entry>
+      <entry><type>hstore</></entry>
+      <entry>get hstore value for key path (<literal>NULL</> if not present)</entry>
+      <entry><literal>'a =&gt; 1, b =&gt; {c =&gt; [44,44]}'::hstore #%&gt; '{b,c}'</literal></entry>
+      <entry><literal>{44, 44}</literal></entry>
+     </row>
+
+     <row>
       <entry><type>hstore</> <literal>-&gt;</> <type>text[]</></entry>
       <entry><type>text[]</></entry>
       <entry>get values for keys (<literal>NULL</> if not present)</entry>
@@ -314,6 +404,22 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain key?</entry>
       <entry><literal>'a=&gt;1'::hstore ? 'a'</literal></entry>
+      <entry><literal>t</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>?</> <type>integer</></entry>
+      <entry><type>boolean</></entry>
+      <entry>does <type>hstore</> contain array index?</entry>
+      <entry><literal>'a,b,c'::hstore ? 2</literal></entry>
+      <entry><literal>t</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>#?</> <type>text[]</></entry>
+      <entry><type>boolean</></entry>
+      <entry>does <type>hstore</> contain key path?</entry>
+      <entry><literal>'[1, 2, {foo=>hi}]'::hstore #? '{2,foo}'</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -358,6 +464,14 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
      </row>
 
      <row>
+      <entry><type>hstore</> <literal>-</> <type>integer</></entry>
+      <entry><type>hstore</></entry>
+      <entry>delete index from left operand</entry>
+      <entry><literal>'{2, 3, 4, 6, 8}'::hstore - 1;</literal></entry>
+      <entry><literal>{2, 4, 6, 8}</literal></entry>
+     </row>
+
+     <row>
       <entry><type>hstore</> <literal>-</> <type>text[]</></entry>
       <entry><type>hstore</></entry>
       <entry>delete keys from left operand</entry>
@@ -371,6 +485,14 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry>delete matching pairs from left operand</entry>
       <entry><literal>'a=&gt;1, b=&gt;2, c=&gt;3'::hstore - 'a=&gt;4, b=&gt;2'::hstore</literal></entry>
       <entry><literal>"a"=&gt;"1", "c"=&gt;"3"</literal></entry>
+     </row>
+
+     <row>
+      <entry><type>hstore</> <literal>#-</> <type>text[]</></entry>
+      <entry><type>hstore</></entry>
+      <entry>delete key path from left operand</entry>
+      <entry><literal>'{a =&gt; {b =&gt; { c =&gt; [1,2]}}}'::hstore #- '{a,b,c,0}'</literal></entry>
+      <entry><literal>"a"=&gt;{"b"=&gt;{"c"=&gt;{2}}}</literal></entry>
      </row>
 
      <row>
