@@ -622,6 +622,18 @@ b
      </row>
 
      <row>
+      <entry><function>hvals(hstore)</function><indexterm><primary>hvals</primary></indexterm></entry>
+      <entry><type>setof hstore</type></entry>
+      <entry>get <type>hstore</>'s values as a set of <type>hstore</>s</entry>
+      <entry><literal>hvals('a=&gt;[1,2],b=&gt;{foo=&gt;1}')</literal></entry>
+      <entry>
+<programlisting>
+{1, 2}
+"foo"=&gt;1
+</programlisting></entry>
+     </row>
+
+     <row>
       <entry><function>hstore_to_array(hstore)</function><indexterm><primary>hstore_to_array</primary></indexterm></entry>
       <entry><type>text[]</type></entry>
       <entry>get <type>hstore</>'s keys and values as an array of alternating
@@ -655,6 +667,14 @@ b
      </row>
 
      <row>
+      <entry><function>json_to_hstore(json)</function><indexterm><primary>json_to_hstore</primary></indexterm></entry>
+      <entry><type>hstore</type></entry>
+      <entry>get <type>json</type> as an <type>hstore</type> value</entry>
+      <entry><literal>json_to_hstore('{"a key": "1", "b": "t", "c": null, "d": "12345", "e": "012345", "f": "1.234", "g": "2.345e+4"}')</literal></entry>
+      <entry><literal>"b"=&gt;"t", "c"=&gt;NULL, "d"=&gt;"12345", "e"=&gt;"012345", "f"=&gt;"1.234", "g"=&gt;"2.345e+4", "a key"=&gt;"1"</literal></entry>
+     </row>
+
+     <row>
       <entry><function>slice(hstore, text[])</function><indexterm><primary>slice</primary></indexterm></entry>
       <entry><type>hstore</type></entry>
       <entry>extract a subset of an <type>hstore</></entry>
@@ -667,6 +687,20 @@ b
       <entry><type>setof(key text, value text)</type></entry>
       <entry>get <type>hstore</>'s keys and values as a set</entry>
       <entry><literal>select * from each('a=&gt;1,b=&gt;2')</literal></entry>
+      <entry>
+<programlisting>
+ key | value
+-----+-------
+ a   | 1
+ b   | 2
+</programlisting></entry>
+     </row>
+
+     <row>
+      <entry><function>each_hstore(hstore)</function><indexterm><primary>each_hstore</primary></indexterm></entry>
+      <entry><type>setof(key text, value text)</type></entry>
+      <entry>get <type>hstore</>'s keys and values as a set</entry>
+      <entry><literal>select * from each_hstore('a=&gt;1,b=&gt;2')</literal></entry>
       <entry>
 <programlisting>
  key | value
@@ -690,6 +724,14 @@ b
       <entry>does <type>hstore</> contain non-<literal>NULL</> value for key?</entry>
       <entry><literal>defined('a=&gt;NULL','a')</literal></entry>
       <entry><literal>f</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>hstore_typeof(hstore)</function><indexterm><primary>hstore_typeof</primary></indexterm></entry>
+      <entry><type>text</type></entry>
+      <entry>get the type of an <type>hstore</> value, one of <literal>hash</>, <literal>array</>, <literal>string</>, <literal>numeric</>, <literal>bool</>, or <literal>null</></entry>
+      <entry><literal>hstore_typeof('[1]')</literal></entry>
+      <entry><literal>array</literal></entry>
      </row>
 
      <row>
@@ -733,6 +775,10 @@ b
      The function <function>hstore_to_json</function> is used when an <type>hstore</type>
      value is cast to <type>json</type>.
    </para>
+   <para>
+     And conversely, function <function>json_to_hstore</function> is used when a <type>json</type>
+     value is cast to <type>hstore</type>.
+   </para>
   </note>
 
   <note>
@@ -741,6 +787,14 @@ b
     with <type>anyelement</>, not <type>record</>, as its first argument,
     but it will reject non-record types with a run-time error.
    </para>
+  </note>
+
+  <note>
+    <para>
+      The <literal>hstore_typeof</> function's <literal>null</> return value should not be confused
+      with a SQL NULL.  While calling <literal>hstore_typeof('null'::hstore)</> will return
+       <literal>null</>, calling <literal>hstore_typeof(NULL::hstore)</> will return a SQL NULL.
+    </para>
   </note>
  </sect2>
 
