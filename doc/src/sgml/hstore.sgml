@@ -960,11 +960,14 @@ SELECT key, count(*) FROM
  <sect2>
   <title>Compatibility</title>
 
-  <para>
-   As of PostgreSQL 9.0, <type>hstore</> uses a different internal
-   representation than previous versions. This presents no obstacle for
+  <para>The internal representation of <type>hstore</> has been updated
+   a couple of times in its history. Data types and nested structures were
+   added in PostgreSQL 9.4, while capacity and improved index support were
+   introduced in Postgrsql 9.0. These changes present no obstacle for
    dump/restore upgrades since the text representation (used in the dump) is
-   unchanged.
+   unchanged. However, <type>hstore</> values dumped from 9.4 cannot be
+   loaded into earlier versions of PostgreSQL if they contain nested values
+   or typed data.
   </para>
 
   <para>
