@@ -234,7 +234,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
      <para>
       <varname>hstore.root_hash_decorated</varname> controls whether
       root-level hash values are wrapped in braces. By default they are not,
-      to preserve compatability with earlier versions of <type>hstore</a>.
+      to preserve compatability with earlier versions of <type>hstore</>.
       Nested hashes must always be wrapped in braces, which means that they
       are represented differently depending on the context. Set this parameter
       to <literal>true</> to require that all hash values be wrapped in braces.
@@ -251,7 +251,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
     </indexterm>
     <listitem>
      <para>
-      By default, the text representation of <type>hstore</a> values includes no
+      By default, the text representation of <type>hstore</> values includes no
       whitespace between the values it contains. Set <varname>hstore.pretty_print</varname>
       to <literal>true</> to add newlines between values and to indent nested
       hashes and arrays.
@@ -524,16 +524,16 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
   </table>
 
   <note>
-   As of PostgreSQL 8.4, the @&gt; and @&lt; operators can go deep:
+   <para>
+    As of PostgreSQL 8.4, the <literal>@&gt;</> and <literal>@&lt;</> operators can go deep:
 <programlisting>
 postgres=# SELECT 'a=&gt;{1,2,{c=&gt;3, x=&gt;4}}, c=&gt;b'::hstore @&gt; 'a=&gt;{{c=&gt;3}}';
  ?column? 
 ----------
  t
 </programlisting>
-
-  <para>
   </para>
+
   <para>
    Prior to PostgreSQL 8.2, the containment operators <literal>@&gt;</>
    and <literal>&lt;@</> were called <literal>@</> and <literal>~</>,
