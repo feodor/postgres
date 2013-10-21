@@ -1335,17 +1335,25 @@ Datum
 hstore_to_json_loose(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	StringInfo	str;
-	text		*out;
+	text	   *out;
 
-	str = makeStringInfo();
-	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+	if (HS_ISEMPTY(in))
+	{
+		out = cstring_to_text_with_len("{}",2);
+	}
+	else
+	{
+		StringInfo	str;
 
-	hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonLooseOutput, pretty_print_var);
+		str = makeStringInfo();
+		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-	out = (text*)str->data;
+		hstoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in), JsonLooseOutput, pretty_print_var);
 
-	SET_VARSIZE(out, str->len);
+		out = (text*)str->data;
+
+		SET_VARSIZE(out, str->len);
+	}
 
 	PG_RETURN_TEXT_P(out);
 }
@@ -1356,17 +1364,25 @@ Datum
 hstore_to_json(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	StringInfo	str;
-	text		*out;
+	text	   *out;
 
-	str = makeStringInfo();
-	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+	if (HS_ISEMPTY(in))
+	{
+		out = cstring_to_text_with_len("{}",2);
+	}
+	else
+	{
+		StringInfo	str;
 
-	hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonOutput, pretty_print_var);
+		str = makeStringInfo();
+		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-	out = (text*)str->data;
+		hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonOutput, pretty_print_var);
 
-	SET_VARSIZE(out, str->len);
+		out = (text*)str->data;
+
+		SET_VARSIZE(out, str->len);
+	}
 
 	PG_RETURN_TEXT_P(out);
 }

@@ -1463,7 +1463,8 @@ DetermineSleepTime(struct timeval * timeout)
 			if (rw->rw_crashed_at == 0)
 				continue;
 
-			if (rw->rw_worker.bgw_restart_time == BGW_NEVER_RESTART)
+			if (rw->rw_worker.bgw_restart_time == BGW_NEVER_RESTART
+				|| rw->rw_terminate)
 			{
 				ForgetBackgroundWorker(&siter);
 				continue;
@@ -1969,12 +1970,7 @@ retry1:
 		else
 		{
 			/* Append '@' and dbname */
-			char	   *db_user;
-
-			db_user = palloc(strlen(port->user_name) +
-							 strlen(port->database_name) + 2);
-			sprintf(db_user, "%s@%s", port->user_name, port->database_name);
-			port->user_name = db_user;
+			port->user_name = psprintf("%s@%s", port->user_name, port->database_name);
 		}
 	}
 
@@ -5475,6 +5471,13 @@ maybe_start_bgworker(void)
 		/* already running? */
 		if (rw->rw_pid != 0)
 			continue;
+
+		/* marked for death? */
+		if (rw->rw_terminate)
+		{
+			ForgetBackgroundWorker(&iter);
+			continue;
+		}
 
 		/*
 		 * If this worker has crashed previously, maybe it needs to be

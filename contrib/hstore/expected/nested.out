@@ -225,13 +225,13 @@ SELECT	hstore_to_json('{a}');
 SELECT	hstore_to_json('');
  hstore_to_json 
 ----------------
- 
+ {}
 (1 row)
 
 SELECT	hstore_to_json('{}');
  hstore_to_json 
 ----------------
- 
+ {}
 (1 row)
 
 SELECT hstore_to_json('"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{c3},{c4=>4}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore);

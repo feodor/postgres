@@ -2192,7 +2192,6 @@ case $host_os in
 dragonfly*) template=netbsd ;;
  freebsd*) template=freebsd ;;
     hpux*) template=hpux ;;
-    irix*) template=irix ;;
  linux*|gnu*|k*bsd*-gnu)
            template=linux ;;
    mingw*) template=win32 ;;
@@ -3073,7 +3072,6 @@ fi
 
 case $template in
   aix) pgac_cc_list="gcc xlc";;
- irix) pgac_cc_list="cc";; # no gcc
     *) pgac_cc_list="gcc cc";;
 esac
 
@@ -21502,7 +21500,8 @@ fi
 
 
 
-for ac_func in crypt fls getopt getrusage inet_aton random rint srandom strerror strlcat strlcpy
+
+for ac_func in asprintf crypt fls getopt getrusage inet_aton random rint srandom strerror strlcat strlcpy
 do
 as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
 { $as_echo "$as_me:$LINENO: checking for $ac_func" >&5

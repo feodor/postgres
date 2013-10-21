@@ -60,7 +60,6 @@ case $host_os in
 dragonfly*) template=netbsd ;;
  freebsd*) template=freebsd ;;
     hpux*) template=hpux ;;
-    irix*) template=irix ;;
  linux*|gnu*|k*bsd*-gnu)
            template=linux ;;
    mingw*) template=win32 ;;
@@ -350,7 +349,6 @@ PGAC_ARG_REQ(with, CC, [CMD], [set compiler (deprecated)], [CC=$with_CC])
 
 case $template in
   aix) pgac_cc_list="gcc xlc";;
- irix) pgac_cc_list="cc";; # no gcc
     *) pgac_cc_list="gcc cc";;
 esac
 
@@ -1346,7 +1344,7 @@ else
   AC_CHECK_FUNCS([fpclass fp_class fp_class_d class], [break])
 fi
 
-AC_REPLACE_FUNCS([crypt fls getopt getrusage inet_aton random rint srandom strerror strlcat strlcpy])
+AC_REPLACE_FUNCS([asprintf crypt fls getopt getrusage inet_aton random rint srandom strerror strlcat strlcpy])
 
 case $host_os in
 
