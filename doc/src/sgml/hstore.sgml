@@ -321,7 +321,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>?&gt;</> <type>text</></entry>
-      <entry><type>numeric</></entry>
+      <entry><type>boolean</></entry>
       <entry>get boolean value for key (<literal>NULL</> if not boolean or not present)</entry>
       <entry><literal>'a =&gt; 42.0, b =&gt; true'::hstore ?&gt; 'b'</literal></entry>
       <entry><literal>t</literal></entry>
@@ -329,7 +329,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>?&gt;</> <type>integer</></entry>
-      <entry><type>numeric</></entry>
+      <entry><type>bolean</></entry>
       <entry>get boolean value for array index (<literal>NULL</> if not boolean or not present)</entry>
       <entry><literal>'{false,null,44}'::hstore ?&gt; 0</literal></entry>
       <entry><literal>f</literal></entry>
