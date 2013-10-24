@@ -2146,7 +2146,7 @@ setup_firstcall(FuncCallContext *funcctx, HStore *hs, ArrayType *path,
 	if (HS_ISEMPTY(hs) || path)
 		st->it = NULL;
 	else
-		st->it = HStoreIteratorInit(VARDATA(hs));
+		st->it = HStoreIteratorInit(VARDATA(st->hs));
 
 	funcctx->user_fctx = (void *) st;
 
@@ -2200,7 +2200,6 @@ setup_firstcall(FuncCallContext *funcctx, HStore *hs, ArrayType *path,
 			else
 				st->path[i].varKind = pathStr;
 		}
-
 	}
 
 	MemoryContextSwitchTo(oldcontext);
