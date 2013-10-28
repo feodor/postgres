@@ -640,3 +640,33 @@ SELECT hstore('xxx', '3.14'::numeric);
  "xxx"=>3.14
 (1 row)
 
+SELECT hstore(NULL);
+ hstore 
+--------
+ 
+(1 row)
+
+SELECT hstore('NULL');
+ hstore 
+--------
+ NULL
+(1 row)
+
+SELECT hstore('t'::bool) AS "true", hstore('f'::bool) AS "false";
+ true | false 
+------+-------
+ t    | f
+(1 row)
+
+SELECT hstore(3.14), hstore(3.14::numeric), hstore('3.14'::numeric);
+ hstore | hstore | hstore 
+--------+--------+--------
+ 3.14   | 3.14   | 3.14
+(1 row)
+
+SELECT hstore('xxx', 'foo=>t, bar=>3.14, zzz=>xxx'::hstore);
+                    hstore                    
+----------------------------------------------
+ "xxx"=>{"bar"=>3.14, "foo"=>t, "zzz"=>"xxx"}
+(1 row)
+

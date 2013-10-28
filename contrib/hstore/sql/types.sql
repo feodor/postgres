@@ -130,3 +130,5 @@ SELECT hstore('NULL');
 SELECT hstore('t'::bool) AS "true", hstore('f'::bool) AS "false";
 
 SELECT hstore(3.14), hstore(3.14::numeric), hstore('3.14'::numeric);
+
+SELECT hstore('xxx', 'foo=>t, bar=>3.14, zzz=>xxx'::hstore);

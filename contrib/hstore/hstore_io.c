@@ -314,6 +314,49 @@ hstore_from_numeric(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(hstoreDump(&v));
 }
 
+PG_FUNCTION_INFO_V1(hstore_from_th);
+Datum		hstore_from_th(PG_FUNCTION_ARGS);
+Datum
+hstore_from_th(PG_FUNCTION_ARGS)
+{
+	text	   	*key;
+	HStoreValue	v;
+	HStorePair	pair;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	key = PG_GETARG_TEXT_PP(0);
+	pair.key.type = hsvString;
+	pair.key.string.val = VARDATA_ANY(key);
+	pair.key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.size = pair.key.string.len + sizeof(HEntry);
+
+	if (PG_ARGISNULL(1))
+	{
+		pair.value.type = hsvNull;
+		pair.value.size = sizeof(HEntry);
+	}
+	else
+	{
+		HStore	   	*val = NULL;
+
+		val = PG_GETARG_HS(1);
+		pair.value.type = hsvBinary;
+		pair.value.binary.data = VARDATA_ANY(val);
+		pair.value.binary.len = VARSIZE_ANY_EXHDR(val);
+		pair.value.size = pair.value.binary.len + sizeof(HEntry) * 2;
+	}
+
+	v.type = hsvHash;
+	v.size = sizeof(HEntry) + pair.key.size + pair.value.size; 
+	v.hash.npairs = 1;
+	v.hash.pairs = &pair;
+
+	PG_RETURN_POINTER(hstoreDump(&v));
+}
+
+PG_FUNCTION_INFO_V1(hstore_from_arrays);
 PG_FUNCTION_INFO_V1(hstore_scalar_from_text);
 Datum		hstore_scalar_from_text(PG_FUNCTION_ARGS);
 Datum
@@ -402,7 +445,6 @@ hstore_scalar_from_numeric(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(hstoreDump(&a));
 }
 
-PG_FUNCTION_INFO_V1(hstore_from_arrays);
 Datum		hstore_from_arrays(PG_FUNCTION_ARGS);
 Datum
 hstore_from_arrays(PG_FUNCTION_ARGS)
