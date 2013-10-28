@@ -314,6 +314,93 @@ hstore_from_numeric(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(hstoreDump(&v));
 }
 
+PG_FUNCTION_INFO_V1(hstore_scalar_from_text);
+Datum		hstore_scalar_from_text(PG_FUNCTION_ARGS);
+Datum
+hstore_scalar_from_text(PG_FUNCTION_ARGS)
+{
+	HStoreValue	a, v;
+
+	if (PG_ARGISNULL(0))
+	{
+		v.type = hsvNull;
+		v.size = sizeof(HEntry);
+	}
+	else
+	{
+		text	*scalar;
+
+		scalar = PG_GETARG_TEXT_PP(0);
+		v.type = hsvString;
+		v.string.val = VARDATA_ANY(scalar);
+		v.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(scalar));
+		v.size = v.string.len + sizeof(HEntry);
+	}
+
+	a.type = hsvArray;
+	a.size = sizeof(HEntry) + v.size;
+	a.array.nelems = 1;
+	a.array.elems = &v;
+	a.array.scalar = true;
+
+	PG_RETURN_POINTER(hstoreDump(&a));
+}
+
+PG_FUNCTION_INFO_V1(hstore_scalar_from_bool);
+Datum		hstore_scalar_from_bool(PG_FUNCTION_ARGS);
+Datum
+hstore_scalar_from_bool(PG_FUNCTION_ARGS)
+{
+	HStoreValue	a, v;
+
+	if (PG_ARGISNULL(0))
+	{
+		v.type = hsvNull;
+		v.size = sizeof(HEntry);
+	}
+	else
+	{
+		v.type = hsvBool;
+		v.boolean = PG_GETARG_BOOL(0);
+		v.size = sizeof(HEntry);
+	}
+
+	a.type = hsvArray;
+	a.size = sizeof(HEntry) + v.size;
+	a.array.nelems = 1;
+	a.array.elems = &v;
+	a.array.scalar = true;
+
+	PG_RETURN_POINTER(hstoreDump(&a));
+}
+
+PG_FUNCTION_INFO_V1(hstore_scalar_from_numeric);
+Datum		hstore_scalar_from_numeric(PG_FUNCTION_ARGS);
+Datum
+hstore_scalar_from_numeric(PG_FUNCTION_ARGS)
+{
+	HStoreValue	a, v;
+
+	if (PG_ARGISNULL(0))
+	{
+		v.type = hsvNull;
+		v.size = sizeof(HEntry);
+	}
+	else
+	{
+		v.type = hsvNumeric;
+		v.numeric = PG_GETARG_NUMERIC(0);
+		v.size = VARSIZE_ANY(v.numeric) + 2*sizeof(HEntry);
+	}
+
+	a.type = hsvArray;
+	a.size = sizeof(HEntry) + v.size;
+	a.array.nelems = 1;
+	a.array.elems = &v;
+	a.array.scalar = true;
+
+	PG_RETURN_POINTER(hstoreDump(&a));
+}
 
 PG_FUNCTION_INFO_V1(hstore_from_arrays);
 Datum		hstore_from_arrays(PG_FUNCTION_ARGS);
