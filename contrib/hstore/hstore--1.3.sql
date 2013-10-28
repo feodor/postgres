@@ -410,6 +410,16 @@ RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_from_text'
 LANGUAGE C IMMUTABLE; -- not STRICT; needs to allow (key,NULL)
 
+CREATE FUNCTION hstore(text,bool)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_from_bool'
+LANGUAGE C IMMUTABLE; -- not STRICT; needs to allow (key,NULL)
+
+CREATE FUNCTION hstore(text,numeric)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_from_numeric'
+LANGUAGE C IMMUTABLE; -- not STRICT; needs to allow (key,NULL)
+
 CREATE FUNCTION hstore(text[],text[])
 RETURNS hstore
 AS 'MODULE_PATHNAME', 'hstore_from_arrays'

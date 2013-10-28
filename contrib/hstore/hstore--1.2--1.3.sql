@@ -226,3 +226,14 @@ CREATE FUNCTION hstore_typeof(hstore)
 RETURNS text 
 AS 'MODULE_PATHNAME','hstore_typeof'
 LANGUAGE C STRICT IMMUTABLE;
+
+CREATE FUNCTION hstore(text,bool)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_from_bool'
+LANGUAGE C IMMUTABLE; -- not STRICT; needs to allow (key,NULL)
+
+CREATE FUNCTION hstore(text,numeric)
+RETURNS hstore
+AS 'MODULE_PATHNAME','hstore_from_numeric'
+LANGUAGE C IMMUTABLE; -- not STRICT; needs to allow (key,NULL)
+

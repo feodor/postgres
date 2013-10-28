@@ -202,7 +202,6 @@ Datum
 hstore_from_text(PG_FUNCTION_ARGS)
 {
 	text	   	*key;
-	text	   	*val = NULL;
 	HStoreValue	v;
 	HStorePair	pair;
 
@@ -222,11 +221,89 @@ hstore_from_text(PG_FUNCTION_ARGS)
 	}
 	else
 	{
+		text	   	*val = NULL;
+
 		val = PG_GETARG_TEXT_PP(1);
 		pair.value.type = hsvString;
 		pair.value.string.val = VARDATA_ANY(val);
 		pair.value.string.len = hstoreCheckValLen(VARSIZE_ANY_EXHDR(val));
 		pair.value.size = pair.value.string.len + sizeof(HEntry);
+	}
+
+	v.type = hsvHash;
+	v.size = sizeof(HEntry) + pair.key.size + pair.value.size; 
+	v.hash.npairs = 1;
+	v.hash.pairs = &pair;
+
+	PG_RETURN_POINTER(hstoreDump(&v));
+}
+
+PG_FUNCTION_INFO_V1(hstore_from_bool);
+Datum		hstore_from_bool(PG_FUNCTION_ARGS);
+Datum
+hstore_from_bool(PG_FUNCTION_ARGS)
+{
+	text	   	*key;
+	HStoreValue	v;
+	HStorePair	pair;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	key = PG_GETARG_TEXT_PP(0);
+	pair.key.type = hsvString;
+	pair.key.string.val = VARDATA_ANY(key);
+	pair.key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.size = pair.key.string.len + sizeof(HEntry);
+
+	if (PG_ARGISNULL(1))
+	{
+		pair.value.type = hsvNull;
+		pair.value.size = sizeof(HEntry);
+	}
+	else
+	{
+		pair.value.type = hsvBool;
+		pair.value.boolean = PG_GETARG_BOOL(1);
+		pair.value.size = sizeof(HEntry);
+	}
+
+	v.type = hsvHash;
+	v.size = sizeof(HEntry) + pair.key.size + pair.value.size; 
+	v.hash.npairs = 1;
+	v.hash.pairs = &pair;
+
+	PG_RETURN_POINTER(hstoreDump(&v));
+}
+
+PG_FUNCTION_INFO_V1(hstore_from_numeric);
+Datum		hstore_from_numeric(PG_FUNCTION_ARGS);
+Datum
+hstore_from_numeric(PG_FUNCTION_ARGS)
+{
+	text	   	*key;
+	HStoreValue	v;
+	HStorePair	pair;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	key = PG_GETARG_TEXT_PP(0);
+	pair.key.type = hsvString;
+	pair.key.string.val = VARDATA_ANY(key);
+	pair.key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.size = pair.key.string.len + sizeof(HEntry);
+
+	if (PG_ARGISNULL(1))
+	{
+		pair.value.type = hsvNull;
+		pair.value.size = sizeof(HEntry);
+	}
+	else
+	{
+		pair.value.type = hsvNumeric;
+		pair.value.numeric = PG_GETARG_NUMERIC(1);
+		pair.value.size = sizeof(HEntry) + sizeof(HEntry) + VARSIZE_ANY(pair.value.numeric);
 	}
 
 	v.type = hsvHash;

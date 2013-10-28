@@ -610,3 +610,33 @@ SELECT hstore_typeof('f') AS bool;
  bool
 (1 row)
 
+SELECT hstore('xxx', 't'::bool);
+  hstore  
+----------
+ "xxx"=>t
+(1 row)
+
+SELECT hstore('xxx', 'f'::bool);
+  hstore  
+----------
+ "xxx"=>f
+(1 row)
+
+SELECT hstore('xxx', 3.14);
+   hstore    
+-------------
+ "xxx"=>3.14
+(1 row)
+
+SELECT hstore('xxx', 3.14::numeric);
+   hstore    
+-------------
+ "xxx"=>3.14
+(1 row)
+
+SELECT hstore('xxx', '3.14'::numeric);
+   hstore    
+-------------
+ "xxx"=>3.14
+(1 row)
+

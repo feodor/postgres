@@ -117,3 +117,10 @@ SELECT hstore_typeof('1.0') AS numeric;
 SELECT hstore_typeof('t') AS bool;
 SELECT hstore_typeof('f') AS bool;
 
+SELECT hstore('xxx', 't'::bool);
+SELECT hstore('xxx', 'f'::bool);
+
+SELECT hstore('xxx', 3.14);
+SELECT hstore('xxx', 3.14::numeric);
+SELECT hstore('xxx', '3.14'::numeric);
+
