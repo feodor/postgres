@@ -173,6 +173,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
          }                   +
      }                       +
  </programlisting>
+  </para>
 
   <note>
   <para>
