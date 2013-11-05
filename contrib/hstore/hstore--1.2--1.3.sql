@@ -252,3 +252,32 @@ RETURNS hstore
 AS 'MODULE_PATHNAME','hstore_scalar_from_numeric'
 LANGUAGE C IMMUTABLE; -- not STRICT; needs to allow (key,NULL)
 
+
+-- GIN support: hash based opclass
+
+FUNCTION gin_extract_hstore_hash(internal, internal)
+RETURNS internal
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION gin_extract_hstore_hash_query(internal, internal, int2, internal, internal)
+RETURNS internal
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION gin_consistent_hstore_hash(internal, int2, internal, int4, internal, internal)
+RETURNS bool
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE OPERATOR CLASS gin_hstore_hash_ops
+FOR TYPE hstore USING gin
+AS
+	OPERATOR        7       @>,
+	FUNCTION        1       btint4cmp(int4,int4),
+	FUNCTION        2       gin_extract_hstore_hash(internal, internal),
+	FUNCTION        3       gin_extract_hstore_hash_query(internal, internal, int2, internal, internal),
+	FUNCTION        4       gin_consistent_hstore_hash(internal, int2, internal, int4, internal, internal),
+STORAGE         int4;
+
+

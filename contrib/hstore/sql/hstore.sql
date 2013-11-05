@@ -302,6 +302,8 @@ select count(*) from testhstore where h ? 'public';
 select count(*) from testhstore where h ?| ARRAY['public','disabled'];
 select count(*) from testhstore where h ?& ARRAY['public','disabled'];
 
+RESET enable_seqscan;
+
 drop index hidx;
 create index hidx on testhstore using gin (h);
 set enable_seqscan=off;
@@ -312,6 +314,8 @@ select count(*) from testhstore where h @> 'wait=>CC, public=>t';
 select count(*) from testhstore where h ? 'public';
 select count(*) from testhstore where h ?| ARRAY['public','disabled'];
 select count(*) from testhstore where h ?& ARRAY['public','disabled'];
+
+RESET enable_seqscan;
 
 select count(*) from (select (each(h)).key from testhstore) as wow ;
 select key, count(*) from (select (each(h)).key from testhstore) as wow group by key order by count desc, key;
@@ -326,6 +330,9 @@ select count(*) from (select h from (select * from testhstore union all select *
 select distinct * from (values (hstore '' || ''),('')) v(h);
 set enable_sort = true;
 
+RESET enable_hashagg;
+RESET enable_sort;
+
 -- btree
 drop index hidx;
 create index hidx on testhstore using btree (h);
@@ -333,6 +340,18 @@ set enable_seqscan=off;
 
 select count(*) from testhstore where h #># 'p=>1';
 select count(*) from testhstore where h = 'pos=>98, line=>371, node=>CBA, indexed=>t';
+
+--gin hash
+drop index hidx;
+create index hidx on testhstore using gin (h gin_hstore_hash_ops);
+set enable_seqscan=off;
+
+select count(*) from testhstore where h @> 'wait=>NULL';
+select count(*) from testhstore where h @> 'wait=>CC';
+select count(*) from testhstore where h @> 'wait=>CC, public=>t';
+
+RESET enable_seqscan;
+drop index hidx;
 
 -- json
 select hstore_to_json('"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4');
