@@ -821,4 +821,37 @@ AS
 	FUNCTION        3       gin_extract_hstore_hash_query(internal, internal, int2, internal, internal),
 	FUNCTION        4       gin_consistent_hstore_hash(internal, int2, internal, int4, internal, internal),
 	STORAGE         int4;
-	
+
+-- output
+
+CREATE FUNCTION hstore_pretty_print()
+RETURNS int4
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION hstore_array_curly_braces()
+RETURNS int4
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION hstore_json()
+RETURNS int4
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION hstore_root_hash_nondecorated()
+RETURNS int4
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION hstore_loose()
+RETURNS int4
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION hstore_print(hstore, int4)
+RETURNS text
+AS 'MODULE_PATHNAME'
+LANGUAGE C IMMUTABLE STRICT;
+
+

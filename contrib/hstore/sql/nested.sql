@@ -453,26 +453,24 @@ SELECT * FROM each_hstore('a=>{b=>c, c=>b, 1=>first}, b=>{1,2}, c=>cc, 1=>first,
 
 --decoration
 
-SET hstore.array_square_brackets=false;
-SET hstore.root_hash_decorated=false;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, '[a, {b=>c}, [c, d, e]]'::hstore AS a;
-
-SET hstore.array_square_brackets=false;
-SET hstore.root_hash_decorated=true;
-SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, '[a, {b=>c}, [c, d, e]]'::hstore AS a;
-
-SET hstore.array_square_brackets=true;
-SET hstore.root_hash_decorated=false;
-SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, '[a, {b=>c}, [c, d, e]]'::hstore AS a;
-
-SET hstore.array_square_brackets=true;
-SET hstore.root_hash_decorated=true;
-SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]]'::hstore AS h, '[a, {b=>c}, [c, d, e]]'::hstore AS a;
-
-RESET hstore.array_square_brackets;
-RESET hstore.root_hash_decorated;
 
 SET hstore.pretty_print = true;
 SELECT 'a=>1, b=>{c=>3}, d=>[4,[5]], e=>[1,2,3,4], f=>g, g=>j'::hstore AS h, 
 	   '[a, {b=>c, c=>d}, [c, d, e, [1,2], h, {f=>g, g=>f}]]'::hstore AS a;
 RESET hstore.pretty_print;
+
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, 0);
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_loose());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_root_hash_nondecorated());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_array_curly_braces());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json());
+
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json() | hstore_loose());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json() | hstore_root_hash_nondecorated());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json() | hstore_array_curly_braces());
+
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_loose() | hstore_root_hash_nondecorated());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_loose() | hstore_array_curly_braces());
+
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_root_hash_nondecorated() | hstore_array_curly_braces());

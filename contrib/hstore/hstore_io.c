@@ -26,9 +26,8 @@ PG_MODULE_MAGIC;
 HSTORE_POLLUTE(hstore_from_text, tconvert);
 
 /* GUC variables */
-static bool array_square_brackets = false;
-static bool	root_hash_decorated = false;
 static bool	pretty_print_var = false;
+#define SET_PRETTY_PRINT_VAR(x)		((pretty_print_var) ? ((x) | PrettyPrint) : (x))
 
 static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level, uint32 header);
 
@@ -1021,7 +1020,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			else if (v->type == hsvNumeric)
 				s = DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
 			else if (v->type == hsvBinary)
-				s = hstoreToCString(NULL, v->binary.data, v->binary.len, HStoreOutput, pretty_print_var);
+				s = hstoreToCString(NULL, v->binary.data, v->binary.len, SET_PRETTY_PRINT_VAR(ArrayCurlyBraces));
 			else
 				elog(PANIC, "Wrong hstore");
 
@@ -1120,9 +1119,9 @@ stringIsNumber(char *string, int len) {
 }
 
 static void
-printIndent(StringInfo out, bool enable, int level)
+printIndent(StringInfo out, HStoreOutputKind kind, int level)
 {
-	if (enable)
+	if (kind & PrettyPrint)
 	{
 		int i;
 
@@ -1132,54 +1131,50 @@ printIndent(StringInfo out, bool enable, int level)
 }
 
 static void
-printCR(StringInfo out, bool enable)
+printCR(StringInfo out, HStoreOutputKind kind)
 {
-	if (enable)
+	if (kind & PrettyPrint)
 		appendStringInfoCharMacro(out, '\n');
+}
+
+static void
+escape_hstore(StringInfo out, char *string, uint32 len)
+{
+	char       *ptr = string;
+
+	appendStringInfoCharMacro(out, '"');
+	while (ptr - string < len)
+	{
+		if (*ptr == '"' || *ptr == '\\')
+			appendStringInfoCharMacro(out, '\\');
+		appendStringInfoCharMacro(out, *ptr);
+		ptr++;
+	}
+	appendStringInfoCharMacro(out, '"');
 }
 
 static void
 putEscapedString(StringInfo out, HStoreOutputKind kind, char *string, uint32 len)
 {
-	switch(kind)
+	if (kind & LooseOutput)
 	{
-		case HStoreOutput:
-		case HStoreStrictOutput:
-			do
-			{
-				char       *ptr = string;
-
-				appendStringInfoCharMacro(out, '"');
-				while (ptr - string < len)
-				{
-					if (*ptr == '"' || *ptr == '\\')
-						appendStringInfoCharMacro(out, '\\');
-					appendStringInfoCharMacro(out, *ptr);
-					ptr++;
-				}
-				appendStringInfoCharMacro(out, '"');
-			} while(0);
-			break;
-		case JsonOutput:
+		if (len == 1 && *string == 't')
+			appendStringInfoString(out, (kind & JsonOutput) ? "true" : "t" );
+		else if (len == 1 && *string == 'f')
+			appendStringInfoString(out, (kind & JsonOutput) ? "false" : "f");
+		else if (len > 0 && stringIsNumber(string, len))
+			appendBinaryStringInfo(out, string, len);
+		else if (kind & JsonOutput)
 			escape_json(out, pnstrdup(string, len));
-			break;
-		case JsonLooseOutput:
-			do 
-			{
-				char *s = pnstrdup(string, len);
-
-				if (len == 1 && *string == 't')
-					appendStringInfoString(out, "true");
-				else if (len == 1 && *string == 'f')
-					appendStringInfoString(out, "false");
-				else if (len > 0 && stringIsNumber(s, len))
-					appendBinaryStringInfo(out, string, len);
-				else
-					escape_json(out, s);
-			} while(0);
-			break;
-		default:
-			elog(PANIC, "Unknown kind");
+		else
+			escape_hstore(out, string, len);
+	}
+	else
+	{
+		if (kind & JsonOutput)
+			escape_json(out, pnstrdup(string, len));
+		else
+			escape_hstore(out, string, len);
 	}
 }
 
@@ -1189,15 +1184,14 @@ putEscapedValue(StringInfo out, HStoreOutputKind kind, HStoreValue *v)
 	switch(v->type)
 	{
 		case hsvNull:
-			appendBinaryStringInfo(out, (kind == HStoreOutput|| kind == HStoreStrictOutput) ? "NULL" : "null", 4);
+			appendBinaryStringInfo(out, (kind & JsonOutput) ? "null" : "NULL", 4);
 			break;
 		case hsvString:
 			putEscapedString(out, kind, v->string.val, v->string.len);
 			break;
 		case hsvBool:
-			if (kind == HStoreOutput || kind == HStoreStrictOutput)
+			if ((kind & JsonOutput) == 0)
 				appendBinaryStringInfo(out, (v->boolean) ? "t" : "f", 1);
-			/* JsonOutput / JsonLooseOutput */
 			else if (v->boolean)
 				appendBinaryStringInfo(out, "true", 4);
 			else
@@ -1210,34 +1204,18 @@ putEscapedValue(StringInfo out, HStoreOutputKind kind, HStoreValue *v)
 			elog(PANIC, "Unknown type");
 	}
 }
+
 static bool
 needBrackets(int level, bool isArray, HStoreOutputKind kind, bool isScalar)
 {
 	bool res;
 
 	if (isArray && isScalar)
-	{
 		res = false;
-	}
 	else if (level == 0)
-	{
-		switch(kind)
-		{
-			case HStoreOutput:
-				res = (isArray || root_hash_decorated) ? true : false;
-				break;
-			case HStoreStrictOutput:
-				res = isArray;
-				break;
-			default:
-				res = true;
-				break;
-		}
-	}
+		res = (isArray || (kind & RootHashNondecorated) == 0) ? true : false;
 	else
-	{
 		res = true;
-	}
 
 	return res;
 }
@@ -1245,27 +1223,13 @@ needBrackets(int level, bool isArray, HStoreOutputKind kind, bool isScalar)
 static bool
 isArrayBrackets(HStoreOutputKind kind)
 {
-	bool res;
-
-	switch(kind)
-	{
-		case HStoreOutput:
-			res = array_square_brackets;
-			break;
-		case HStoreStrictOutput:
-			res = false;
-			break;
-		default:
-			res = true;
-	}
-
-	return res;
+	return ((kind & ArrayCurlyBraces) == 0) ? true : false;
 }
 		
 
 char*
 hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
-		  HStoreOutputKind kind, bool enable_pretty_print)
+		  HStoreOutputKind kind)
 {
 	bool			first = true;
 	HStoreIterator	*it;
@@ -1295,15 +1259,15 @@ reout:
 				if (first == false)
 				{
 					appendBinaryStringInfo(out, ", ", 2);
-					printCR(out, enable_pretty_print);
+					printCR(out, kind);
 				}
 				first = true;
 
 				if (needBrackets(level, true, kind, v.array.scalar))
 				{
-					printIndent(out, enable_pretty_print, level);
+					printIndent(out, kind, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? '[' : '{');
-					printCR(out, enable_pretty_print);
+					printCR(out, kind);
 				}
 				level++;
 				break;
@@ -1311,15 +1275,15 @@ reout:
 				if (first == false)
 				{
 					appendBinaryStringInfo(out, ", ", 2);
-					printCR(out, enable_pretty_print);
+					printCR(out, kind);
 				}
 				first = true;
 
 				if (needBrackets(level, false, kind, false))
 				{
-					printIndent(out, enable_pretty_print, level);
+					printIndent(out, kind, level);
 					appendStringInfoCharMacro(out, '{');
-					printCR(out, enable_pretty_print);
+					printCR(out, kind);
 				}
 
 				level++;
@@ -1328,22 +1292,13 @@ reout:
 				if (first == false)
 				{
 					appendBinaryStringInfo(out, ", ", 2);
-					printCR(out, enable_pretty_print);
+					printCR(out, kind);
 				}
 				first = true;
 
-				printIndent(out, enable_pretty_print, level);
-				if (kind == JsonLooseOutput)
-				{
-					kind = JsonOutput;
-					putEscapedValue(out, kind, &v);
-					kind = JsonLooseOutput;
-				}
-				else
-				{
-					putEscapedValue(out, kind, &v);
-				}
-				appendBinaryStringInfo(out, (kind == HStoreOutput) ? "=>" : ": ", 2);
+				printIndent(out, kind, level);
+				putEscapedValue(out, kind & ~LooseOutput /* key should not be loose */, &v);
+				appendBinaryStringInfo(out, (kind & JsonOutput) ? ": " : "=>", 2);
 
 				type = HStoreIteratorGet(&it, &v, false);
 				if (type == WHS_VALUE)
@@ -1354,7 +1309,7 @@ reout:
 				else
 				{
 					Assert(type == WHS_BEGIN_HASH || type == WHS_BEGIN_ARRAY);
-					printCR(out, enable_pretty_print);
+					printCR(out, kind);
 					goto reout;
 				}
 				break;
@@ -1362,32 +1317,32 @@ reout:
 				if (first == false)
 				{
 					appendBinaryStringInfo(out, ", ", 2);
-					printCR(out, enable_pretty_print);
+					printCR(out, kind);
 				}
 				else
 				{
 					first = false;
 				}
 
-				printIndent(out, enable_pretty_print, level);
+				printIndent(out, kind, level);
 				putEscapedValue(out, kind, &v);
 				break;
 			case WHS_END_ARRAY:
 				level--;
-				printCR(out, enable_pretty_print);
+				printCR(out, kind);
 				if (needBrackets(level, true, kind, v.array.scalar))
 				{
-					printIndent(out, enable_pretty_print, level);
+					printIndent(out, kind, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? ']' : '}');
 				}
 				first = false;
 				break;
 			case WHS_END_HASH:
 				level--;
-				printCR(out, enable_pretty_print);
+				printCR(out, kind);
 				if (needBrackets(level, false, kind, false))
 				{
-					printIndent(out, enable_pretty_print, level);
+					printIndent(out, kind, level);
 					appendStringInfoCharMacro(out, '}');
 				}
 				first = false;
@@ -1430,7 +1385,7 @@ HStoreValueToText(HStoreValue *v)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		hstoreToCString(str, v->binary.data, v->binary.len, HStoreOutput, pretty_print_var);
+		hstoreToCString(str, v->binary.data, v->binary.len, SET_PRETTY_PRINT_VAR(0));
 
 		out = (text*)str->data;
 		SET_VARSIZE(out, str->len);
@@ -1447,7 +1402,7 @@ hstore_out(PG_FUNCTION_ARGS)
 	HStore	*hs = PG_GETARG_HS(0);
 	char 	*out;
 
-	out = hstoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), HStoreOutput, pretty_print_var);
+	out = hstoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), SET_PRETTY_PRINT_VAR(0));
 
 	PG_RETURN_CSTRING(out);
 }
@@ -1556,7 +1511,8 @@ hstore_to_json_loose(PG_FUNCTION_ARGS)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		hstoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in), JsonLooseOutput, pretty_print_var);
+		hstoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in), 
+						SET_PRETTY_PRINT_VAR(JsonOutput | LooseOutput));
 
 		out = (text*)str->data;
 
@@ -1585,7 +1541,8 @@ hstore_to_json(PG_FUNCTION_ARGS)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), JsonOutput, pretty_print_var);
+		hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), 
+						SET_PRETTY_PRINT_VAR(JsonOutput));
 
 		out = (text*)str->data;
 
@@ -1766,37 +1723,71 @@ array_to_hstore(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(hstoreDump(result));
 }
 
+PG_FUNCTION_INFO_V1(hstore_pretty_print);
+Datum		hstore_pretty_print(PG_FUNCTION_ARGS);
+Datum
+hstore_pretty_print(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT32(PrettyPrint);
+}
+
+PG_FUNCTION_INFO_V1(hstore_array_curly_braces);
+Datum		hstore_array_curly_braces(PG_FUNCTION_ARGS);
+Datum
+hstore_array_curly_braces(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT32(ArrayCurlyBraces);
+}
+
+PG_FUNCTION_INFO_V1(hstore_root_hash_nondecorated);
+Datum		hstore_root_hash_nondecorated(PG_FUNCTION_ARGS);
+Datum
+hstore_root_hash_nondecorated(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT32(RootHashNondecorated);
+}
+
+PG_FUNCTION_INFO_V1(hstore_json);
+Datum		hstore_json(PG_FUNCTION_ARGS);
+Datum
+hstore_json(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT32(JsonOutput);
+}
+
+PG_FUNCTION_INFO_V1(hstore_loose);
+Datum		hstore_loose(PG_FUNCTION_ARGS);
+Datum
+hstore_loose(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT32(LooseOutput);
+}
+
+PG_FUNCTION_INFO_V1(hstore_print);
+Datum		hstore_print(PG_FUNCTION_ARGS);
+Datum
+hstore_print(PG_FUNCTION_ARGS)
+{
+	HStore		*hs = PG_GETARG_HS(0);
+	int32		flags = PG_GETARG_INT32(1);
+	text 		*out;
+	StringInfo	str;
+
+	str = makeStringInfo();
+	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+
+	hstoreToCString(str, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), flags);
+
+	out = (text*)str->data;
+	SET_VARSIZE(out, str->len);
+
+	PG_RETURN_TEXT_P(out);
+}
 
 void _PG_init(void);
 void
 _PG_init(void)
 {
-	DefineCustomBoolVariable(
-		"hstore.array_square_brackets",
-		"[] brackets for array",
-		"Use [] brackets for array's decoration",
-		&array_square_brackets,
-		array_square_brackets,
-		PGC_USERSET,
-		GUC_NOT_IN_SAMPLE,
-		NULL,
-		NULL,
-		NULL
-	);
-
-	DefineCustomBoolVariable(
-		"hstore.root_hash_decorated",
-		"Enables brackets decoration for root hash (hstore)",
-		"Enables brackets decoration for root hash (hstore)",
-		&root_hash_decorated,
-		root_hash_decorated,
-		PGC_USERSET,
-		GUC_NOT_IN_SAMPLE,
-		NULL,
-		NULL,
-		NULL
-	);
-
 	DefineCustomBoolVariable(
 		"hstore.pretty_print",
 		"Enable pretty print",

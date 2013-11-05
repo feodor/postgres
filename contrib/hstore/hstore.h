@@ -176,15 +176,16 @@ extern HStoreValue* getHStoreValue(char *buffer, uint32 flags, int32 i);
 extern bool stringIsNumber(char *string, int len);
 
 typedef enum HStoreOutputKind {
-	HStoreOutput,
-	HStoreStrictOutput,
-	JsonOutput,
-	JsonLooseOutput
+	JsonOutput = 0x01,
+	LooseOutput = 0x02,
+	ArrayCurlyBraces = 0x04,
+	RootHashNondecorated = 0x08,
+	PrettyPrint = 0x10
 } HStoreOutputKind;
 
 extern char* hstoreToCString(StringInfo out, char *in,
-							 int len /* just estimation */, HStoreOutputKind kind,
-							 bool enable_pretty_print);
+							 int len /* just estimation */, 
+							 HStoreOutputKind kind);
 text* HStoreValueToText(HStoreValue *v);
 
 typedef struct ToHStoreState

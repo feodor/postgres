@@ -8,237 +8,237 @@ select ''::hstore;
 (1 row)
 
 select 'a=>b'::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select ' a=>b'::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select 'a =>b'::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select 'a=>b '::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select 'a=> b'::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select '"a"=>"b"'::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select ' "a"=>"b"'::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select '"a" =>"b"'::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select '"a"=>"b" '::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select '"a"=> "b"'::hstore;
-  hstore  
-----------
- "a"=>"b"
+   hstore   
+------------
+ {"a"=>"b"}
 (1 row)
 
 select 'aa=>bb'::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select ' aa=>bb'::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select 'aa =>bb'::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select 'aa=>bb '::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select 'aa=> bb'::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select '"aa"=>"bb"'::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select ' "aa"=>"bb"'::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select '"aa" =>"bb"'::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select '"aa"=>"bb" '::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select '"aa"=> "bb"'::hstore;
-   hstore   
-------------
- "aa"=>"bb"
+    hstore    
+--------------
+ {"aa"=>"bb"}
 (1 row)
 
 select 'aa=>bb, cc=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>bb , cc=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>bb ,cc=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>bb, "cc"=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>bb , "cc"=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>bb ,"cc"=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>"bb", cc=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>"bb" , cc=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>"bb" ,cc=>dd'::hstore;
-         hstore         
-------------------------
- "aa"=>"bb", "cc"=>"dd"
+          hstore          
+--------------------------
+ {"aa"=>"bb", "cc"=>"dd"}
 (1 row)
 
 select 'aa=>null'::hstore;
-   hstore   
-------------
- "aa"=>NULL
+    hstore    
+--------------
+ {"aa"=>NULL}
 (1 row)
 
 select 'aa=>NuLl'::hstore;
-   hstore   
-------------
- "aa"=>NULL
+    hstore    
+--------------
+ {"aa"=>NULL}
 (1 row)
 
 select 'aa=>"NuLl"'::hstore;
-    hstore    
---------------
- "aa"=>"NuLl"
+     hstore     
+----------------
+ {"aa"=>"NuLl"}
 (1 row)
 
 select 'aa=>nul'::hstore;
-   hstore    
--------------
- "aa"=>"nul"
+    hstore     
+---------------
+ {"aa"=>"nul"}
 (1 row)
 
 select 'aa=>NuL'::hstore;
-   hstore    
--------------
- "aa"=>"NuL"
+    hstore     
+---------------
+ {"aa"=>"NuL"}
 (1 row)
 
 select 'aa=>"NuL"'::hstore;
-   hstore    
--------------
- "aa"=>"NuL"
+    hstore     
+---------------
+ {"aa"=>"NuL"}
 (1 row)
 
 select e'\\=a=>q=w'::hstore;
-   hstore    
--------------
- "=a"=>"q=w"
+    hstore     
+---------------
+ {"=a"=>"q=w"}
 (1 row)
 
 select e'"=a"=>q\\=w'::hstore;
-   hstore    
--------------
- "=a"=>"q=w"
+    hstore     
+---------------
+ {"=a"=>"q=w"}
 (1 row)
 
 select e'"\\"a"=>q>w'::hstore;
-    hstore    
---------------
- "\"a"=>"q>w"
+     hstore     
+----------------
+ {"\"a"=>"q>w"}
 (1 row)
 
 select e'\\"a=>q"w'::hstore;
-    hstore     
----------------
- "\"a"=>"q\"w"
+     hstore      
+-----------------
+ {"\"a"=>"q\"w"}
 (1 row)
 
 select ''::hstore;
@@ -450,63 +450,63 @@ select hstore 'a=>NULL, b=>qq' ?& '{}'::text[];
 
 -- delete
 select delete('a=>1 , b=>2, c=>3'::hstore, 'a');
-     delete     
-----------------
- "b"=>2, "c"=>3
+      delete      
+------------------
+ {"b"=>2, "c"=>3}
 (1 row)
 
 select delete('a=>null , b=>2, c=>3'::hstore, 'a');
-     delete     
-----------------
- "b"=>2, "c"=>3
+      delete      
+------------------
+ {"b"=>2, "c"=>3}
 (1 row)
 
 select delete('a=>1 , b=>2, c=>3'::hstore, 'b');
-     delete     
-----------------
- "a"=>1, "c"=>3
+      delete      
+------------------
+ {"a"=>1, "c"=>3}
 (1 row)
 
 select delete('a=>1 , b=>2, c=>3'::hstore, 'c');
-     delete     
-----------------
- "a"=>1, "b"=>2
+      delete      
+------------------
+ {"a"=>1, "b"=>2}
 (1 row)
 
 select delete('a=>1 , b=>2, c=>3'::hstore, 'd');
-         delete         
-------------------------
- "a"=>1, "b"=>2, "c"=>3
+          delete          
+--------------------------
+ {"a"=>1, "b"=>2, "c"=>3}
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - 'a'::text;
-    ?column?    
-----------------
- "b"=>2, "c"=>3
+     ?column?     
+------------------
+ {"b"=>2, "c"=>3}
 (1 row)
 
 select 'a=>null , b=>2, c=>3'::hstore - 'a'::text;
-    ?column?    
-----------------
- "b"=>2, "c"=>3
+     ?column?     
+------------------
+ {"b"=>2, "c"=>3}
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - 'b'::text;
-    ?column?    
-----------------
- "a"=>1, "c"=>3
+     ?column?     
+------------------
+ {"a"=>1, "c"=>3}
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - 'c'::text;
-    ?column?    
-----------------
- "a"=>1, "b"=>2
+     ?column?     
+------------------
+ {"a"=>1, "b"=>2}
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - 'd'::text;
-        ?column?        
-------------------------
- "a"=>1, "b"=>2, "c"=>3
+         ?column?         
+--------------------------
+ {"a"=>1, "b"=>2, "c"=>3}
 (1 row)
 
 select pg_column_size('a=>1 , b=>2, c=>3'::hstore - 'b'::text)
@@ -518,21 +518,21 @@ select pg_column_size('a=>1 , b=>2, c=>3'::hstore - 'b'::text)
 
 -- delete (array)
 select delete('a=>1 , b=>2, c=>3'::hstore, ARRAY['d','e']);
-         delete         
-------------------------
- "a"=>1, "b"=>2, "c"=>3
+          delete          
+--------------------------
+ {"a"=>1, "b"=>2, "c"=>3}
 (1 row)
 
 select delete('a=>1 , b=>2, c=>3'::hstore, ARRAY['d','b']);
-     delete     
-----------------
- "a"=>1, "c"=>3
+      delete      
+------------------
+ {"a"=>1, "c"=>3}
 (1 row)
 
 select delete('a=>1 , b=>2, c=>3'::hstore, ARRAY['a','c']);
- delete 
---------
- "b"=>2
+  delete  
+----------
+ {"b"=>2}
 (1 row)
 
 select delete('a=>1 , b=>2, c=>3'::hstore, ARRAY[['b'],['c'],['a']]);
@@ -542,27 +542,27 @@ select delete('a=>1 , b=>2, c=>3'::hstore, ARRAY[['b'],['c'],['a']]);
 (1 row)
 
 select delete('a=>1 , b=>2, c=>3'::hstore, '{}'::text[]);
-         delete         
-------------------------
- "a"=>1, "b"=>2, "c"=>3
+          delete          
+--------------------------
+ {"a"=>1, "b"=>2, "c"=>3}
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - ARRAY['d','e'];
-        ?column?        
-------------------------
- "a"=>1, "b"=>2, "c"=>3
+         ?column?         
+--------------------------
+ {"a"=>1, "b"=>2, "c"=>3}
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - ARRAY['d','b'];
-    ?column?    
-----------------
- "a"=>1, "c"=>3
+     ?column?     
+------------------
+ {"a"=>1, "c"=>3}
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - ARRAY['a','c'];
  ?column? 
 ----------
- "b"=>2
+ {"b"=>2}
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - ARRAY[['b'],['c'],['a']];
@@ -572,9 +572,9 @@ select 'a=>1 , b=>2, c=>3'::hstore - ARRAY[['b'],['c'],['a']];
 (1 row)
 
 select 'a=>1 , b=>2, c=>3'::hstore - '{}'::text[];
-        ?column?        
-------------------------
- "a"=>1, "b"=>2, "c"=>3
+         ?column?         
+--------------------------
+ {"a"=>1, "b"=>2, "c"=>3}
 (1 row)
 
 select pg_column_size('a=>1 , b=>2, c=>3'::hstore - ARRAY['a','c'])
@@ -593,15 +593,15 @@ select pg_column_size('a=>1 , b=>2, c=>3'::hstore - '{}'::text[])
 
 -- delete (hstore)
 select delete('aa=>1 , b=>2, c=>3'::hstore, 'aa=>4, b=>2'::hstore);
-     delete      
------------------
- "c"=>3, "aa"=>1
+      delete       
+-------------------
+ {"c"=>3, "aa"=>1}
 (1 row)
 
 select delete('aa=>1 , b=>2, c=>3'::hstore, 'aa=>NULL, c=>3'::hstore);
-     delete      
------------------
- "b"=>2, "aa"=>1
+      delete       
+-------------------
+ {"b"=>2, "aa"=>1}
 (1 row)
 
 select delete('aa=>1 , b=>2, c=>3'::hstore, 'aa=>1, b=>2, c=>3'::hstore);
@@ -611,27 +611,27 @@ select delete('aa=>1 , b=>2, c=>3'::hstore, 'aa=>1, b=>2, c=>3'::hstore);
 (1 row)
 
 select delete('aa=>1 , b=>2, c=>3'::hstore, 'b=>2'::hstore);
-     delete      
------------------
- "c"=>3, "aa"=>1
+      delete       
+-------------------
+ {"c"=>3, "aa"=>1}
 (1 row)
 
 select delete('aa=>1 , b=>2, c=>3'::hstore, ''::hstore);
-         delete          
--------------------------
- "b"=>2, "c"=>3, "aa"=>1
+          delete           
+---------------------------
+ {"b"=>2, "c"=>3, "aa"=>1}
 (1 row)
 
 select 'aa=>1 , b=>2, c=>3'::hstore - 'aa=>4, b=>2'::hstore;
-    ?column?     
------------------
- "c"=>3, "aa"=>1
+     ?column?      
+-------------------
+ {"c"=>3, "aa"=>1}
 (1 row)
 
 select 'aa=>1 , b=>2, c=>3'::hstore - 'aa=>NULL, c=>3'::hstore;
-    ?column?     
------------------
- "b"=>2, "aa"=>1
+     ?column?      
+-------------------
+ {"b"=>2, "aa"=>1}
 (1 row)
 
 select 'aa=>1 , b=>2, c=>3'::hstore - 'aa=>1, b=>2, c=>3'::hstore;
@@ -641,15 +641,15 @@ select 'aa=>1 , b=>2, c=>3'::hstore - 'aa=>1, b=>2, c=>3'::hstore;
 (1 row)
 
 select 'aa=>1 , b=>2, c=>3'::hstore - 'b=>2'::hstore;
-    ?column?     
------------------
- "c"=>3, "aa"=>1
+     ?column?      
+-------------------
+ {"c"=>3, "aa"=>1}
 (1 row)
 
 select 'aa=>1 , b=>2, c=>3'::hstore - ''::hstore;
-        ?column?         
--------------------------
- "b"=>2, "c"=>3, "aa"=>1
+         ?column?          
+---------------------------
+ {"b"=>2, "c"=>3, "aa"=>1}
 (1 row)
 
 select pg_column_size('a=>1 , b=>2, c=>3'::hstore - 'b=>2'::hstore)
@@ -668,33 +668,33 @@ select pg_column_size('a=>1 , b=>2, c=>3'::hstore - ''::hstore)
 
 -- ||
 select 'aa=>1 , b=>2, cq=>3'::hstore || 'cq=>l, b=>g, fg=>f';
-               ?column?                
----------------------------------------
- "b"=>"g", "aa"=>1, "cq"=>"l", "fg"=>f
+                ?column?                 
+-----------------------------------------
+ {"b"=>"g", "aa"=>1, "cq"=>"l", "fg"=>f}
 (1 row)
 
 select 'aa=>1 , b=>2, cq=>3'::hstore || 'aq=>l';
-              ?column?               
--------------------------------------
- "b"=>2, "aa"=>1, "aq"=>"l", "cq"=>3
+               ?column?                
+---------------------------------------
+ {"b"=>2, "aa"=>1, "aq"=>"l", "cq"=>3}
 (1 row)
 
 select 'aa=>1 , b=>2, cq=>3'::hstore || 'aa=>l';
-          ?column?          
-----------------------------
- "b"=>2, "aa"=>"l", "cq"=>3
+           ?column?           
+------------------------------
+ {"b"=>2, "aa"=>"l", "cq"=>3}
 (1 row)
 
 select 'aa=>1 , b=>2, cq=>3'::hstore || '';
-         ?column?         
---------------------------
- "b"=>2, "aa"=>1, "cq"=>3
+          ?column?          
+----------------------------
+ {"b"=>2, "aa"=>1, "cq"=>3}
 (1 row)
 
 select ''::hstore || 'cq=>l, b=>g, fg=>f';
-           ?column?           
-------------------------------
- "b"=>"g", "cq"=>"l", "fg"=>f
+            ?column?            
+--------------------------------
+ {"b"=>"g", "cq"=>"l", "fg"=>f}
 (1 row)
 
 select pg_column_size(''::hstore || ''::hstore) = pg_column_size(''::hstore);
@@ -726,27 +726,27 @@ select pg_column_size(''::hstore || 'aa=>1, b=>2'::hstore)
 
 -- hstore(text,text)
 select 'a=>g, b=>c'::hstore || hstore('asd', 'gf');
-            ?column?             
----------------------------------
- "a"=>"g", "b"=>"c", "asd"=>"gf"
+             ?column?              
+-----------------------------------
+ {"a"=>"g", "b"=>"c", "asd"=>"gf"}
 (1 row)
 
 select 'a=>g, b=>c'::hstore || hstore('b', 'gf');
-      ?column?       
----------------------
- "a"=>"g", "b"=>"gf"
+       ?column?        
+-----------------------
+ {"a"=>"g", "b"=>"gf"}
 (1 row)
 
 select 'a=>g, b=>c'::hstore || hstore('b', 'NULL');
-       ?column?        
------------------------
- "a"=>"g", "b"=>"NULL"
+        ?column?         
+-------------------------
+ {"a"=>"g", "b"=>"NULL"}
 (1 row)
 
 select 'a=>g, b=>c'::hstore || hstore('b', NULL);
-      ?column?       
----------------------
- "a"=>"g", "b"=>NULL
+       ?column?        
+-----------------------
+ {"a"=>"g", "b"=>NULL}
 (1 row)
 
 select ('a=>g, b=>c'::hstore || hstore(NULL, 'b')) is null;
@@ -777,21 +777,21 @@ select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
 (1 row)
 
 select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['c','b']);
-     slice      
-----------------
- "b"=>2, "c"=>3
+      slice       
+------------------
+ {"b"=>2, "c"=>3}
 (1 row)
 
 select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['aa','b']);
-      slice      
------------------
- "b"=>2, "aa"=>1
+       slice       
+-------------------
+ {"b"=>2, "aa"=>1}
 (1 row)
 
 select slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['c','b','aa']);
-          slice          
--------------------------
- "b"=>2, "c"=>3, "aa"=>1
+           slice           
+---------------------------
+ {"b"=>2, "c"=>3, "aa"=>1}
 (1 row)
 
 select pg_column_size(slice(hstore 'aa=>1, b=>2, c=>3', ARRAY['c','b']))
@@ -818,15 +818,15 @@ select '{}'::text[]::hstore;
 select ARRAY['a','g','b','h','asd']::hstore;
 ERROR:  array must have even number of elements
 select ARRAY['a','g','b','h','asd','i']::hstore;
-             array              
---------------------------------
- "a"=>"g", "b"=>"h", "asd"=>"i"
+              array               
+----------------------------------
+ {"a"=>"g", "b"=>"h", "asd"=>"i"}
 (1 row)
 
 select ARRAY[['a','g'],['b','h'],['asd','i']]::hstore;
-             array              
---------------------------------
- "a"=>"g", "b"=>"h", "asd"=>"i"
+              array               
+----------------------------------
+ {"a"=>"g", "b"=>"h", "asd"=>"i"}
 (1 row)
 
 select ARRAY[['a','g','b'],['h','asd','i']]::hstore;
@@ -842,15 +842,15 @@ select hstore('{}'::text[]);
 select hstore(ARRAY['a','g','b','h','asd']);
 ERROR:  array must have even number of elements
 select hstore(ARRAY['a','g','b','h','asd','i']);
-             hstore             
---------------------------------
- "a"=>"g", "b"=>"h", "asd"=>"i"
+              hstore              
+----------------------------------
+ {"a"=>"g", "b"=>"h", "asd"=>"i"}
 (1 row)
 
 select hstore(ARRAY[['a','g'],['b','h'],['asd','i']]);
-             hstore             
---------------------------------
- "a"=>"g", "b"=>"h", "asd"=>"i"
+              hstore              
+----------------------------------
+ {"a"=>"g", "b"=>"h", "asd"=>"i"}
 (1 row)
 
 select hstore(ARRAY[['a','g','b'],['h','asd','i']]);
@@ -858,46 +858,46 @@ ERROR:  array must have two columns
 select hstore(ARRAY[[['a','g'],['b','h'],['asd','i']]]);
 ERROR:  wrong number of array subscripts
 select hstore('[0:5]={a,g,b,h,asd,i}'::text[]);
-             hstore             
---------------------------------
- "a"=>"g", "b"=>"h", "asd"=>"i"
+              hstore              
+----------------------------------
+ {"a"=>"g", "b"=>"h", "asd"=>"i"}
 (1 row)
 
 select hstore('[0:2][1:2]={{a,g},{b,h},{asd,i}}'::text[]);
-             hstore             
---------------------------------
- "a"=>"g", "b"=>"h", "asd"=>"i"
+              hstore              
+----------------------------------
+ {"a"=>"g", "b"=>"h", "asd"=>"i"}
 (1 row)
 
 -- pairs of arrays
 select hstore(ARRAY['a','b','asd'], ARRAY['g','h','i']);
-             hstore             
---------------------------------
- "a"=>"g", "b"=>"h", "asd"=>"i"
+              hstore              
+----------------------------------
+ {"a"=>"g", "b"=>"h", "asd"=>"i"}
 (1 row)
 
 select hstore(ARRAY['a','b','asd'], ARRAY['g','h',NULL]);
-             hstore              
----------------------------------
- "a"=>"g", "b"=>"h", "asd"=>NULL
+              hstore               
+-----------------------------------
+ {"a"=>"g", "b"=>"h", "asd"=>NULL}
 (1 row)
 
 select hstore(ARRAY['z','y','x'], ARRAY['1','2','3']);
-            hstore            
-------------------------------
- "x"=>"3", "y"=>"2", "z"=>"1"
+             hstore             
+--------------------------------
+ {"x"=>"3", "y"=>"2", "z"=>"1"}
 (1 row)
 
 select hstore(ARRAY['aaa','bb','c','d'], ARRAY[null::text,null,null,null]);
-                    hstore                     
------------------------------------------------
- "c"=>NULL, "d"=>NULL, "bb"=>NULL, "aaa"=>NULL
+                     hstore                      
+-------------------------------------------------
+ {"c"=>NULL, "d"=>NULL, "bb"=>NULL, "aaa"=>NULL}
 (1 row)
 
 select hstore(ARRAY['aaa','bb','c','d'], null);
-                    hstore                     
------------------------------------------------
- "c"=>NULL, "d"=>NULL, "bb"=>NULL, "aaa"=>NULL
+                     hstore                      
+-------------------------------------------------
+ {"c"=>NULL, "d"=>NULL, "bb"=>NULL, "aaa"=>NULL}
 (1 row)
 
 select quote_literal(hstore('{}'::text[], '{}'::text[]));
@@ -925,9 +925,9 @@ select pg_column_size(hstore(ARRAY['a','b','asd'], ARRAY['g','h','i']))
 
 -- records
 select hstore(v) from (values (1, 'foo', 1.2, 3::float8)) v(a,b,c,d);
-                  hstore                  
-------------------------------------------
- "a"=>"1", "b"=>"foo", "c"=>1.2, "d"=>"3"
+                   hstore                   
+--------------------------------------------
+ {"a"=>"1", "b"=>"foo", "c"=>1.2, "d"=>"3"}
 (1 row)
 
 create domain hstestdom1 as integer not null default 0;
@@ -936,21 +936,21 @@ create table testhstore1 (a integer, b text, c numeric, d float8, e hstestdom1);
 insert into testhstore0 values (1, 'foo', 1.2, 3::float8);
 insert into testhstore1 values (1, 'foo', 1.2, 3::float8);
 select hstore(v) from testhstore1 v;
-                       hstore                       
-----------------------------------------------------
- "a"=>"1", "b"=>"foo", "c"=>1.2, "d"=>"3", "e"=>"0"
+                        hstore                        
+------------------------------------------------------
+ {"a"=>"1", "b"=>"foo", "c"=>1.2, "d"=>"3", "e"=>"0"}
 (1 row)
 
 select hstore(null::testhstore0);
-                   hstore                   
---------------------------------------------
- "a"=>NULL, "b"=>NULL, "c"=>NULL, "d"=>NULL
+                    hstore                    
+----------------------------------------------
+ {"a"=>NULL, "b"=>NULL, "c"=>NULL, "d"=>NULL}
 (1 row)
 
 select hstore(null::testhstore1);
-                        hstore                         
--------------------------------------------------------
- "a"=>NULL, "b"=>NULL, "c"=>NULL, "d"=>NULL, "e"=>NULL
+                         hstore                          
+---------------------------------------------------------
+ {"a"=>NULL, "b"=>NULL, "c"=>NULL, "d"=>NULL, "e"=>NULL}
 (1 row)
 
 select pg_column_size(hstore(v))

@@ -53,18 +53,7 @@ makeitemFromValue(HStoreValue *v, char flag)
 			item = makeitem(v->string.val, v->string.len, flag);
 			break;
 		default:
-			Assert(v->type == hsvBinary);
-			do {
-				StringInfo	str;
-
-				str = makeStringInfo();
-				appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
-				appendStringInfoCharMacro(str, flag);
-
-				hstoreToCString(str, v->binary.data, v->binary.len, HStoreStrictOutput, false);
-				item = (text*)str->data;
-				SET_VARSIZE(item, str->len);
-			} while(0);
+			elog(ERROR, "Wrong hstore type");
 	}
 
 	return item;
