@@ -564,6 +564,11 @@ LANGUAGE C STRICT IMMUTABLE;
 CREATE CAST (json AS hstore)
 WITH FUNCTION json_to_hstore(json);
 
+CREATE FUNCTION array_to_hstore(anyarray)
+RETURNS hstore
+AS 'MODULE_PATHNAME','array_to_hstore'
+LANGUAGE C STRICT IMMUTABLE;
+
 -- btree support
 
 CREATE FUNCTION hstore_eq(hstore,hstore)

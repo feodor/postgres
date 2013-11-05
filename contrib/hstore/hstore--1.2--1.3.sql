@@ -280,4 +280,8 @@ AS
 	FUNCTION        4       gin_consistent_hstore_hash(internal, int2, internal, int4, internal, internal),
 STORAGE         int4;
 
+CREATE FUNCTION array_to_hstore(anyarray)
+RETURNS hstore
+AS 'MODULE_PATHNAME','array_to_hstore'
+LANGUAGE C STRICT IMMUTABLE;
 

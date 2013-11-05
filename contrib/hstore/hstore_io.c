@@ -7,6 +7,7 @@
 
 #include "access/htup_details.h"
 #include "catalog/pg_type.h"
+#include "catalog/pg_cast.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
 #include "utils/builtins.h"
@@ -14,6 +15,7 @@
 #include "utils/json.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
+#include "utils/syscache.h"
 #include "utils/typcache.h"
 
 #include "hstore.h"
@@ -164,7 +166,7 @@ recvHStore(StringInfo buf, HStoreValue *v, uint32 level, uint32 header)
 		v->array.scalar = (hentry == HENTRY_ISCALAR) ? true : false;
 
 		if (v->array.scalar && v->array.nelems != 1)
-			elog(NOTICE, "bogus input");
+			elog(ERROR, "bogus input");
 
 		if (v->array.nelems > 0)
 		{
@@ -1601,6 +1603,167 @@ json_to_hstore(PG_FUNCTION_ARGS)
 	text	*json = PG_GETARG_TEXT_PP(0);
 
 	PG_RETURN_POINTER(hstoreDump(parseHStore(VARDATA_ANY(json), VARSIZE_ANY_EXHDR(json), true)));
+}
+
+static Oid
+searchCast(Oid src, Oid dst, CoercionMethod *method)
+{
+	Oid				funcOid = InvalidOid;
+	HeapTuple   	tuple;
+
+	tuple = SearchSysCache2(CASTSOURCETARGET,
+							ObjectIdGetDatum(src),
+							ObjectIdGetDatum(dst));
+
+
+	*method = 0;
+
+	if (HeapTupleIsValid(tuple))
+	{
+		Form_pg_cast	castForm = (Form_pg_cast) GETSTRUCT(tuple);
+
+		if (castForm->castmethod == COERCION_METHOD_FUNCTION)
+			funcOid = castForm->castfunc;
+
+		*method = castForm->castmethod;
+
+		ReleaseSysCache(tuple);
+	}
+
+	return funcOid;
+}
+
+PG_FUNCTION_INFO_V1(array_to_hstore);
+Datum		array_to_hstore(PG_FUNCTION_ARGS);
+Datum
+array_to_hstore(PG_FUNCTION_ARGS)
+{
+	ArrayType		*array = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayIterator	iterator;
+	int				i = 0;
+	Datum			datum;
+	bool			isnull;
+	int				ncounters = ARR_NDIM(array),
+					*counters = palloc0(sizeof(*counters) * ncounters),
+					*dims = ARR_DIMS(array);
+	ToHStoreState	*state = NULL;
+	HStoreValue		value, *result;
+	Oid				castOid = InvalidOid;
+	int				valueType = hsvString;
+	FmgrInfo		castInfo;
+	CoercionMethod	method;
+
+	if (ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)) == 0)
+		PG_RETURN_POINTER(hstoreDump(NULL));
+
+	switch(ARR_ELEMTYPE(array))
+	{
+		case BOOLOID:
+			valueType = hsvBool;
+			break;
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		case FLOAT4OID:
+		case FLOAT8OID:
+			castOid = searchCast(ARR_ELEMTYPE(array), NUMERICOID, &method);
+			Assert(castOid != InvalidOid);
+		case NUMERICOID:
+			valueType = hsvNumeric;
+			break;
+		default:
+			castOid = searchCast(ARR_ELEMTYPE(array), TEXTOID, &method);
+
+			if (castOid == InvalidOid && method != COERCION_METHOD_BINARY)
+				elog(ERROR, "Could not cast array's element type to text");
+		case TEXTOID:
+			valueType = hsvString;
+			break;
+	}
+
+	if (castOid != InvalidOid)
+		fmgr_info(castOid, &castInfo);
+
+	iterator = array_create_iterator(array, 0);
+
+	value.type = hsvArray;
+	value.array.scalar = false;
+	for(i=0; i<ncounters; i++)
+	{
+		value.array.nelems = dims[i];
+		result = pushHStoreValue(&state, WHS_BEGIN_ARRAY, &value);
+	}
+
+	while(array_iterate(iterator, &datum, &isnull))
+	{
+		i = ncounters - 1;
+
+		if (counters[i] >= dims[i])
+		{
+			while(i>=0 && counters[i] >= dims[i])
+			{
+				counters[i] = 0;
+				result = pushHStoreValue(&state, WHS_END_ARRAY, NULL);
+				i--;
+			}
+
+			Assert(i>=0);
+
+			counters[i]++;
+
+			value.type = hsvArray;
+			value.array.scalar = false;
+			for(i = i + 1; i<ncounters; i++)
+			{
+				counters[i] = 1;
+				value.array.nelems = dims[i];
+				result = pushHStoreValue(&state, WHS_BEGIN_ARRAY, &value);
+			}
+		}
+		else
+		{
+			counters[i]++;
+		}
+
+		if (isnull)
+		{
+			value.type = hsvNull;
+			value.size = sizeof(HEntry);
+		}
+		else
+		{
+			value.type = valueType;
+			switch(valueType)
+			{
+				case hsvBool:
+					value.boolean = DatumGetBool(datum);
+					value.size = sizeof(HEntry);
+					break;
+				case hsvString:
+					if (castOid != InvalidOid)
+						datum = FunctionCall1(&castInfo, datum);
+					value.string.val = VARDATA_ANY(datum);
+					value.string.len = VARSIZE_ANY_EXHDR(datum);
+					value.size = sizeof(HEntry) + value.string.len;
+					break;
+				case hsvNumeric:
+					if (castOid != InvalidOid)
+						datum = FunctionCall1(&castInfo, datum);
+					value.numeric = DatumGetNumeric(datum);
+					value.size = sizeof(HEntry)*2 + VARSIZE_ANY(value.numeric);
+					break;
+				default:
+					elog(ERROR, "Impossible state: %d", valueType);
+			}
+		}
+
+		result = pushHStoreValue(&state, WHS_ELEM, &value);
+	}
+
+	for(i=0; i<ncounters; i++)
+		result = pushHStoreValue(&state, WHS_END_ARRAY, NULL);
+
+	PG_RETURN_POINTER(hstoreDump(result));
 }
 
 

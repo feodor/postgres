@@ -132,3 +132,16 @@ SELECT hstore('t'::bool) AS "true", hstore('f'::bool) AS "false";
 SELECT hstore(3.14), hstore(3.14::numeric), hstore('3.14'::numeric);
 
 SELECT hstore('xxx', 'foo=>t, bar=>3.14, zzz=>xxx'::hstore);
+
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::int2[]);
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::int4[]);
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::int8[]);
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::float4[]);
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::float8[]);
+SELECT array_to_hstore('{{1,1,f},{f,t,NULL}}'::bool[]);
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::text[]);
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::varchar[]);
+
+SELECT array_to_hstore('{{{1,11},{1,1},{4,41}},{{23,231},{3,31},{5,51}}}'::int4[]);
+SELECT hstore('array', array_to_hstore('{{{1,11},{1,1},{4,41}},{{23,231},{3,31},{5,51}}}'::int4[]));
+
