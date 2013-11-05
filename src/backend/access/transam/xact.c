@@ -1824,6 +1824,16 @@ CommitTransaction(void)
 			 TransStateAsString(s->state));
 	Assert(s->parent == NULL);
 
+	/* 
+	 * First fire any pre-commit triggers, so if they in turn cause any
+     * deferred triggers etc to fire this will be picked up below. 
+     * Only fire them, though, if we have a real transaction ID and 
+	 * we're not running standalone. Not firing when standalone provides
+	 * a way to recover from setting up a bad transaction trigger.
+	 */
+	if (s->transactionId != InvalidTransactionId && IsUnderPostmaster)
+		PreCommitTriggersFire();
+
 	/*
 	 * Do pre-commit processing that involves calling user-defined code, such
 	 * as triggers.  Since closing cursors could queue trigger actions,
@@ -2028,6 +2038,16 @@ PrepareTransaction(void)
 		elog(WARNING, "PrepareTransaction while in %s state",
 			 TransStateAsString(s->state));
 	Assert(s->parent == NULL);
+
+	/* 
+	 * First fire any pre-commit triggers, so if they in turn cause any
+     * deferred triggers etc to fire this will be picked up below. 
+     * Only fire them, though, if we have a real transaction ID and 
+	 * we're not running standalone. Not firing when standalone provides
+	 * a way to recover from setting up a bad transaction trigger.
+	 */
+	if (s->transactionId != InvalidTransactionId && IsUnderPostmaster)
+		PreCommitTriggersFire();
 
 	/*
 	 * Do pre-commit processing that involves calling user-defined code, such

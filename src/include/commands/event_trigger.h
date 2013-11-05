@@ -52,4 +52,6 @@ extern void EventTriggerEndCompleteQuery(void);
 extern bool trackDroppedObjectsNeeded(void);
 extern void EventTriggerSQLDropAddObject(ObjectAddress *object);
 
+extern void PreCommitTriggersFire(void);
+
 #endif   /* EVENT_TRIGGER_H */
