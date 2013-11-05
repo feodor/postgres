@@ -6,8 +6,8 @@
 #include "access/gist.h"
 #include "access/skey.h"
 #include "catalog/pg_type.h"
+#include "utils/pg_crc.h"
 
-#include "crc32.h"
 #include "hstore.h"
 
 /* bigint defines */
@@ -108,8 +108,10 @@ Datum		ghstore_same(PG_FUNCTION_ARGS);
 static int
 crc32_HStoreValue(HStoreValue *v, uint32 r)
 {
-	int		crc = crc32_init();
+	int		crc;
 	char	flag = '\0';
+
+	INIT_CRC32(crc);
 
 	switch(r)
 	{
@@ -126,37 +128,41 @@ crc32_HStoreValue(HStoreValue *v, uint32 r)
 			break;
 	}
 
-	crc = crc32_buf(crc, &flag, 1);
+	COMP_CRC32(crc, &flag, 1);
 
 	switch(v->type)
 	{
 		case hsvString:
-			crc = crc32_buf(crc, v->string.val, v->string.len);
+			COMP_CRC32(crc, v->string.val, v->string.len);
 			break;
 		case hsvBool:
 			flag = (v->boolean) ? 't' : 'f';
-			crc = crc32_buf(crc, &flag, 1);
+			COMP_CRC32(crc, &flag, 1);
 			break;
 		case hsvNumeric:
-			crc = crc32_buf(crc, (char*)v->numeric, VARSIZE_ANY(v->numeric));
+			COMP_CRC32(crc, VARDATA_ANY(v->numeric), VARSIZE_ANY_EXHDR(v->numeric));
 			break;
 		default:
 			elog(PANIC, "impossible value %d", v->type);
 	}
 
-	return crc32_fini(crc);
+	FIN_CRC32(crc);
+	return crc;
 }
 
 static int
 crc32_Key(char *buf, int sz)
 {
-	int     crc = crc32_init();
+	int     crc;
 	char	flag = KEYFLAG;
 
-	crc = crc32_buf(crc, &flag, 1);
-	crc = crc32_buf(crc, buf, sz);
+	INIT_CRC32(crc);
 
-	return crc32_fini(crc);
+	COMP_CRC32(crc, &flag, 1);
+	COMP_CRC32(crc, buf, sz);
+
+	FIN_CRC32(crc);
+	return crc;
 }
 
 Datum
