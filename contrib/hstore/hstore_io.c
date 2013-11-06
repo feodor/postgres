@@ -1119,12 +1119,14 @@ stringIsNumber(char *string, int len) {
 }
 
 static void
-printIndent(StringInfo out, HStoreOutputKind kind, int level)
+printIndent(StringInfo out, bool isRootHash, HStoreOutputKind kind, int level)
 {
 	if (kind & PrettyPrint)
 	{
 		int i;
 
+		if (isRootHash && (kind & RootHashDecorated) == 0)
+			level--;
 		for(i=0; i<4*level; i++)
 			appendStringInfoCharMacro(out, ' ');
 	}
@@ -1236,6 +1238,7 @@ hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
 	int				type;
 	HStoreValue		v;
 	int				level = 0;
+	bool			isRootHash = false;
 
 	if (out == NULL)
 		out = makeStringInfo();
@@ -1265,7 +1268,7 @@ reout:
 
 				if (needBrackets(level, true, kind, v.array.scalar))
 				{
-					printIndent(out, kind, level);
+					printIndent(out, isRootHash, kind, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? '[' : '{');
 					printCR(out, kind);
 				}
@@ -1279,9 +1282,12 @@ reout:
 				}
 				first = true;
 
+				if (level == 0)
+					isRootHash = true;
+
 				if (needBrackets(level, false, kind, false))
 				{
-					printIndent(out, kind, level);
+					printIndent(out, isRootHash, kind, level);
 					appendStringInfoCharMacro(out, '{');
 					printCR(out, kind);
 				}
@@ -1296,7 +1302,7 @@ reout:
 				}
 				first = true;
 
-				printIndent(out, kind, level);
+				printIndent(out, isRootHash, kind, level);
 				putEscapedValue(out, kind & ~LooseOutput /* key should not be loose */, &v);
 				appendBinaryStringInfo(out, (kind & JsonOutput) ? ": " : "=>", 2);
 
@@ -1324,7 +1330,7 @@ reout:
 					first = false;
 				}
 
-				printIndent(out, kind, level);
+				printIndent(out, isRootHash, kind, level);
 				putEscapedValue(out, kind, &v);
 				break;
 			case WHS_END_ARRAY:
@@ -1332,7 +1338,7 @@ reout:
 				if (needBrackets(level, true, kind, v.array.scalar))
 				{
 					printCR(out, kind);
-					printIndent(out, kind, level);
+					printIndent(out, isRootHash, kind, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? ']' : '}');
 				}
 				first = false;
@@ -1342,7 +1348,7 @@ reout:
 				if (needBrackets(level, false, kind, false))
 				{
 					printCR(out, kind);
-					printIndent(out, kind, level);
+					printIndent(out, isRootHash, kind, level);
 					appendStringInfoCharMacro(out, '}');
 				}
 				first = false;
