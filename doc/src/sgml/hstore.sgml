@@ -205,25 +205,6 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
    <varlistentry>
     <term>
-     <varname>hstore.root_hash_decorated</varname> (<type>boolean</type>)
-    </term>
-    <indexterm>
-     <primary><varname>hstore.root_hash_decorated</> configuration parameter</primary>
-    </indexterm>
-    <listitem>
-     <para>
-      <varname>hstore.root_hash_decorated</varname> controls whether
-      root-level hash values are wrapped in braces. By default they are not,
-      to preserve compatability with earlier versions of <type>hstore</>.
-      Nested hashes must always be wrapped in braces, which means that they
-      are represented differently depending on the context. Set this parameter
-      to <literal>true</> to require that all hash values be wrapped in braces.
-     </para>
-    </listitem>
-   </varlistentry>
-
-   <varlistentry>
-    <term>
      <varname>hstore.pretty_print</varname> (<type>boolean</type>)
     </term>
     <indexterm>
