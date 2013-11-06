@@ -1329,9 +1329,9 @@ reout:
 				break;
 			case WHS_END_ARRAY:
 				level--;
-				printCR(out, kind);
 				if (needBrackets(level, true, kind, v.array.scalar))
 				{
+					printCR(out, kind);
 					printIndent(out, kind, level);
 					appendStringInfoChar(out, isArrayBrackets(kind) ? ']' : '}');
 				}
@@ -1339,9 +1339,9 @@ reout:
 				break;
 			case WHS_END_HASH:
 				level--;
-				printCR(out, kind);
 				if (needBrackets(level, false, kind, false))
 				{
+					printCR(out, kind);
 					printIndent(out, kind, level);
 					appendStringInfoCharMacro(out, '}');
 				}
