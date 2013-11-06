@@ -585,11 +585,67 @@ postgres=# SELECT 'a=&gt;{1,2,{c=&gt;3, x=&gt;4}}, c=&gt;b'::hstore @&gt; 'a=&gt
      </row>
 
      <row>
+      <entry><function>hstore(text, hstore)</function></entry>
+      <entry><type>hstore</type></entry>
+      <entry>make a nested <type>hstore</></entry>
+      <entry><literal>hstore('xxx', 'foo=&gt;t, bar=&gt;3.14'::hstore)</literal></entry>
+      <entry><literal>"xxx"=&gt;{"bar"=&gt;3.14, "foo"=&gt;t}</literal></entry>
+     </row>
+
+     <row>
       <entry><function>hstore(text, text)</function></entry>
       <entry><type>hstore</type></entry>
       <entry>make single-item <type>hstore</></entry>
       <entry><literal>hstore('a', 'b')</literal></entry>
       <entry><literal>"a"=&gt;"b"</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>hstore(text, numeric)</function></entry>
+      <entry><type>hstore</type></entry>
+      <entry>make single-item <type>hstore</></entry>
+      <entry><literal>hstore('a', 3.14)</literal></entry>
+      <entry><literal>"a"=&gt;3.14</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>hstore(text, boolean)</function></entry>
+      <entry><type>hstore</type></entry>
+      <entry>make single-item <type>hstore</></entry>
+      <entry><literal>hstore('a', true)</literal></entry>
+      <entry><literal>"a"=&gt;t</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>hstore(text)</function></entry>
+      <entry><type>hstore</type></entry>
+      <entry>make scalar string <type>hstore</></entry>
+      <entry><literal>hstore('foo')</literal></entry>
+      <entry><literal>"foo"</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>hstore(numeric)</function></entry>
+      <entry><type>hstore</type></entry>
+      <entry>make scalar numeric <type>hstore</></entry>
+      <entry><literal>hstore(42)</literal></entry>
+      <entry><literal>42</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>hstore(boolean)</function></entry>
+      <entry><type>hstore</type></entry>
+      <entry>make scalar boolean <type>hstore</></entry>
+      <entry><literal>hstore(false)</literal></entry>
+      <entry><literal>f</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>array_to_hstore(anyarray)</function></entry>
+      <entry><type>hstore</type></entry>
+      <entry>construct an array <type>hstore</> from an array</entry>
+      <entry><literal>array_to_hstore('{{1,1,4},{23,3,5}}'::int[])</literal></entry>
+      <entry><literal>[[1, 1, 4], [23, 3, 5]]</literal></entry>
      </row>
 
      <row>
