@@ -179,7 +179,7 @@ typedef enum HStoreOutputKind {
 	JsonOutput = 0x01,
 	LooseOutput = 0x02,
 	ArrayCurlyBraces = 0x04,
-	RootHashNondecorated = 0x08,
+	RootHashDecorated = 0x08,
 	PrettyPrint = 0x10
 } HStoreOutputKind;
 

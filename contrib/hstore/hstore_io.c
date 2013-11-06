@@ -1213,7 +1213,7 @@ needBrackets(int level, bool isArray, HStoreOutputKind kind, bool isScalar)
 	if (isArray && isScalar)
 		res = false;
 	else if (level == 0)
-		res = (isArray || (kind & RootHashNondecorated) == 0) ? true : false;
+		res = (isArray || (kind & RootHashDecorated)) ? true : false;
 	else
 		res = true;
 
@@ -1512,7 +1512,7 @@ hstore_to_json_loose(PG_FUNCTION_ARGS)
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
 		hstoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in), 
-						SET_PRETTY_PRINT_VAR(JsonOutput | LooseOutput));
+						SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated | LooseOutput));
 
 		out = (text*)str->data;
 
@@ -1542,7 +1542,7 @@ hstore_to_json(PG_FUNCTION_ARGS)
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
 		hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), 
-						SET_PRETTY_PRINT_VAR(JsonOutput));
+						SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
 
 		out = (text*)str->data;
 
@@ -1739,12 +1739,12 @@ hstore_array_curly_braces(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(ArrayCurlyBraces);
 }
 
-PG_FUNCTION_INFO_V1(hstore_root_hash_nondecorated);
-Datum		hstore_root_hash_nondecorated(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(hstore_root_hash_decorated);
+Datum		hstore_root_hash_decorated(PG_FUNCTION_ARGS);
 Datum
-hstore_root_hash_nondecorated(PG_FUNCTION_ARGS)
+hstore_root_hash_decorated(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_INT32(RootHashNondecorated);
+	PG_RETURN_INT32(RootHashDecorated);
 }
 
 PG_FUNCTION_INFO_V1(hstore_json);

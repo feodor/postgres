@@ -1,373 +1,373 @@
 SELECT '"foo"=>true'::hstore;
-   hstore   
-------------
- {"foo"=>t}
+  hstore  
+----------
+ "foo"=>t
 (1 row)
 
 SELECT 'foo=>true'::hstore;
-   hstore   
-------------
- {"foo"=>t}
+  hstore  
+----------
+ "foo"=>t
 (1 row)
 
 SELECT '"true"=>true'::hstore;
-   hstore    
--------------
- {"true"=>t}
+  hstore   
+-----------
+ "true"=>t
 (1 row)
 
 SELECT 'true=>true'::hstore;
-   hstore    
--------------
- {"true"=>t}
+  hstore   
+-----------
+ "true"=>t
 (1 row)
 
 SELECT '"t"=>true'::hstore;
-  hstore  
-----------
- {"t"=>t}
+ hstore 
+--------
+ "t"=>t
 (1 row)
 
 SELECT 't=>true'::hstore;
-  hstore  
-----------
- {"t"=>t}
+ hstore 
+--------
+ "t"=>t
 (1 row)
 
 SELECT '"false"=>true'::hstore;
-    hstore    
---------------
- {"false"=>t}
+   hstore   
+------------
+ "false"=>t
 (1 row)
 
 SELECT 'false=>true'::hstore;
-    hstore    
---------------
- {"false"=>t}
+   hstore   
+------------
+ "false"=>t
 (1 row)
 
 SELECT '"f"=>true'::hstore;
-  hstore  
-----------
- {"f"=>t}
+ hstore 
+--------
+ "f"=>t
 (1 row)
 
 SELECT 'f=>true'::hstore;
-  hstore  
-----------
- {"f"=>t}
+ hstore 
+--------
+ "f"=>t
 (1 row)
 
 SELECT '"foo"=>false'::hstore;
-   hstore   
-------------
- {"foo"=>f}
+  hstore  
+----------
+ "foo"=>f
 (1 row)
 
 SELECT 'foo=>false'::hstore;
-   hstore   
-------------
- {"foo"=>f}
+  hstore  
+----------
+ "foo"=>f
 (1 row)
 
 SELECT '"false"=>false'::hstore;
-    hstore    
---------------
- {"false"=>f}
+   hstore   
+------------
+ "false"=>f
 (1 row)
 
 SELECT 'false=>false'::hstore;
-    hstore    
---------------
- {"false"=>f}
+   hstore   
+------------
+ "false"=>f
 (1 row)
 
 SELECT '"t"=>false'::hstore;
-  hstore  
-----------
- {"t"=>f}
+ hstore 
+--------
+ "t"=>f
 (1 row)
 
 SELECT 't=>false'::hstore;
-  hstore  
-----------
- {"t"=>f}
+ hstore 
+--------
+ "t"=>f
 (1 row)
 
 SELECT '"false"=>false'::hstore;
-    hstore    
---------------
- {"false"=>f}
+   hstore   
+------------
+ "false"=>f
 (1 row)
 
 SELECT 'false=>false'::hstore;
-    hstore    
---------------
- {"false"=>f}
+   hstore   
+------------
+ "false"=>f
 (1 row)
 
 SELECT '"f"=>false'::hstore;
-  hstore  
-----------
- {"f"=>f}
+ hstore 
+--------
+ "f"=>f
 (1 row)
 
 SELECT 'f=>false'::hstore;
-  hstore  
-----------
- {"f"=>f}
+ hstore 
+--------
+ "f"=>f
 (1 row)
 
 SELECT '"1"=>x'::hstore;
-   hstore   
-------------
- {"1"=>"x"}
+  hstore  
+----------
+ "1"=>"x"
 (1 row)
 
 SELECT '1=>x'::hstore;
-   hstore   
-------------
- {"1"=>"x"}
+  hstore  
+----------
+ "1"=>"x"
 (1 row)
 
 SELECT 'foo=>1'::hstore;
-   hstore   
-------------
- {"foo"=>1}
+  hstore  
+----------
+ "foo"=>1
 (1 row)
 
 SELECT 'foo=>1.'::hstore;
-   hstore   
-------------
- {"foo"=>1}
+  hstore  
+----------
+ "foo"=>1
 (1 row)
 
 SELECT 'foo=>1.0'::hstore;
-    hstore    
---------------
- {"foo"=>1.0}
+   hstore   
+------------
+ "foo"=>1.0
 (1 row)
 
 SELECT 'foo=>1.01'::hstore;
-    hstore     
----------------
- {"foo"=>1.01}
+   hstore    
+-------------
+ "foo"=>1.01
 (1 row)
 
 SELECT 'foo=>1.01e'::hstore;
-      hstore      
-------------------
- {"foo"=>"1.01e"}
+     hstore     
+----------------
+ "foo"=>"1.01e"
 (1 row)
 
 SELECT 'foo=>1.01e1'::hstore;
-    hstore     
----------------
- {"foo"=>10.1}
+   hstore    
+-------------
+ "foo"=>10.1
 (1 row)
 
 SELECT 'foo=>1.01e+1'::hstore;
-    hstore     
----------------
- {"foo"=>10.1}
+   hstore    
+-------------
+ "foo"=>10.1
 (1 row)
 
 SELECT 'foo=>1.01e-1'::hstore;
-     hstore     
-----------------
- {"foo"=>0.101}
+    hstore    
+--------------
+ "foo"=>0.101
 (1 row)
 
 SELECT 'foo=>.1'::hstore;
-    hstore    
---------------
- {"foo"=>0.1}
+   hstore   
+------------
+ "foo"=>0.1
 (1 row)
 
 SELECT 'foo=>.1e'::hstore;
-     hstore     
-----------------
- {"foo"=>".1e"}
+    hstore    
+--------------
+ "foo"=>".1e"
 (1 row)
 
 SELECT 'foo=>.1e1'::hstore;
-   hstore   
-------------
- {"foo"=>1}
+  hstore  
+----------
+ "foo"=>1
 (1 row)
 
 SELECT 'foo=>.1e+1'::hstore;
-   hstore   
-------------
- {"foo"=>1}
+  hstore  
+----------
+ "foo"=>1
 (1 row)
 
 SELECT 'foo=>.1e-1'::hstore;
-    hstore     
----------------
- {"foo"=>0.01}
+   hstore    
+-------------
+ "foo"=>0.01
 (1 row)
 
 SELECT 'foo=>+1'::hstore;
-   hstore   
-------------
- {"foo"=>1}
+  hstore  
+----------
+ "foo"=>1
 (1 row)
 
 SELECT 'foo=>+1.'::hstore;
-   hstore   
-------------
- {"foo"=>1}
+  hstore  
+----------
+ "foo"=>1
 (1 row)
 
 SELECT 'foo=>+1.0'::hstore;
-    hstore    
---------------
- {"foo"=>1.0}
+   hstore   
+------------
+ "foo"=>1.0
 (1 row)
 
 SELECT 'foo=>+1.01'::hstore;
-    hstore     
----------------
- {"foo"=>1.01}
+   hstore    
+-------------
+ "foo"=>1.01
 (1 row)
 
 SELECT 'foo=>+1.01e'::hstore;
-      hstore       
--------------------
- {"foo"=>"+1.01e"}
+     hstore      
+-----------------
+ "foo"=>"+1.01e"
 (1 row)
 
 SELECT 'foo=>+1.01e1'::hstore;
-    hstore     
----------------
- {"foo"=>10.1}
+   hstore    
+-------------
+ "foo"=>10.1
 (1 row)
 
 SELECT 'foo=>+1.01e+1'::hstore;
-    hstore     
----------------
- {"foo"=>10.1}
+   hstore    
+-------------
+ "foo"=>10.1
 (1 row)
 
 SELECT 'foo=>+1.01e-1'::hstore;
-     hstore     
-----------------
- {"foo"=>0.101}
+    hstore    
+--------------
+ "foo"=>0.101
 (1 row)
 
 SELECT 'foo=>+.1'::hstore;
-    hstore    
---------------
- {"foo"=>0.1}
+   hstore   
+------------
+ "foo"=>0.1
 (1 row)
 
 SELECT 'foo=>+.1e'::hstore;
-     hstore      
------------------
- {"foo"=>"+.1e"}
+    hstore     
+---------------
+ "foo"=>"+.1e"
 (1 row)
 
 SELECT 'foo=>+.1e1'::hstore;
-   hstore   
-------------
- {"foo"=>1}
+  hstore  
+----------
+ "foo"=>1
 (1 row)
 
 SELECT 'foo=>+.1e+1'::hstore;
-   hstore   
-------------
- {"foo"=>1}
+  hstore  
+----------
+ "foo"=>1
 (1 row)
 
 SELECT 'foo=>+.1e-1'::hstore;
-    hstore     
----------------
- {"foo"=>0.01}
+   hstore    
+-------------
+ "foo"=>0.01
 (1 row)
 
 SELECT 'foo=>-1'::hstore;
-   hstore    
--------------
- {"foo"=>-1}
+  hstore   
+-----------
+ "foo"=>-1
 (1 row)
 
 SELECT 'foo=>-1.'::hstore;
-   hstore    
--------------
- {"foo"=>-1}
+  hstore   
+-----------
+ "foo"=>-1
 (1 row)
 
 SELECT 'foo=>-1.0'::hstore;
-    hstore     
----------------
- {"foo"=>-1.0}
+   hstore    
+-------------
+ "foo"=>-1.0
 (1 row)
 
 SELECT 'foo=>-1.01'::hstore;
-     hstore     
-----------------
- {"foo"=>-1.01}
+    hstore    
+--------------
+ "foo"=>-1.01
 (1 row)
 
 SELECT 'foo=>-1.01e'::hstore;
-      hstore       
--------------------
- {"foo"=>"-1.01e"}
+     hstore      
+-----------------
+ "foo"=>"-1.01e"
 (1 row)
 
 SELECT 'foo=>-1.01e1'::hstore;
-     hstore     
-----------------
- {"foo"=>-10.1}
+    hstore    
+--------------
+ "foo"=>-10.1
 (1 row)
 
 SELECT 'foo=>-1.01e+1'::hstore;
-     hstore     
-----------------
- {"foo"=>-10.1}
+    hstore    
+--------------
+ "foo"=>-10.1
 (1 row)
 
 SELECT 'foo=>-1.01e-1'::hstore;
-     hstore      
------------------
- {"foo"=>-0.101}
+    hstore     
+---------------
+ "foo"=>-0.101
 (1 row)
 
 SELECT 'foo=>-.1'::hstore;
-    hstore     
----------------
- {"foo"=>-0.1}
+   hstore    
+-------------
+ "foo"=>-0.1
 (1 row)
 
 SELECT 'foo=>-.1e'::hstore;
-     hstore      
------------------
- {"foo"=>"-.1e"}
+    hstore     
+---------------
+ "foo"=>"-.1e"
 (1 row)
 
 SELECT 'foo=>-.1e1'::hstore;
-   hstore    
--------------
- {"foo"=>-1}
+  hstore   
+-----------
+ "foo"=>-1
 (1 row)
 
 SELECT 'foo=>-.1e+1'::hstore;
-   hstore    
--------------
- {"foo"=>-1}
+  hstore   
+-----------
+ "foo"=>-1
 (1 row)
 
 SELECT 'foo=>-.1e-1'::hstore;
-     hstore     
-----------------
- {"foo"=>-0.01}
+    hstore    
+--------------
+ "foo"=>-0.01
 (1 row)
 
 SELECT 'foo=>1e2000'::hstore;
-      hstore       
--------------------
- {"foo"=>"1e2000"}
+     hstore      
+-----------------
+ "foo"=>"1e2000"
 (1 row)
 
 SELECT 'foo=>1e12, bar=>x'::hstore ^> 'foo';
@@ -611,33 +611,33 @@ SELECT hstore_typeof('f') AS bool;
 (1 row)
 
 SELECT hstore('xxx', 't'::bool);
-   hstore   
-------------
- {"xxx"=>t}
+  hstore  
+----------
+ "xxx"=>t
 (1 row)
 
 SELECT hstore('xxx', 'f'::bool);
-   hstore   
-------------
- {"xxx"=>f}
+  hstore  
+----------
+ "xxx"=>f
 (1 row)
 
 SELECT hstore('xxx', 3.14);
-    hstore     
----------------
- {"xxx"=>3.14}
+   hstore    
+-------------
+ "xxx"=>3.14
 (1 row)
 
 SELECT hstore('xxx', 3.14::numeric);
-    hstore     
----------------
- {"xxx"=>3.14}
+   hstore    
+-------------
+ "xxx"=>3.14
 (1 row)
 
 SELECT hstore('xxx', '3.14'::numeric);
-    hstore     
----------------
- {"xxx"=>3.14}
+   hstore    
+-------------
+ "xxx"=>3.14
 (1 row)
 
 SELECT hstore(NULL);
@@ -665,9 +665,9 @@ SELECT hstore(3.14), hstore(3.14::numeric), hstore('3.14'::numeric);
 (1 row)
 
 SELECT hstore('xxx', 'foo=>t, bar=>3.14, zzz=>xxx'::hstore);
-                     hstore                     
-------------------------------------------------
- {"xxx"=>{"bar"=>3.14, "foo"=>t, "zzz"=>"xxx"}}
+                    hstore                    
+----------------------------------------------
+ "xxx"=>{"bar"=>3.14, "foo"=>t, "zzz"=>"xxx"}
 (1 row)
 
 SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::int2[]);
@@ -725,8 +725,8 @@ SELECT array_to_hstore('{{{1,11},{1,1},{4,41}},{{23,231},{3,31},{5,51}}}'::int4[
 (1 row)
 
 SELECT hstore('array', array_to_hstore('{{{1,11},{1,1},{4,41}},{{23,231},{3,31},{5,51}}}'::int4[]));
-                                 hstore                                 
-------------------------------------------------------------------------
- {"array"=>[[[1, 11], [1, 1], [4, 41], [23, 231]], [[3, 31], [5, 51]]]}
+                                hstore                                
+----------------------------------------------------------------------
+ "array"=>[[[1, 11], [1, 1], [4, 41], [23, 231]], [[3, 31], [5, 51]]]
 (1 row)
 

@@ -462,15 +462,15 @@ RESET hstore.pretty_print;
 
 SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, 0);
 SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_loose());
-SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_root_hash_nondecorated());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_root_hash_decorated());
 SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_array_curly_braces());
 SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json());
 
 SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json() | hstore_loose());
-SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json() | hstore_root_hash_nondecorated());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json() | hstore_root_hash_decorated());
 SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_json() | hstore_array_curly_braces());
 
-SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_loose() | hstore_root_hash_nondecorated());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_loose() | hstore_root_hash_decorated());
 SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_loose() | hstore_array_curly_braces());
 
-SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_root_hash_nondecorated() | hstore_array_curly_braces());
+SELECT hstore_print('a=>t, f=>t, t=>"f", arr=>[1,2,3,"3",x], 123=>string'::hstore, hstore_root_hash_decorated() | hstore_array_curly_braces());
