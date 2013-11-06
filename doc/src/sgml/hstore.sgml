@@ -75,14 +75,13 @@
 
   <para>
    Arrays of values of any supported type may be constructed as
-   comma-separated lists, bracketed by square brackets or curly braces. Some
-   examples:
+   square-bracketed comma-separated lists. Some examples:
 
 <programlisting>
-=% SELECT '{k,v}'::hstore, '[1.0, "hi there", false, null]'::hstore;
+=% SELECT '[k,v]'::hstore, '[1.0, "hi there", false, null]'::hstore;
    hstore   |           hstore           
 ------------+----------------------------
- {"k", "v"} | {1.0, "hi there", f, NULL}
+ ["k", "v"] | [1.0, "hi there", f, NULL]
 </programlisting>
 
   </para>
@@ -137,41 +136,41 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       ]]
     }
 }'::hstore;
-            hstore            
-------------------------------
-     "bbox"=>                +
-     {                       +
-         -180.0,             +
-         -90.0,              +
-         180.0,              +
-         90.0                +
-     },                      +
-     "type"=>"Feature",      +
-     "geometry"=>            +
-     {                       +
-         "type"=>"Polygon",  +
-         "coordinates"=>     +
-         {                   +
-             {               +
-                 {           +
-                     -180.0, +
-                     10.0    +
-                 },          +
-                 {           +
-                     20.0,   +
-                     90.0    +
-                 },          +
-                 {           +
-                     180.0,  +
-                     -5.0    +
-                 },          +
-                 {           +
-                     -30.0,  +
-                     -90.0   +
-                 }           +
-             }               +
-         }                   +
-     }                       +
+          hstore          
+--------------------------
+ "bbox"=>                +
+ [                       +
+     -180.0,             +
+     -90.0,              +
+     180.0,              +
+     90.0                +
+ ],                      +
+ "type"=>"Feature",      +
+ "geometry"=>            +
+ {                       +
+     "type"=>"Polygon",  +
+     "coordinates"=>     +
+     [                   +
+         [               +
+             [           +
+                 -180.0, +
+                 10.0    +
+             ],          +
+             [           +
+                 20.0,   +
+                 90.0    +
+             ],          +
+             [           +
+                 180.0,  +
+                 -5.0    +
+             ],          +
+             [           +
+                 -30.0,  +
+                 -90.0   +
+             ]           +
+         ]               +
+     ]                   +
+ }
  </programlisting>
   </para>
 
@@ -203,26 +202,6 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
     There are several configuration parameters that control the output formatting of
     <type>hstore</> values.
    </para>
-
-  <variablelist>
-   <varlistentry>
-    <term>
-     <varname>hstore.array_square_brackets</varname> (<type>boolean</type>)
-    </term>
-    <indexterm>
-     <primary><varname>hstore.array_square_brackets</> configuration parameter</primary>
-    </indexterm>
-    <listitem>
-     <para>
-      <varname>hstore.array_square_brackets</varname> controls whether arrays
-      are wrapped in square brackets or curly braces. When set to <literal>true</>,
-      brackets will be used. When set to <literal>false</> (the default),
-      curly braces are used. Use of square brackets increases compatability
-      with Perl hashes, and better distinguish arrays from hashes (which
-      simplifies parsing, as weel).
-     </para>
-    </listitem>
-   </varlistentry>
 
    <varlistentry>
     <term>
@@ -300,7 +279,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>-&gt;</> <type>integer</></entry>
       <entry><type>text</></entry>
       <entry>get value for array index (<literal>NULL</> if not present)</entry>
-      <entry><literal>'{foo,bar,baz}'::hstore -&gt; 1</literal></entry>
+      <entry><literal>'[foo,bar,baz]'::hstore -&gt; 1</literal></entry>
       <entry><literal>bar</literal></entry>
      </row>
 
@@ -316,7 +295,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>^&gt;</> <type>integer</></entry>
       <entry><type>numeric</></entry>
       <entry>get numeric value for array index (<literal>NULL</> if not numeric or not present)</entry>
-      <entry><literal>'{foo,null,44}'::hstore ^&gt; 2</literal></entry>
+      <entry><literal>'[foo,null,44]'::hstore ^&gt; 2</literal></entry>
       <entry><literal>44</literal></entry>
      </row>
 
@@ -332,7 +311,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>?&gt;</> <type>integer</></entry>
       <entry><type>bolean</></entry>
       <entry>get boolean value for array index (<literal>NULL</> if not boolean or not present)</entry>
-      <entry><literal>'{false,null,44}'::hstore ?&gt; 0</literal></entry>
+      <entry><literal>'[false,null,44]'::hstore ?&gt; 0</literal></entry>
       <entry><literal>f</literal></entry>
      </row>
 
@@ -340,7 +319,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#&gt;</> <type>text[]</></entry>
       <entry><type>text</></entry>
       <entry>get value for key path (<literal>NULL</> if not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; yellow}'::hstore #&gt; '{foo,bar}'</literal></entry>
+      <entry><literal>'foo =&gt; {bar =&gt; yellow}'::hstore #&gt; '[foo,bar]'</literal></entry>
       <entry><literal>yellow</literal></entry>
      </row>
 
@@ -348,7 +327,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#^&gt;</> <type>text[]</></entry>
       <entry><type>numeric</></entry>
       <entry>get numeric value for key path (<literal>NULL</> if not numeric or not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; 99}'::hstore #^&gt; '{foo,bar}'</literal></entry>
+      <entry><literal>'foo =&gt; {bar =&gt; 99}'::hstore #^&gt; '[foo,bar]'</literal></entry>
       <entry><literal>99</literal></entry>
      </row>
 
@@ -356,7 +335,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#?&gt;</> <type>text[]</></entry>
       <entry><type>boolean</></entry>
       <entry>get boolean value for key path (<literal>NULL</> if not booelan or not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; true}'::hstore #?&gt; '{foo,bar}'</literal></entry>
+      <entry><literal>'foo =&gt; {bar =&gt; true}'::hstore #?&gt; '[foo,bar]'</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -380,8 +359,8 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#%&gt;</> <type>text[]</></entry>
       <entry><type>hstore</></entry>
       <entry>get hstore value for key path (<literal>NULL</> if not present)</entry>
-      <entry><literal>'a =&gt; 1, b =&gt; {c =&gt; [44,44]}'::hstore #%&gt; '{b,c}'</literal></entry>
-      <entry><literal>{44, 44}</literal></entry>
+      <entry><literal>'a =&gt; 1, b =&gt; {c =&gt; [44,44]}'::hstore #%&gt; '[b,c]'</literal></entry>
+      <entry><literal>[44, 44]</literal></entry>
      </row>
 
      <row>
@@ -389,7 +368,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>text[]</></entry>
       <entry>get values for keys (<literal>NULL</> if not present)</entry>
       <entry><literal>'a=&gt;x, b=&gt;y, c=&gt;z'::hstore -&gt; ARRAY['c','a']</literal></entry>
-      <entry><literal>{"z","x"}</literal></entry>
+      <entry><literal>["z","x"]</literal></entry>
      </row>
 
      <row>
@@ -420,7 +399,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#?</> <type>text[]</></entry>
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain key path?</entry>
-      <entry><literal>'[1, 2, {foo=>hi}]'::hstore #? '{2,foo}'</literal></entry>
+      <entry><literal>'[1, 2, {foo=&gt;hi}]'::hstore #? '[2,foo]'</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -468,8 +447,8 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>-</> <type>integer</></entry>
       <entry><type>hstore</></entry>
       <entry>delete index from left operand</entry>
-      <entry><literal>'{2, 3, 4, 6, 8}'::hstore - 1;</literal></entry>
-      <entry><literal>{2, 4, 6, 8}</literal></entry>
+      <entry><literal>'[2, 3, 4, 6, 8]'::hstore - 1;</literal></entry>
+      <entry><literal>[2, 4, 6, 8]</literal></entry>
      </row>
 
      <row>
@@ -492,8 +471,8 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#-</> <type>text[]</></entry>
       <entry><type>hstore</></entry>
       <entry>delete key path from left operand</entry>
-      <entry><literal>'{a =&gt; {b =&gt; { c =&gt; [1,2]}}}'::hstore #- '{a,b,c,0}'</literal></entry>
-      <entry><literal>"a"=&gt;{"b"=&gt;{"c"=&gt;{2}}}</literal></entry>
+      <entry><literal>'{a =&gt; {b =&gt; { c =&gt; [1,2]}}}'::hstore #- '[a,b,c,0]'</literal></entry>
+      <entry><literal>"a"=&gt;{"b"=&gt;{"c"=&gt;[2]}}</literal></entry>
      </row>
 
      <row>
@@ -509,7 +488,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>text[]</></entry>
       <entry>convert <type>hstore</> to array of alternating keys and values</entry>
       <entry><literal>%% 'a=&gt;foo, b=&gt;bar'::hstore</literal></entry>
-      <entry><literal>{a,foo,b,bar}</literal></entry>
+      <entry><literal>[a,foo,b,bar]</literal></entry>
      </row>
 
      <row>
@@ -517,7 +496,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>text[]</></entry>
       <entry>convert <type>hstore</> to two-dimensional key/value array</entry>
       <entry><literal>%# 'a=&gt;foo, b=&gt;bar'::hstore</literal></entry>
-      <entry><literal>{{a,foo},{b,bar}}</literal></entry>
+      <entry><literal>[[a,foo],[b,bar]]</literal></entry>
      </row>
 
     </tbody>
@@ -528,7 +507,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
    <para>
     As of PostgreSQL 8.4, the <literal>@&gt;</> and <literal>@&lt;</> operators can go deep:
 <programlisting>
-postgres=# SELECT 'a=&gt;{1,2,{c=&gt;3, x=&gt;4}}, c=&gt;b'::hstore @&gt; 'a=&gt;{{c=&gt;3}}';
+postgres=# SELECT 'a=&gt;[1,2,{c=&gt;3, x=&gt;4}], c=&gt;b'::hstore @&gt; 'a=&gt;[{c=&gt;3}]';
  ?column? 
 ----------
  t
@@ -695,7 +674,7 @@ b
       <entry><literal>hvals('a=&gt;[1,2],b=&gt;{foo=&gt;1}')</literal></entry>
       <entry>
 <programlisting>
-{1, 2}
+[1, 2]
 "foo"=&gt;1
 </programlisting></entry>
      </row>
@@ -805,7 +784,7 @@ b
       <entry><function>replace(hstore,text[],hstore)</function><indexterm><primary>replace</primary></indexterm></entry>
       <entry><type>hstore</type></entry>
       <entry>replace value at the specified path</entry>
-      <entry><literal>replace('a=&gt;1,b=&gt;{c=&gt;3,d=&gt;{4,5,6}}'::hstore,'{b,d}', '1')</literal></entry>
+      <entry><literal>replace('a=&gt;1,b=&gt;{c=&gt;3,d=&gt;[4,5,6]}'::hstore,'[b,d]', '1')</literal></entry>
       <entry><literal>"a"=&gt;1, "b"=&gt;{"c"=&gt;3, "d"=&gt;}</literal></entry>
      </row>
 
@@ -813,8 +792,8 @@ b
       <entry><function>concat_path(hstore,text[],hstore)</function><indexterm><primary>concat_path</primary></indexterm></entry>
       <entry><type>hstore</type></entry>
       <entry>concatenate <type>hstore</> value at the specified path</entry>
-      <entry><literal>concat_path('b=&gt;{c=&gt;3,d=&gt;{4,5,6}}'::hstore,'{b,d}', '1')</literal></entry>
-      <entry><literal>"b"=&gt;{"c"=&gt;3, "d"=&gt;{4, 5, 6, 1}}</literal></entry>
+      <entry><literal>concat_path('b=&gt;{c=&gt;3,d=&gt;[4,5,6]}'::hstore,'[b,d]', '1')</literal></entry>
+      <entry><literal>"b"=&gt;{"c"=&gt;3, "d"=&gt;[4, 5, 6, 1]}</literal></entry>
      </row>
 
      <row>
