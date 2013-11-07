@@ -824,34 +824,15 @@ AS
 
 -- output
 
-CREATE FUNCTION hstore_pretty_print()
-RETURNS int4
-AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE STRICT;
-
-CREATE FUNCTION hstore_array_curly_braces()
-RETURNS int4
-AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE STRICT;
-
-CREATE FUNCTION hstore_json()
-RETURNS int4
-AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE STRICT;
-
-CREATE FUNCTION hstore_root_hash_decorated()
-RETURNS int4
-AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE STRICT;
-
-CREATE FUNCTION hstore_loose()
-RETURNS int4
-AS 'MODULE_PATHNAME'
-LANGUAGE C IMMUTABLE STRICT;
-
-CREATE FUNCTION hstore_print(hstore, int4)
+CREATE FUNCTION hstore_print(hstore, 
+							 pretty_print bool DEFAULT false,
+							 array_curly_braces bool DEFAULT false,
+							 root_hash_decorated bool DEFAULT false,
+							 json bool DEFAULT false,
+							 loose bool DEFAULT false)
 RETURNS text
-AS 'MODULE_PATHNAME'
+AS 'MODULE_PATHNAME', 'hstore_print'
 LANGUAGE C IMMUTABLE STRICT;
+
 
 

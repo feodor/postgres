@@ -1736,55 +1736,26 @@ array_to_hstore(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(hstoreDump(result));
 }
 
-PG_FUNCTION_INFO_V1(hstore_pretty_print);
-Datum		hstore_pretty_print(PG_FUNCTION_ARGS);
-Datum
-hstore_pretty_print(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_INT32(PrettyPrint);
-}
-
-PG_FUNCTION_INFO_V1(hstore_array_curly_braces);
-Datum		hstore_array_curly_braces(PG_FUNCTION_ARGS);
-Datum
-hstore_array_curly_braces(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_INT32(ArrayCurlyBraces);
-}
-
-PG_FUNCTION_INFO_V1(hstore_root_hash_decorated);
-Datum		hstore_root_hash_decorated(PG_FUNCTION_ARGS);
-Datum
-hstore_root_hash_decorated(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_INT32(RootHashDecorated);
-}
-
-PG_FUNCTION_INFO_V1(hstore_json);
-Datum		hstore_json(PG_FUNCTION_ARGS);
-Datum
-hstore_json(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_INT32(JsonOutput);
-}
-
-PG_FUNCTION_INFO_V1(hstore_loose);
-Datum		hstore_loose(PG_FUNCTION_ARGS);
-Datum
-hstore_loose(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_INT32(LooseOutput);
-}
-
 PG_FUNCTION_INFO_V1(hstore_print);
 Datum		hstore_print(PG_FUNCTION_ARGS);
 Datum
 hstore_print(PG_FUNCTION_ARGS)
 {
 	HStore		*hs = PG_GETARG_HS(0);
-	int32		flags = PG_GETARG_INT32(1);
+	int 		flags = 0;
 	text 		*out;
 	StringInfo	str;
+
+	if (PG_GETARG_BOOL(1))
+		flags |= PrettyPrint;
+	if (PG_GETARG_BOOL(2))
+		flags |= ArrayCurlyBraces;
+	if (PG_GETARG_BOOL(3))
+		flags |= RootHashDecorated;
+	if (PG_GETARG_BOOL(4))
+		flags |= JsonOutput;
+	if (PG_GETARG_BOOL(5))
+		flags |= LooseOutput;
 
 	str = makeStringInfo();
 	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
