@@ -63,12 +63,13 @@ SELECT 'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'ff',
 SELECT '[ a, b, c, d]'::hstore -> 'a';
 --
 
-CREATE TABLE testtype (i int, h hstore, a int[]);
-INSERT INTO testtype VALUES (1, 'a=>1', '{1,2,3}');
+CREATE TABLE testtype (i int, h hstore, a int[], j json);
+INSERT INTO testtype VALUES (1, 'a=>1', '{1,2,3}', '{"x": 2}');
 
 SELECT populate_record(v, 'i=>2'::hstore) FROM testtype v;
 SELECT populate_record(v, 'i=>2, a=>{7,8,9}'::hstore) FROM testtype v;
 SELECT populate_record(v, 'i=>2, h=>{b=>3}, a=>{7,8,9}'::hstore) FROM testtype v;
+SELECT populate_record(v, 'i=>2, h=>{b=>3}, a=>{7,8,9}, j=>{a=>{1,2,3}}'::hstore) FROM testtype v;
 
 --complex delete
 

@@ -1019,8 +1019,12 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 				s = pnstrdup((v->boolean) ? "t" : "f", 1);
 			else if (v->type == hsvNumeric)
 				s = DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
+			else if (v->type == hsvBinary && column_type == JSONOID)
+				s = hstoreToCString(NULL, v->binary.data, v->binary.len, 
+									SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
 			else if (v->type == hsvBinary)
-				s = hstoreToCString(NULL, v->binary.data, v->binary.len, SET_PRETTY_PRINT_VAR(ArrayCurlyBraces));
+				s = hstoreToCString(NULL, v->binary.data, v->binary.len, 
+									SET_PRETTY_PRINT_VAR(ArrayCurlyBraces));
 			else
 				elog(PANIC, "Wrong hstore");
 

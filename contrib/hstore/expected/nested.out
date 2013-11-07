@@ -257,24 +257,30 @@ SELECT '[ a, b, c, d]'::hstore -> 'a';
 (1 row)
 
 --
-CREATE TABLE testtype (i int, h hstore, a int[]);
-INSERT INTO testtype VALUES (1, 'a=>1', '{1,2,3}');
+CREATE TABLE testtype (i int, h hstore, a int[], j json);
+INSERT INTO testtype VALUES (1, 'a=>1', '{1,2,3}', '{"x": 2}');
 SELECT populate_record(v, 'i=>2'::hstore) FROM testtype v;
-     populate_record      
---------------------------
- (2,"""a""=>1","{1,2,3}")
+            populate_record            
+---------------------------------------
+ (2,"""a""=>1","{1,2,3}","{""x"": 2}")
 (1 row)
 
 SELECT populate_record(v, 'i=>2, a=>{7,8,9}'::hstore) FROM testtype v;
-     populate_record      
---------------------------
- (2,"""a""=>1","{7,8,9}")
+            populate_record            
+---------------------------------------
+ (2,"""a""=>1","{7,8,9}","{""x"": 2}")
 (1 row)
 
 SELECT populate_record(v, 'i=>2, h=>{b=>3}, a=>{7,8,9}'::hstore) FROM testtype v;
-     populate_record      
---------------------------
- (2,"""b""=>3","{7,8,9}")
+            populate_record            
+---------------------------------------
+ (2,"""b""=>3","{7,8,9}","{""x"": 2}")
+(1 row)
+
+SELECT populate_record(v, 'i=>2, h=>{b=>3}, a=>{7,8,9}, j=>{a=>{1,2,3}}'::hstore) FROM testtype v;
+                populate_record                
+-----------------------------------------------
+ (2,"""b""=>3","{7,8,9}","{""a"": [1, 2, 3]}")
 (1 row)
 
 --complex delete
