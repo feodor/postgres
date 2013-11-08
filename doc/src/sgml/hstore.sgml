@@ -809,6 +809,14 @@ b
       <entry></entry>
      </row>
 
+     <row>
+      <entry><function>hstore_print(hstore,bool,bool,bool,bool,bool)</function></entry>
+      <entry><type>text</type></entry>
+      <entry>Format an <type>hstore</> value as text with various formatting options</entry>
+      <entry>see Printing section</entry>
+      <entry></entry>
+     </row>
+
     </tbody>
    </tgroup>
   </table>
@@ -865,6 +873,111 @@ CREATE INDEX hidx ON testhstore USING BTREE (h);
 
 CREATE INDEX hidx ON testhstore USING HASH (h);
 </programlisting>
+ </sect2>
+
+ <sect2>
+  <title>Printing</title>
+
+  <para>
+   The <literal>hstore_print()</> function takes a single <type>hstore</>
+   value and formats it as text. By default, the returned value is identical
+   to the text format used to return <type>hstore</> values in queries.
+   However, <literal>hstore_print()</> also accepts a number of optional
+   parameters, passed as <type>boolean</> values, to format an <type>hstore</>
+   in various ways. The parameters include:
+  </para>
+
+  <table id="hstore-print-table">
+   <title><literal>hstore_print()</> Parameters</title>
+
+   <tgroup cols="4">
+    <thead>
+     <row>
+      <entry>Parameter</entry>
+      <entry>Description</entry>
+      <entry>Example</entry>
+      <entry>Result</entry>
+     </row>
+    </thead>
+
+    <tbody>
+
+     <row>
+      <entry><literal>pretty_print</></entry>
+      <entry>Adds add newlines between values and indents nested hashes and arrays.</entry>
+      <entry><literal>hstore_print('a=&gt;t, t=&gt;"f", arr=&gt;[1,2,"3"]', pretty_print := true)</literal></entry>
+      <entry>
+<programlisting>
+ hstore_print 
+--------------
+ "a"=&gt;t,     +
+ "t"=&gt;"f",   +
+ "arr"=&gt;     +
+ [           +
+     1,      +
+     2,      +
+     "3"     +
+ ]
+</programlisting></entry>
+     </row>
+
+     <row>
+      <entry><literal>array_curly_braces</></entry>
+      <entry>Wraps arrays in curly braces instead of brackets</entry>
+      <entry><literal>hstore_print('arr=&gt;[1,2,"3"]', array_curly_braces := true)</literal></entry>
+      <entry><literal>"arr"=&gt;{1, 2, "3"}</literal></entry>
+     </row>
+
+     <row>
+      <entry><literal>root_hash_decorated</></entry>
+      <entry>Wraps the root has object, if three is one, in curly braces</entry>
+      <entry><literal>hstore_print('arr=>[1,2,"3"]', root_hash_decorated := true)</literal></entry>
+      <entry><literal>{"arr"=&gt;[1, 2, "3"]}</literal></entry>
+     </row>
+
+     <row>
+      <entry><literal>json</></entry>
+      <entry>Retuns the value as a JSON string</entry>
+      <entry><literal>hstore_print('arr=&gt;[1,2,"3"]', json := true)</literal></entry>
+      <entry><literal>"arr": [1, 2, "3"]</literal></entry>
+     </row>
+
+     <row>
+      <entry><literal>loose</></entry>
+      <entry>Try to parse numbers and booleans</entry>
+      <entry><literal>hstore_print('arr=>[1,"2","t"]', loose := true)</literal></entry>
+      <entry><literal>"arr"=>[1, 2, t]</literal></entry>
+     </row>
+
+    </tbody>
+   </tgroup>
+  </table>
+
+  <para>
+    These options can be combined for different effects. For example, to pretty-print
+    an <type>hstore</> value with the root hash decorated and array curly braces,
+    simply pass all three values:
+<programlisting>
+# SELECT hstore_print(
+    'arr=&gt;[1,2,"3"]',
+    root_hash_decorated := true,
+    array_curly_braces  := true,
+   pretty_print         := true
+);
+ hstore_print 
+--------------
+ {           +
+     "arr"=&gt; +
+     {       +
+         1,  +
+         2,  +
+         "3" +
+     }       +
+ }
+(1 row)
+</programlisting>
+  </para>
+
  </sect2>
 
  <sect2>
