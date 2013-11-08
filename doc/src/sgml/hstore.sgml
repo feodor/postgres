@@ -805,7 +805,7 @@ b
       <entry><function>populate_record(record,hstore)</function><indexterm><primary>populate_record</primary></indexterm></entry>
       <entry><type>record</type></entry>
       <entry>replace fields in <type>record</> with matching values from <type>hstore</></entry>
-      <entry>see Examples section</entry>
+      <entry>see Populating Records section</entry>
       <entry></entry>
      </row>
 
@@ -931,7 +931,7 @@ CREATE INDEX hidx ON testhstore USING HASH (h);
      <row>
       <entry><literal>root_hash_decorated</></entry>
       <entry>Wraps the root has object, if three is one, in curly braces</entry>
-      <entry><literal>hstore_print('arr=>[1,2,"3"]', root_hash_decorated := true)</literal></entry>
+      <entry><literal>hstore_print('arr=&gt;[1,2,"3"]', root_hash_decorated := true)</literal></entry>
       <entry><literal>{"arr"=&gt;[1, 2, "3"]}</literal></entry>
      </row>
 
@@ -945,7 +945,7 @@ CREATE INDEX hidx ON testhstore USING HASH (h);
      <row>
       <entry><literal>loose</></entry>
       <entry>Try to parse numbers and booleans</entry>
-      <entry><literal>hstore_print('arr=>[1,"2","t"]', loose := true)</literal></entry>
+      <entry><literal>hstore_print('arr=&gt;[1,"2","t"]', loose := true)</literal></entry>
       <entry><literal>"arr"=>[1, 2, t]</literal></entry>
      </row>
 
@@ -962,7 +962,7 @@ CREATE INDEX hidx ON testhstore USING HASH (h);
     'arr=&gt;[1,2,"3"]',
     root_hash_decorated := true,
     array_curly_braces  := true,
-   pretty_print         := true
+    pretty_print        := true
 );
  hstore_print 
 --------------
@@ -975,6 +975,50 @@ CREATE INDEX hidx ON testhstore USING HASH (h);
      }       +
  }
 (1 row)
+</programlisting>
+  </para>
+
+ </sect2>
+
+
+ <sect2>
+  <title>Populating Records</title>
+
+  <para>
+   The <literal>populate_record()</> converts an <type>hstore</> hash value to
+   a pre-defined record type. Pass any record value (even <literal>NULL</>) as
+   the first argument and the <type>hstore</> to convert to that type as the
+   second argument. At its simplest <literal>populate_record()</> simply maps
+   keys to column names and values to record values:
+<programlisting>
+CREATE TABLE test (col1 integer, col2 text, col3 text);
+
+SELECT * FROM populate_record(
+    null::test,
+    '"col1"=&gt;"456", "col2"=&gt;"zzz"'
+);
+ col1 | col2 | col3 
+------+------+------
+  456 | zzz  | 
+(1 row)
+</programlisting>
+  </para>
+
+  <para>
+   But <literal>populate_record()</> supports more complicated records and nested
+   <type>hstore</a> values, as well. It makes an effort to convert
+   from <type>hstore</> data types to PostgreSQL types, including arrays,
+   <type>json</>, and <type>hstore</> values:
+<programlisting>
+CREATE type stuff AS (i int, h hstore, a int[], j json);
+
+SELECT * FROM populate_record(
+    null::stuff,
+    'i=&gt;2, h=&gt;{b=&gt;3}, a=&gt;{7,8,9}, j=&gt;{a=&gt;{1,2,3}}'
+);
+ i |   h    |    a    |        j         
+---+--------+---------+------------------
+ 2 | "b"=&gt;3 | {7,8,9} | {"a": [1, 2, 3]}
 </programlisting>
   </para>
 
@@ -1007,20 +1051,6 @@ SELECT hstore(t) FROM test AS t;
                    hstore                    
 ---------------------------------------------
  "col1"=&gt;"123", "col2"=&gt;"foo", "col3"=&gt;"bar"
-(1 row)
-</programlisting>
-  </para>
-
-  <para>
-   Convert an <type>hstore</> to a predefined <type>record</> type:
-<programlisting>
-CREATE TABLE test (col1 integer, col2 text, col3 text);
-
-SELECT * FROM populate_record(null::test,
-                              '"col1"=&gt;"456", "col2"=&gt;"zzz"');
- col1 | col2 | col3 
-------+------+------
-  456 | zzz  | 
 (1 row)
 </programlisting>
   </para>
