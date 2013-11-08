@@ -349,7 +349,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>text[]</></entry>
       <entry>get values for keys (<literal>NULL</> if not present)</entry>
       <entry><literal>'a=&gt;x, b=&gt;y, c=&gt;z'::hstore -&gt; ARRAY['c','a']</literal></entry>
-      <entry><literal>["z","x"]</literal></entry>
+      <entry><literal>{"z","x"}</literal></entry>
      </row>
 
      <row>
@@ -469,7 +469,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>text[]</></entry>
       <entry>convert <type>hstore</> to array of alternating keys and values</entry>
       <entry><literal>%% 'a=&gt;foo, b=&gt;bar'::hstore</literal></entry>
-      <entry><literal>[a,foo,b,bar]</literal></entry>
+      <entry><literal>{a,foo,b,bar}</literal></entry>
      </row>
 
      <row>
@@ -477,7 +477,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>text[]</></entry>
       <entry>convert <type>hstore</> to two-dimensional key/value array</entry>
       <entry><literal>%# 'a=&gt;foo, b=&gt;bar'::hstore</literal></entry>
-      <entry><literal>[[a,foo],[b,bar]]</literal></entry>
+      <entry><literal>{{a,foo},{b,bar}}</literal></entry>
      </row>
 
     </tbody>
