@@ -21,7 +21,7 @@ typedef enum
 	EVT_DDLCommandStart,
 	EVT_DDLCommandEnd,
 	EVT_SQLDrop,
-        EVT_Commit
+	EVT_Commit
 } EventTriggerEvent;
 
 typedef struct

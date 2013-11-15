@@ -1824,10 +1824,10 @@ CommitTransaction(void)
 			 TransStateAsString(s->state));
 	Assert(s->parent == NULL);
 
-	/* 
+	/*
 	 * First fire any pre-commit triggers, so if they in turn cause any
-     * deferred triggers etc to fire this will be picked up below. 
-     * Only fire them, though, if we have a real transaction ID and 
+	 * deferred triggers etc to fire this will be picked up below.
+	 * Only fire them, though, if we have a real transaction ID and
 	 * we're not running standalone. Not firing when standalone provides
 	 * a way to recover from setting up a bad transaction trigger.
 	 */
@@ -2039,10 +2039,10 @@ PrepareTransaction(void)
 			 TransStateAsString(s->state));
 	Assert(s->parent == NULL);
 
-	/* 
+	/*
 	 * First fire any pre-commit triggers, so if they in turn cause any
-     * deferred triggers etc to fire this will be picked up below. 
-     * Only fire them, though, if we have a real transaction ID and 
+	 * deferred triggers etc to fire this will be picked up below.
+	 * Only fire them, though, if we have a real transaction ID and
 	 * we're not running standalone. Not firing when standalone provides
 	 * a way to recover from setting up a bad transaction trigger.
 	 */

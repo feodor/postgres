@@ -1293,7 +1293,14 @@ pg_event_trigger_dropped_objects(PG_FUNCTION_ARGS)
 	return (Datum) 0;
 }
 
-
+/*
+ * PreCommitTriggersFire
+ *
+ * fire triggers set for the commit event.
+ *
+ * This will be called just before deferred RI and Constraint triggers are
+ * fired.
+ */
 void
 PreCommitTriggersFire(void)
 {
@@ -1301,8 +1308,6 @@ PreCommitTriggersFire(void)
 	EventTriggerData trigdata;
 	List	   *runlist = NIL;
 	ListCell   *lc;
-
-	// elog(NOTICE,"looking up commit triggers");
 
 	trigger_list = EventCacheLookup(EVT_Commit);
 
@@ -1315,9 +1320,7 @@ PreCommitTriggersFire(void)
 
 	/* don't spend any more time on this if no functions to run */
 	if (runlist == NIL)
-		return NIL;
-
-	// elog(NOTICE,"calling %d commit triggers", list_length(runlist));
+		return;
 
 	trigdata.type = T_EventTriggerData;
 	trigdata.event = "transaction_commit";
@@ -1327,5 +1330,4 @@ PreCommitTriggersFire(void)
 	EventTriggerInvoke(runlist, &trigdata);
 
 	list_free(runlist);
-	
 }

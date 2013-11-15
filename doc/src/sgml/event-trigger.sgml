@@ -12,7 +12,7 @@
    <productname>PostgreSQL</> also provides event triggers.  Unlike regular
    triggers, which are attached to a single table and capture only DML events,
    event triggers are global to a particular database and are capable of
-   capturing DDL events.
+   capturing DDL events or transaction commits.
   </para>
 
   <para>
@@ -29,8 +29,9 @@
      occurs in the database in which it is defined. Currently, the only
      supported events are
      <literal>ddl_command_start</>,
-     <literal>ddl_command_end</>
-     and <literal>sql_drop</>.
+     <literal>ddl_command_end</>,
+     <literal>sql_drop</>, and
+     <literal>transaction_commit</>.
      Support for additional events may be added in future releases.
    </para>
 
@@ -65,6 +66,15 @@
    </para>
 
    <para>
+    A <literal>transaction_commit</> trigger is called at the end of a
+    transaction, just before any deferred triggers are fired, unless
+    no data changes have been made by the transaction, or
+    <productname>PostgreSQL</> is running in Single-User mode. This is so
+    that you can recover from a badly specified <literal>transaction_commit</>
+    trigger.
+   </para>
+
+   <para>
      Event triggers (like other functions) cannot be executed in an aborted
      transaction.  Thus, if a DDL command fails with an error, any associated
      <literal>ddl_command_end</> triggers will not be executed.  Conversely,
@@ -77,8 +87,13 @@
    </para>
 
    <para>
-     For a complete list of commands supported by the event trigger mechanism,
-     see <xref linkend="event-trigger-matrix">.
+    A <literal>transaction_commit</> trigger is also not called in an
+    aborted transaction.
+   </para>
+
+   <para>
+     For a complete list of commands supported by the event trigger
+     mechanism, see <xref linkend="event-trigger-matrix">.
    </para>
 
    <para>
@@ -100,6 +115,11 @@
      trigger can be fired only for particular commands which the user wishes
      to intercept. A common use of such triggers is to restrict the range of
      DDL operations which users may perform.
+   </para>
+
+   <para>
+    <literal>transaction_commit</> triggers do not currently support
+    <literal>WHEN</literal> clauses.
    </para>
   </sect1>
 
