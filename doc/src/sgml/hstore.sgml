@@ -198,11 +198,12 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
  <sect2>
   <title>Ouput Format Configuration Parameters</title>
 
-   <para>
-    There are several configuration parameters that control the output formatting of
-    <type>hstore</> values.
-   </para>
+  <para>
+   There are several configuration parameters that control the output formatting of
+   <type>hstore</> values.
+  </para>
 
+  <variablelist>
    <varlistentry>
     <term>
      <varname>hstore.pretty_print</varname> (<type>boolean</type>)
