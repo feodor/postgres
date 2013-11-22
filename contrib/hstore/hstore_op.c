@@ -63,7 +63,7 @@ arrayToHStoreSortedArray(ArrayType *a)
 
 	if (v->array.nelems > 1)
 		qsort_arg(v->array.elems, v->array.nelems, sizeof(*v->array.elems),
-				  compareHStoreStringValue, &hasNonUniq);
+				  compareJsonbStringValue /* compareHStoreStringValue */, &hasNonUniq);
 
 	if (hasNonUniq)
 	{
@@ -139,7 +139,7 @@ hstore_fetchval(PG_FUNCTION_ARGS)
 	text		*out;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
 										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
 	if ((out = HStoreValueToText(v)) == NULL)
@@ -158,7 +158,7 @@ hstore_fetchval_numeric(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
 										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
 	if (v && v->type == hsvNumeric)
@@ -182,7 +182,7 @@ hstore_fetchval_boolean(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
 										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
 	if (v && v->type == hsvBool)
@@ -202,7 +202,7 @@ hstore_fetchval_n(PG_FUNCTION_ARGS)
 	text		*out;
 
 	if (!HS_ISEMPTY(hs))
-		v = getHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, i);
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, i);
 
 	if ((out = HStoreValueToText(v)) == NULL)
 		PG_RETURN_NULL();
@@ -220,7 +220,7 @@ hstore_fetchval_n_numeric(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = getHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, i);
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, i);
 
 	if (v && v->type == hsvNumeric)
 	{
@@ -243,7 +243,7 @@ hstore_fetchval_n_boolean(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = getHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, i);
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, i);
 
 	if (v && v->type == hsvBool)
 		PG_RETURN_BOOL(v->boolean);
@@ -336,9 +336,9 @@ hstoreDeepFetch(HStore *in, ArrayType *path)
 
 		header = *(uint32*)v->binary.data;
 
-		if (header & HS_FLAG_HSTORE)
+		if (header & HS_FLAG_HASH)
 		{
-			v = findUncompressedHStoreValue(v->binary.data, HS_FLAG_HSTORE,
+			v = findUncompressedHStoreValue(v->binary.data, HS_FLAG_HASH,
 											NULL, VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]));
 		}
 		else if (header & HS_FLAG_ARRAY)
@@ -481,7 +481,7 @@ hstore_fetchval_hstore(PG_FUNCTION_ARGS)
 	HStore		*out;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
 										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
 
@@ -502,7 +502,7 @@ hstore_fetchval_n_hstore(PG_FUNCTION_ARGS)
 	HStore		*out;
 
 	if (!HS_ISEMPTY(hs))
-		v = getHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, i);
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, i);
 
 	if ((out = HStoreValueToHStore(v)) == NULL)
 		PG_RETURN_NULL();
@@ -535,7 +535,7 @@ hstore_exists(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
 										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
 	PG_RETURN_BOOL(v != NULL);
@@ -552,7 +552,7 @@ hstore_exists_idx(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = getHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, ith); 
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, ith); 
 
 	PG_RETURN_BOOL(v != NULL);
 }
@@ -595,7 +595,7 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound, 
+		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, plowbound, 
 											   v->array.elems + i) != NULL)
 		{
 			res = true;
@@ -638,7 +638,7 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound, 
+		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, plowbound, 
 											   v->array.elems + i) == NULL)
 		{
 			res = false;
@@ -660,7 +660,7 @@ hstore_defined(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, 
+		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
 										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
 
 	PG_RETURN_BOOL(!(v == NULL || v->type == hsvNull));
@@ -1496,7 +1496,7 @@ hstore_slice_to_array(PG_FUNCTION_ARGS)
 		HStoreValue	*v = NULL;
 
 		if (key_nulls[i] == false)
-			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, NULL,
+			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, NULL,
 											VARDATA(key), VARSIZE(key) - VARHDRSZ);
 
 		out_datums[i] = PointerGetDatum(HStoreValueToText(v));
@@ -1548,7 +1548,7 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 		
 	for (i = 0; i < a->array.nelems; ++i)
 	{
-		HStoreValue	*v = findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HSTORE | HS_FLAG_ARRAY, plowbound,
+		HStoreValue	*v = findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, plowbound,
 															a->array.elems + i);
 
 		if (v)
@@ -2355,15 +2355,15 @@ getNextValsPath(SetReturningState *st)
 
 		header = *(uint32*)st->path[st->level].v.binary.data;
 
-		if (header & HS_FLAG_HSTORE)
+		if (header & HS_FLAG_HASH)
 		{
 			if (st->path[st->level].varKind == pathAny)
 			{
-				v = getHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_HSTORE, st->path[st->level].i++);
+				v = getHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_HASH, st->path[st->level].i++);
 			}
 			else
 			{
-				v = findUncompressedHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_HSTORE, NULL, 
+				v = findUncompressedHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_HASH, NULL, 
 												VARDATA_ANY(st->path[st->level].varStr),
 												VARSIZE_ANY_EXHDR(st->path[st->level].varStr));
 			}
@@ -2655,7 +2655,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 
 			Assert(r2 == WHS_KEY);
 
-			v = findUncompressedHStoreValueByValue((*it1)->buffer, HS_FLAG_HSTORE, &lowbound, &v2);
+			v = findUncompressedHStoreValueByValue((*it1)->buffer, HS_FLAG_HASH, &lowbound, &v2);
 
 			if (v == NULL)
 			{

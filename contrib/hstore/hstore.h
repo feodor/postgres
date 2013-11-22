@@ -4,10 +4,7 @@
 #ifndef __HSTORE_H__
 #define __HSTORE_H__
 
-#include "fmgr.h"
-#include "lib/stringinfo.h"
-#include "utils/array.h"
-#include "utils/numeric.h"
+#include "utils/jsonb.h"
 
 /*
  * HEntry: there is one of these for each key _and_ value in an hstore
@@ -16,43 +13,38 @@
  * by subtraction from the previous entry.	the ISFIRST flag lets us tell
  * whether there is a previous entry.
  */
-typedef struct
-{
-	uint32		entry;
-} HEntry;
 
-#define HENTRY_ISFIRST		0x80000000
-#define HENTRY_ISSTRING 	(0x00000000) /* keep binary compatibility */
-#define HENTRY_ISNUMERIC	(0x10000000)
-#define HENTRY_ISNEST		(0x20000000)
-#define HENTRY_ISNULL		(0x40000000) /* keep binary compatibility */
-#define HENTRY_ISBOOL		(0x10000000 | 0x20000000)
-#define HENTRY_ISFALSE		HENTRY_ISBOOL
-#define HENTRY_ISTRUE		(0x10000000 | 0x20000000 | 0x40000000)
+typedef JEntry HEntry;
+
+#define HENTRY_ISFIRST		JENTRY_ISFIRST
+#define HENTRY_ISSTRING 	JENTRY_ISSTRING
+#define HENTRY_ISNUMERIC	JENTRY_ISNUMERIC
+#define HENTRY_ISNEST		JENTRY_ISNEST
+#define HENTRY_ISNULL		JENTRY_ISNULL
+#define HENTRY_ISBOOL		JENTRY_ISBOOL
+#define HENTRY_ISFALSE		JENTRY_ISFALSE
+#define HENTRY_ISTRUE		JENTRY_ISTRUE
 
 /* HENTRY_ISHASH, HENTRY_ISARRAY and HENTRY_ISCALAR is only used in send/recv */
-#define HENTRY_ISHASH		(0x20000000)
-#define HENTRY_ISARRAY		(0x20000000 | 0x40000000)
-#define HENTRY_ISCALAR		(0x10000000 | 0x40000000)
+#define HENTRY_ISHASH		JENTRY_ISOBJECT
+#define HENTRY_ISARRAY		JENTRY_ISARRAY
+#define HENTRY_ISCALAR		JENTRY_ISCALAR
 
-#define HENTRY_POSMASK 	0x0FFFFFFF
-#define HENTRY_TYPEMASK	(~(HENTRY_POSMASK | HENTRY_ISFIRST))
+#define HENTRY_POSMASK 	JENTRY_POSMASK
+#define HENTRY_TYPEMASK	JENTRY_TYPEMASK
 
-/* note possible multiple evaluations, also access to prior array element */
-#define HSE_ISFIRST(he_) 		(((he_).entry & HENTRY_ISFIRST) != 0)
-#define HSE_ISSTRING(he_)		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISSTRING)
-#define HSE_ISNUMERIC(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNUMERIC)
-#define HSE_ISNEST(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNEST)
-#define HSE_ISNULL(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNULL)
-#define HSE_ISBOOL(he_) 		(((he_).entry & HENTRY_TYPEMASK & HENTRY_ISBOOL) == HENTRY_ISBOOL)
-#define HSE_ISBOOL_TRUE(he_) 	(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISTRUE)
-#define HSE_ISBOOL_FALSE(he_) 	(HSE_ISBOOL(he_) && !HSE_ISBOOL_TRUE(he_))
+#define HSE_ISFIRST(he_) 		JBE_ISFIRST(he_)
+#define HSE_ISSTRING(he_)		JBE_ISSTRING(he_)
+#define HSE_ISNUMERIC(he_) 		JBE_ISNUMERIC(he_)
+#define HSE_ISNEST(he_) 		JBE_ISNEST(he_)
+#define HSE_ISNULL(he_) 		JBE_ISNULL(he_)
+#define HSE_ISBOOL(he_) 		JBE_ISBOOL(he_)
+#define HSE_ISBOOL_TRUE(he_) 	JBE_ISBOOL_TRUE(he_)
+#define HSE_ISBOOL_FALSE(he_) 	JBE_ISBOOL_FALSE(he_)
 
-#define HSE_ENDPOS(he_) ((he_).entry & HENTRY_POSMASK)
-#define HSE_OFF(he_) (HSE_ISFIRST(he_) ? 0 : HSE_ENDPOS((&(he_))[-1]))
-#define HSE_LEN(he_) (HSE_ISFIRST(he_)	\
-					  ? HSE_ENDPOS(he_) \
-					  : HSE_ENDPOS(he_) - HSE_ENDPOS((&(he_))[-1]))
+#define HSE_ENDPOS(he_) 		JBE_ENDPOS(he_)
+#define HSE_OFF(he_) 			JBE_OFF(he_)
+#define HSE_LEN(he_) 			JBE_LEN(he_)
 
 /*
  * determined by the size of "endpos" (ie HENTRY_POSMASK)
@@ -60,12 +52,7 @@ typedef struct
 #define HSTORE_MAX_KEY_LEN 		HENTRY_POSMASK
 #define HSTORE_MAX_VALUE_LEN 	HENTRY_POSMASK
 
-typedef struct
-{
-	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	/* header of hash or array hstore type */
-	/* array of HEntry follows */
-} HStore;
+typedef Jsonb HStore;
 
 /*
  * it's not possible to get more than 2^28 items into an hstore,
@@ -73,17 +60,17 @@ typedef struct
  * for one reason why.	Some bits are left for future use here.
  */
 #define HS_FLAG_NEWVERSION 		0x80000000
-#define HS_FLAG_ARRAY			0x40000000
-#define HS_FLAG_HSTORE			0x20000000
-#define HS_FLAG_SCALAR			0x10000000
+#define HS_FLAG_ARRAY			JB_FLAG_ARRAY
+#define HS_FLAG_HASH			JB_FLAG_OBJECT
+#define HS_FLAG_SCALAR			JB_FLAG_SCALAR
 
 #define HS_COUNT_MASK			0x0FFFFFFF
 
-#define HS_ISEMPTY(hsp_)		(VARSIZE(hsp_) <= VARHDRSZ)
-#define HS_ROOT_COUNT(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))
-#define HS_ROOT_IS_HASH(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_HSTORE))
-#define HS_ROOT_IS_ARRAY(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_ARRAY))
-#define HS_ROOT_IS_SCALAR(hsp_) (HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_SCALAR))
+#define HS_ISEMPTY(hsp_)		JB_ISEMPTY(hsp_)
+#define HS_ROOT_COUNT(hsp_) 	JB_ROOT_COUNT(hsp_)
+#define HS_ROOT_IS_HASH(hsp_) 	JB_ROOT_IS_OBJECT(hsp_)
+#define HS_ROOT_IS_ARRAY(hsp_) 	JB_ROOT_IS_ARRAY(hsp_)
+#define HS_ROOT_IS_SCALAR(hsp_) JB_ROOT_IS_SCALAR(hsp_)
 
 /* DatumGetHStoreP includes support for reading old-format hstore values */
 extern HStore *hstoreUpgrade(Datum orig);
@@ -92,175 +79,56 @@ extern HStore *hstoreUpgrade(Datum orig);
 
 #define PG_GETARG_HS(x) DatumGetHStoreP(PG_GETARG_DATUM(x))
 
-typedef struct HStorePair HStorePair;
-typedef struct HStoreValue HStoreValue;
+typedef JsonbPair HStorePair;
+typedef JsonbValue HStoreValue;
 
-struct HStoreValue {
-	enum {
-		hsvNull,
-		hsvString,
-		hsvNumeric,
-		hsvBool,
-		hsvArray,
-		hsvHash,
-		hsvBinary  /* binary form of hsvArray/hsvHash */
-	} type;
-
-	uint32		size; /* estimation size of node (including subnodes) */
-
-	union {
-		Numeric			numeric;
-		bool			boolean;
-		struct {
-			uint32		len;
-			char 		*val; /* could be not null-terminated */
-		} string;
-
-		struct {
-			int			nelems;
-			HStoreValue	*elems;
-			bool		scalar; /* scalar actually shares representation with array */
-		} array;
-
-		struct {
-			int			npairs;
-			HStorePair 	*pairs;
-		} hash;
-
-		struct {
-			uint32		len;
-			char		*data;
-		} binary;
-	};
-
-}; 
-
-struct HStorePair {
-	HStoreValue	key;
-	HStoreValue	value;
-	uint32		order; /* to keep order of pairs with equal key */ 
-}; 
-
-
-extern HStoreValue* parseHStore(const char *str, int len, bool json);
+/* JsonbValue.type renaming */
+#define hsvNull		jbvNull
+#define hsvString	jbvString
+#define hsvNumeric	jbvNumeric
+#define hsvBool		jbvBool
+#define hsvArray	jbvArray
+#define hsvHash		jbvHash
+#define hsvBinary	jbvBinary
 
 /*
- * hstore support functios
+ * hstore support functions, they are mostly the same as jsonb
  */
 
-#define WHS_KEY         	(0x001)
-#define WHS_VALUE       	(0x002)
-#define WHS_ELEM       		(0x004)
-#define WHS_BEGIN_ARRAY 	(0x008)
-#define WHS_END_ARRAY   	(0x010)
-#define WHS_BEGIN_HASH	    (0x020)
-#define WHS_END_HASH        (0x040)
+#define WHS_KEY         	WJB_KEY
+#define WHS_VALUE       	WJB_VALUE
+#define WHS_ELEM       		WJB_ELEM
+#define WHS_BEGIN_ARRAY 	WJB_BEGIN_ARRAY
+#define WHS_END_ARRAY   	WJB_END_ARRAY
+#define WHS_BEGIN_HASH	    WJB_BEGIN_OBJECT
+#define WHS_END_HASH        WJB_END_OBJECT
 
-typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, 
-											uint32 /* flags */, uint32 /* level */);
-extern void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
+#define walkUncompressedHStore(v, cb, cb_arg)		walkUncompressedJsonb((v), (cb), (cb_arg))
+#define compareHStoreStringValue(a, b, arg)			compareJsonbStringValue((a), (b), (arg))
+#define compareHStorePair(a, b, arg)				compareJsonbPair((a), (b), (arg))
 
-extern int compareHStoreStringValue(const void *a, const void *b, void *arg);
-extern int compareHStorePair(const void *a, const void *b, void *arg);
+#define compareHStoreBinaryValue(a, b)				compareJsonbBinaryValue((a), (b))
+#define compareHStoreValue(a, b)					compareJsonbValue((a), (b))
 
-extern int compareHStoreBinaryValue(char *a, char *b);
-extern int compareHStoreValue(HStoreValue *a, HStoreValue *b);
+#define findUncompressedHStoreValueByValue(buffer, flags, lowbound, key)	\
+	findUncompressedJsonbValueByValue((buffer), (flags), (lowbound), (key))
+#define findUncompressedHStoreValue(buffer, flags, lowbound, key, keylen)	\
+	findUncompressedJsonbValue((buffer), (flags), (lowbound), (key), (keylen))
 
-extern HStoreValue* findUncompressedHStoreValueByValue(char *buffer, uint32 flags, 
-												uint32 *lowbound, HStoreValue* key);
-extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
-												uint32 *lowbound, char *key, uint32 keylen);
+#define getHStoreValue(buffer, flags, i)			getJsonbValue((buffer), (flags), (i))
 
-extern HStoreValue* getHStoreValue(char *buffer, uint32 flags, int32 i);
+typedef ToJsonbState ToHStoreState;
+#define pushHStoreValue(state, r /* WHS_* */, v)	pushJsonbValue((state), (r), (v))
 
-extern bool stringIsNumber(char *string, int len);
+extern uint32 compressHStore(HStoreValue *v, char *buffer);
 
-typedef enum HStoreOutputKind {
-	JsonOutput = 0x01,
-	LooseOutput = 0x02,
-	ArrayCurlyBraces = 0x04,
-	RootHashDecorated = 0x08,
-	PrettyPrint = 0x10
-} HStoreOutputKind;
+typedef JsonbIterator HStoreIterator;
 
-extern char* hstoreToCString(StringInfo out, char *in,
-							 int len /* just estimation */, 
-							 HStoreOutputKind kind);
+#define	HStoreIteratorInit(buffer)					JsonbIteratorInit(buffer)
+
+#define HStoreIteratorGet(it, v, skipNested)	JsonbIteratorGet((it), (v), (skipNested))
+
 text* HStoreValueToText(HStoreValue *v);
-
-typedef struct ToHStoreState
-{
-	HStoreValue             v;
-	uint32                  size;
-	struct ToHStoreState    *next;
-} ToHStoreState;
-
-extern HStoreValue* pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v);
-
-/* be aware: size effects for n argument */
-#define ORDER_PAIRS(a, n, delaction)												\
-	do {																			\
-		bool	hasNonUniq = false;													\
-																					\
-		if ((n) > 1)																\
-			qsort_arg((a), (n), sizeof(HStorePair), compareHStorePair, &hasNonUniq);\
-																					\
-		if (hasNonUniq)																\
-		{																			\
-			HStorePair	*ptr = (a) + 1,												\
-						*res = (a);													\
-																					\
-			while (ptr - (a) < (n))													\
-			{																		\
-				if (ptr->key.string.len == res->key.string.len && 					\
-					memcmp(ptr->key.string.val, res->key.string.val,				\
-						   ptr->key.string.len) == 0)								\
-				{																	\
-					delaction;														\
-				}																	\
-				else																\
-				{																	\
-					res++;															\
-					if (ptr != res)													\
-						memcpy(res, ptr, sizeof(*res));								\
-				}																	\
-				ptr++;																\
-			}																		\
-																					\
-			(n) = res + 1 - (a);													\
-		}																			\
-	} while(0)																		
-
-uint32 compressHStore(HStoreValue *v, char *buffer);
-
-
-typedef struct HStoreIterator
-{
-	uint32					type;
-	uint32					nelems;
-	HEntry					*array;
-	bool					isScalar;
-	char					*data;
-	char					*buffer; /* unparsed buffer */
-
-	int						i;
-
-	/*
-	 * enum members should be freely OR'ed with HS_FLAG_ARRAY/HS_FLAG_HSTORE 
-	 * with possiblity of decoding. See optimization in HStoreIteratorGet()
-	 */
-	enum {
-		hsi_start 	= 0x00,
-		hsi_key		= 0x01,
-		hsi_value	= 0x02,
-		hsi_elem	= 0x04
-	} state;
-
-	struct HStoreIterator	*next;
-} HStoreIterator;
-
-extern 	HStoreIterator*	HStoreIteratorInit(char *buffer);
-extern	int /* WHS_* */	HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested);
 
 #define HStoreContainsStrategyNumber	7
 #define HStoreExistsStrategyNumber		9

@@ -15,6 +15,8 @@ override CFLAGS+= -mieee
 endif
 endif
 
+override CPPFLAGS := -I. -I$(srcdir) $(CPPFLAGS)
+
 OBJS = acl.o arrayfuncs.o array_selfuncs.o array_typanalyze.o \
 	array_userfuncs.o arrayutils.o bool.o \
 	cash.o char.o date.o datetime.o datum.o domains.o \
@@ -31,8 +33,25 @@ OBJS = acl.o arrayfuncs.o array_selfuncs.o array_typanalyze.o \
 	tsquery_op.o tsquery_rewrite.o tsquery_util.o tsrank.o \
 	tsvector.o tsvector_op.o tsvector_parser.o \
 	txid.o uuid.o windowfuncs.o xml.o rangetypes_spgist.o \
-	rangetypes_typanalyze.o rangetypes_selfuncs.o
+	rangetypes_typanalyze.o rangetypes_selfuncs.o \
+	jsonb.o jsonb_gram.o jsonb_support.o
 
 like.o: like.c like_match.c
+
+# jsonb_scan is compiled as part of jsonb_gram
+jsonb_gram.o: jsonb_scan.c
+
+jsonb_gram.o: jsonb_gram.h
+
+jsonb_gram.c: BISONFLAGS += -d
+
+# There is no correct way to write a rule that generates two files.
+# Rules with two targets don't have that meaning, they are merely
+# shorthand for two otherwise separate rules.  To be safe for parallel
+# make, we must chain the dependencies like this.  The semicolon is
+# important, otherwise make will choose the built-in rule for
+# gram.y=>gram.c.
+
+jsonb_gram.h: jsonb_gram.c ;
 
 include $(top_srcdir)/src/backend/common.mk

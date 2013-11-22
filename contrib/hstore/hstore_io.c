@@ -31,6 +31,17 @@ static bool	pretty_print_var = false;
 
 static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level, uint32 header);
 
+typedef enum HStoreOutputKind {
+	JsonOutput = 0x01,
+	LooseOutput = 0x02,
+	ArrayCurlyBraces = 0x04,
+	RootHashDecorated = 0x08,
+	PrettyPrint = 0x10
+} HStoreOutputKind;
+
+static char* HStoreToCString(StringInfo out, char *in,
+							 int len /* just estimation */, HStoreOutputKind kind);
+
 static size_t
 hstoreCheckKeyLen(size_t len)
 {
@@ -81,7 +92,7 @@ Datum		hstore_in(PG_FUNCTION_ARGS);
 Datum
 hstore_in(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_POINTER(hstoreDump(parseHStore(PG_GETARG_CSTRING(0), -1, false)));
+	PG_RETURN_POINTER(hstoreDump(parseJsonb(PG_GETARG_CSTRING(0), -1, false)));
 }
 
 static void
@@ -971,7 +982,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 		{
 			char *key = NameStr(tupdesc->attrs[i]->attname);
 
-			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HSTORE, NULL, key, strlen(key));
+			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH, NULL, key, strlen(key));
 		}
 
 		/*
@@ -1020,13 +1031,13 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			else if (v->type == hsvNumeric)
 				s = DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
 			else if (v->type == hsvBinary && column_type == JSONOID)
-				s = hstoreToCString(NULL, v->binary.data, v->binary.len, 
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
 									SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
 			else if (v->type == hsvBinary && type_is_array(column_type))
-				s = hstoreToCString(NULL, v->binary.data, v->binary.len, 
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
 									SET_PRETTY_PRINT_VAR(ArrayCurlyBraces));
 			else if (v->type == hsvBinary)
-				s = hstoreToCString(NULL, v->binary.data, v->binary.len, 
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
 									SET_PRETTY_PRINT_VAR(0));
 			else
 				elog(PANIC, "Wrong hstore");
@@ -1043,86 +1054,6 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	ReleaseTupleDesc(tupdesc);
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(rettuple));
-}
-
-bool
-stringIsNumber(char *string, int len) {
-	enum {
-		SIN_FIRSTINT,
-		SIN_ZEROINT,
-		SIN_INT,
-		SIN_SCALE,
-		SIN_MSIGN,
-		SIN_MANTISSA
-	} sinState;
-	char	*c;
-	bool	r;
-
-	if (*string == '-' || *string == '+')
-	{
-		string++;
-		len--;
-	}
-
-	c = string;
-	r = true;
-	sinState = SIN_FIRSTINT;
-
-	while(r && c - string < len)
-	{
-		switch(sinState)
-		{
-			case SIN_FIRSTINT:
-				if (*c == '0')
-					sinState = SIN_ZEROINT;
-				else if (*c == '.')
-					sinState = SIN_SCALE;
-				else if (isdigit(*c))
-					sinState = SIN_INT;
-				else
-					r = false;
-				break;
-			case SIN_ZEROINT:
-				if (*c == '.')
-					sinState = SIN_SCALE;
-				else
-					r = false;
-				break;
-			case SIN_INT:
-				if (*c == '.')
-					sinState = SIN_SCALE;
-				else if (*c == 'e' || *c == 'E')
-					sinState = SIN_MSIGN;
-				else if (!isdigit(*c))
-					r = false;
-				break;
-			case SIN_SCALE:
-				if (*c == 'e' || *c == 'E')
-					sinState = SIN_MSIGN;
-				else if (!isdigit(*c))
-					r = false;
-				break;
-			case SIN_MSIGN:
-				if (*c == '-' || *c == '+' || isdigit(*c))
-					sinState = SIN_MANTISSA;
-				else
-					r = false;
-				break;
-			case SIN_MANTISSA:
-				if (!isdigit(*c))
-					r = false;
-				break;
-			default:
-				abort();
-		}
-
-		c++;
-	}
-
-	if (sinState == SIN_MSIGN)
-		r = false;
-
-	return r;
 }
 
 static void
@@ -1171,7 +1102,7 @@ putEscapedString(StringInfo out, HStoreOutputKind kind, char *string, uint32 len
 			appendStringInfoString(out, (kind & JsonOutput) ? "true" : "t" );
 		else if (len == 1 && *string == 'f')
 			appendStringInfoString(out, (kind & JsonOutput) ? "false" : "f");
-		else if (len > 0 && stringIsNumber(string, len))
+		else if (len > 0 && JsonbStringIsNumber(string, len))
 			appendBinaryStringInfo(out, string, len);
 		else if (kind & JsonOutput)
 			escape_json(out, pnstrdup(string, len));
@@ -1235,9 +1166,8 @@ isArrayBrackets(HStoreOutputKind kind)
 	return ((kind & ArrayCurlyBraces) == 0) ? true : false;
 }
 		
-
-char*
-hstoreToCString(StringInfo out, char *in, int len /* just estimation */,
+static char*
+HStoreToCString(StringInfo out, char *in, int len /* just estimation */,
 		  HStoreOutputKind kind)
 {
 	bool			first = true;
@@ -1398,7 +1328,7 @@ HStoreValueToText(HStoreValue *v)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		hstoreToCString(str, v->binary.data, v->binary.len, SET_PRETTY_PRINT_VAR(0));
+		HStoreToCString(str, v->binary.data, v->binary.len, SET_PRETTY_PRINT_VAR(0));
 
 		out = (text*)str->data;
 		SET_VARSIZE(out, str->len);
@@ -1415,7 +1345,7 @@ hstore_out(PG_FUNCTION_ARGS)
 	HStore	*hs = PG_GETARG_HS(0);
 	char 	*out;
 
-	out = hstoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), SET_PRETTY_PRINT_VAR(0));
+	out = HStoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), SET_PRETTY_PRINT_VAR(0));
 
 	PG_RETURN_CSTRING(out);
 }
@@ -1524,7 +1454,7 @@ hstore_to_json_loose(PG_FUNCTION_ARGS)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		hstoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in), 
+		HStoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in), 
 						SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated | LooseOutput));
 
 		out = (text*)str->data;
@@ -1554,7 +1484,7 @@ hstore_to_json(PG_FUNCTION_ARGS)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		hstoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), 
+		HStoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), VARSIZE_ANY(in), 
 						SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
 
 		out = (text*)str->data;
@@ -1572,7 +1502,7 @@ json_to_hstore(PG_FUNCTION_ARGS)
 {
 	text	*json = PG_GETARG_TEXT_PP(0);
 
-	PG_RETURN_POINTER(hstoreDump(parseHStore(VARDATA_ANY(json), VARSIZE_ANY_EXHDR(json), true)));
+	PG_RETURN_POINTER(hstoreDump(parseJsonb(VARDATA_ANY(json), VARSIZE_ANY_EXHDR(json), true)));
 }
 
 static Oid
@@ -1760,7 +1690,7 @@ hstore_print(PG_FUNCTION_ARGS)
 	str = makeStringInfo();
 	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-	hstoreToCString(str, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), flags);
+	HStoreToCString(str, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), VARSIZE(hs), flags);
 
 	out = (text*)str->data;
 	SET_VARSIZE(out, str->len);
@@ -1784,4 +1714,19 @@ _PG_init(void)
 		NULL,
 		NULL
 	);
+}
+
+uint32
+compressHStore(HStoreValue *v, char *buffer)
+{
+	uint32	l = compressJsonb(v, buffer);
+
+	if (l > sizeof(uint32))
+	{
+		uint32	*header = (uint32*)buffer;
+
+		*header |= HS_FLAG_NEWVERSION;
+	}
+
+	return l;
 }
