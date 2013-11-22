@@ -373,6 +373,13 @@
       <entry>Data type of the aggregate function's internal transition (state) data</entry>
      </row>
      <row>
+      <entry><structfield>aggtransspace</structfield></entry>
+      <entry><type>int4</type></entry>
+      <entry></entry>
+      <entry>Approximate average size (in bytes) of the transition state
+       data, or zero to use a default estimate</entry>
+     </row>
+     <row>
       <entry><structfield>agginitval</structfield></entry>
       <entry><type>text</type></entry>
       <entry></entry>
@@ -1860,6 +1867,19 @@
       <entry></entry>
       <entry>True if relation is populated (this is true for all
        relations other than some materialized views)</entry>
+     </row>
+
+     <row>
+      <entry><structfield>relreplident</structfield></entry>
+      <entry><type>char</type></entry>
+      <entry></entry>
+      <entry>
+       Columns used to form <quote>replica identity</> for rows:
+       <literal>d</> = default (primary key, if any),
+       <literal>n</> = nothing,
+       <literal>f</> = all columns
+       <literal>i</> = index with indisreplident set, or default
+      </entry>
      </row>
 
      <row>
@@ -3654,6 +3674,17 @@
       <entry>
        If false, the index is in process of being dropped, and should be
        ignored for all purposes (including HOT-safety decisions)
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>indisreplident</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>
+       If true this index has been chosen as <quote>replica identity</>
+       using <command>ALTER TABLE ... REPLICA IDENTITY USING INDEX
+       ...</>
       </entry>
      </row>
 

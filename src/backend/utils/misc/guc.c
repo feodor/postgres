@@ -4250,7 +4250,7 @@ SelectConfigFiles(const char *userDoption, const char *progname)
 	pg_timezone_abbrev_initialize();
 
 	set_default_effective_cache_size();
-	    
+
 	/*
 	 * Figure out where pg_hba.conf is, and make sure the path is absolute.
 	 */
@@ -6187,7 +6187,7 @@ flatten_set_variable_args(const char *name, List *args)
 		A_Const    *con;
 
 		if (l != list_head(args))
-			appendStringInfo(&buf, ", ");
+			appendStringInfoString(&buf, ", ");
 
 		if (IsA(arg, TypeCast))
 		{

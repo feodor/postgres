@@ -1425,8 +1425,7 @@ composite_to_json(Datum composite, StringInfo result, bool use_line_feeds)
 
 	for (i = 0; i < tupdesc->natts; i++)
 	{
-		Datum		val,
-					origval;
+		Datum		val;
 		bool		isnull;
 		char	   *attname;
 		TYPCATEGORY tcategory;
@@ -1445,7 +1444,7 @@ composite_to_json(Datum composite, StringInfo result, bool use_line_feeds)
 		escape_json(result, attname);
 		appendStringInfoChar(result, ':');
 
-		origval = heap_getattr(tuple, i + 1, tupdesc, &isnull);
+		val = heap_getattr(tuple, i + 1, tupdesc, &isnull);
 
 		getTypeOutputInfo(tupdesc->attrs[i]->atttypid,
 						  &typoutput, &typisvarlena);
@@ -1480,20 +1479,7 @@ composite_to_json(Datum composite, StringInfo result, bool use_line_feeds)
 		else
 			tcategory = TypeCategory(tupdesc->attrs[i]->atttypid);
 
-		/*
-		 * If we have a toasted datum, forcibly detoast it here to avoid
-		 * memory leakage inside the type's output routine.
-		 */
-		if (typisvarlena && !isnull)
-			val = PointerGetDatum(PG_DETOAST_DATUM(origval));
-		else
-			val = origval;
-
 		datum_to_json(val, isnull, result, tcategory, typoutput);
-
-		/* Clean up detoasted copy, if any */
-		if (val != origval)
-			pfree(DatumGetPointer(val));
 	}
 
 	appendStringInfoChar(result, '}');
@@ -1513,7 +1499,7 @@ array_to_json(PG_FUNCTION_ARGS)
 
 	array_to_json_internal(array, result, false);
 
-	PG_RETURN_TEXT_P(cstring_to_text(result->data));
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(result->data, result->len));
 }
 
 /*
@@ -1530,7 +1516,7 @@ array_to_json_pretty(PG_FUNCTION_ARGS)
 
 	array_to_json_internal(array, result, use_line_feeds);
 
-	PG_RETURN_TEXT_P(cstring_to_text(result->data));
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(result->data, result->len));
 }
 
 /*
@@ -1546,7 +1532,7 @@ row_to_json(PG_FUNCTION_ARGS)
 
 	composite_to_json(array, result, false);
 
-	PG_RETURN_TEXT_P(cstring_to_text(result->data));
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(result->data, result->len));
 }
 
 /*
@@ -1563,7 +1549,7 @@ row_to_json_pretty(PG_FUNCTION_ARGS)
 
 	composite_to_json(array, result, use_line_feeds);
 
-	PG_RETURN_TEXT_P(cstring_to_text(result->data));
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(result->data, result->len));
 }
 
 /*
@@ -1572,10 +1558,9 @@ row_to_json_pretty(PG_FUNCTION_ARGS)
 Datum
 to_json(PG_FUNCTION_ARGS)
 {
+	Datum		val = PG_GETARG_DATUM(0);
 	Oid			val_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	StringInfo	result;
-	Datum		orig_val,
-				val;
 	TYPCATEGORY tcategory;
 	Oid			typoutput;
 	bool		typisvarlena;
@@ -1586,10 +1571,7 @@ to_json(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("could not determine input data type")));
 
-
 	result = makeStringInfo();
-
-	orig_val = PG_ARGISNULL(0) ? (Datum) 0 : PG_GETARG_DATUM(0);
 
 	getTypeOutputInfo(val_type, &typoutput, &typisvarlena);
 
@@ -1623,22 +1605,9 @@ to_json(PG_FUNCTION_ARGS)
 	else
 		tcategory = TypeCategory(val_type);
 
-	/*
-	 * If we have a toasted datum, forcibly detoast it here to avoid memory
-	 * leakage inside the type's output routine.
-	 */
-	if (typisvarlena && orig_val != (Datum) 0)
-		val = PointerGetDatum(PG_DETOAST_DATUM(orig_val));
-	else
-		val = orig_val;
-
 	datum_to_json(val, false, result, tcategory, typoutput);
 
-	/* Clean up detoasted copy, if any */
-	if (val != orig_val)
-		pfree(DatumGetPointer(val));
-
-	PG_RETURN_TEXT_P(cstring_to_text(result->data));
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(result->data, result->len));
 }
 
 /*
@@ -1651,8 +1620,7 @@ json_agg_transfn(PG_FUNCTION_ARGS)
 	MemoryContext aggcontext,
 				oldcontext;
 	StringInfo	state;
-	Datum		orig_val,
-				val;
+	Datum		val;
 	TYPCATEGORY tcategory;
 	Oid			typoutput;
 	bool		typisvarlena;
@@ -1692,13 +1660,12 @@ json_agg_transfn(PG_FUNCTION_ARGS)
 	/* fast path for NULLs */
 	if (PG_ARGISNULL(1))
 	{
-		orig_val = (Datum) 0;
-		datum_to_json(orig_val, true, state, 0, InvalidOid);
+		val = (Datum) 0;
+		datum_to_json(val, true, state, 0, InvalidOid);
 		PG_RETURN_POINTER(state);
 	}
 
-
-	orig_val = PG_GETARG_DATUM(1);
+	val = PG_GETARG_DATUM(1);
 
 	getTypeOutputInfo(val_type, &typoutput, &typisvarlena);
 
@@ -1732,15 +1699,6 @@ json_agg_transfn(PG_FUNCTION_ARGS)
 	else
 		tcategory = TypeCategory(val_type);
 
-	/*
-	 * If we have a toasted datum, forcibly detoast it here to avoid memory
-	 * leakage inside the type's output routine.
-	 */
-	if (typisvarlena)
-		val = PointerGetDatum(PG_DETOAST_DATUM(orig_val));
-	else
-		val = orig_val;
-
 	if (!PG_ARGISNULL(0) &&
 	  (tcategory == TYPCATEGORY_ARRAY || tcategory == TYPCATEGORY_COMPOSITE))
 	{
@@ -1748,10 +1706,6 @@ json_agg_transfn(PG_FUNCTION_ARGS)
 	}
 
 	datum_to_json(val, false, state, tcategory, typoutput);
-
-	/* Clean up detoasted copy, if any */
-	if (val != orig_val)
-		pfree(DatumGetPointer(val));
 
 	/*
 	 * The transition type for array_agg() is declared to be "internal", which
@@ -1779,7 +1733,7 @@ json_agg_finalfn(PG_FUNCTION_ARGS)
 
 	appendStringInfoChar(state, ']');
 
-	PG_RETURN_TEXT_P(cstring_to_text(state->data));
+	PG_RETURN_TEXT_P(cstring_to_text_with_len(state->data, state->len));
 }
 
 /*
@@ -1832,7 +1786,7 @@ escape_json(StringInfo buf, const char *str)
  *
  * Returns the type of the outermost JSON value as TEXT.  Possible types are
  * "object", "array", "string", "number", "boolean", and "null".
- * 
+ *
  * Performs a single call to json_lex() to get the first token of the supplied
  * value.  This initial token uniquely determines the value's type.  As our
  * input must already have been validated by json_in() or json_recv(), the
@@ -1842,39 +1796,39 @@ escape_json(StringInfo buf, const char *str)
 Datum
 json_typeof(PG_FUNCTION_ARGS)
 {
-    text       *json = PG_GETARG_TEXT_P(0);
+	text	   *json = PG_GETARG_TEXT_P(0);
 
-    JsonLexContext *lex = makeJsonLexContext(json, false);
-    JsonTokenType tok;
-    char *type;
+	JsonLexContext *lex = makeJsonLexContext(json, false);
+	JsonTokenType tok;
+	char *type;
 
-    /* Lex exactly one token from the input and check its type. */
-    json_lex(lex);
-    tok = lex_peek(lex);
-    switch (tok)
-    {
-        case JSON_TOKEN_OBJECT_START:
-            type = "object";
-            break;
-        case JSON_TOKEN_ARRAY_START:
-            type = "array";
-            break;
-        case JSON_TOKEN_STRING:
-            type = "string";
-            break;
-        case JSON_TOKEN_NUMBER:
-            type = "number";
-            break;
-        case JSON_TOKEN_TRUE:
-        case JSON_TOKEN_FALSE:
-            type = "boolean";
-            break;
-        case JSON_TOKEN_NULL:
-            type = "null";
-            break;
-        default:
-            elog(ERROR, "unexpected json token: %d", tok);
-    }
+	/* Lex exactly one token from the input and check its type. */
+	json_lex(lex);
+	tok = lex_peek(lex);
+	switch (tok)
+	{
+	case JSON_TOKEN_OBJECT_START:
+		type = "object";
+		break;
+	case JSON_TOKEN_ARRAY_START:
+		type = "array";
+		break;
+	case JSON_TOKEN_STRING:
+		type = "string";
+		break;
+	case JSON_TOKEN_NUMBER:
+		type = "number";
+		break;
+	case JSON_TOKEN_TRUE:
+	case JSON_TOKEN_FALSE:
+		type = "boolean";
+		break;
+	case JSON_TOKEN_NULL:
+		type = "null";
+		break;
+	default:
+		elog(ERROR, "unexpected json token: %d", tok);
+	}
 
-    PG_RETURN_TEXT_P(cstring_to_text(type));
+	PG_RETURN_TEXT_P(cstring_to_text(type));
 }
