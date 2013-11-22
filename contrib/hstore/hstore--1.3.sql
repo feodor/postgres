@@ -461,6 +461,22 @@ LANGUAGE C IMMUTABLE STRICT;
 CREATE CAST (hstore AS json)
   WITH FUNCTION hstore_to_json(hstore);
 
+CREATE FUNCTION hstore2jsonb(hstore)
+RETURNS jsonb
+AS 'MODULE_PATHNAME', 'hstore2jsonb'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE CAST (hstore AS jsonb)
+  WITH FUNCTION hstore2jsonb(hstore);
+
+CREATE FUNCTION jsonb2hstore(jsonb)
+RETURNS hstore
+AS 'MODULE_PATHNAME', 'jsonb2hstore'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE CAST (jsonb AS hstore)
+  WITH FUNCTION jsonb2hstore(jsonb);
+
 CREATE FUNCTION hstore_to_json_loose(hstore)
 RETURNS json
 AS 'MODULE_PATHNAME', 'hstore_to_json_loose'

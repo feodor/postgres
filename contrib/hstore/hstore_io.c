@@ -1030,7 +1030,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 				s = pnstrdup((v->boolean) ? "t" : "f", 1);
 			else if (v->type == hsvNumeric)
 				s = DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
-			else if (v->type == hsvBinary && column_type == JSONOID)
+			else if (v->type == hsvBinary && (column_type == JSONOID || column_type == JSONBOID))
 				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
 									SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
 			else if (v->type == hsvBinary && type_is_array(column_type))
@@ -1698,6 +1698,46 @@ hstore_print(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(out);
 }
 
+PG_FUNCTION_INFO_V1(hstore2jsonb);
+Datum		hstore2jsonb(PG_FUNCTION_ARGS);
+Datum
+hstore2jsonb(PG_FUNCTION_ARGS)
+{
+	HStore	*hs = PG_GETARG_HS(0);
+	Jsonb	*jb = palloc(VARSIZE_ANY(hs));
+
+	memcpy(jb, hs, VARSIZE_ANY(hs));
+
+	if (VARSIZE_ANY_EXHDR(jb) >= sizeof(uint32))
+	{
+		uint32 *header = (uint32*)VARDATA_ANY(jb);
+
+		*header &= ~JB_FLAG_UNUSED;
+	}
+
+	PG_RETURN_JSONB(jb);
+}
+
+PG_FUNCTION_INFO_V1(jsonb2hstore);
+Datum		jsonb2hstore(PG_FUNCTION_ARGS);
+Datum
+jsonb2hstore(PG_FUNCTION_ARGS)
+{
+	Jsonb	*jb = PG_GETARG_JSONB(0);
+	HStore	*hs = palloc(VARSIZE_ANY(jb));
+
+	memcpy(hs, jb, VARSIZE_ANY(jb));
+
+	if (VARSIZE_ANY_EXHDR(hs) >= sizeof(uint32))
+	{
+		uint32	*header = (uint32*)VARDATA_ANY(hs);
+
+		*header |= HS_FLAG_NEWVERSION;
+	}
+
+	PG_RETURN_POINTER(hs);
+}
+
 void _PG_init(void);
 void
 _PG_init(void)
@@ -1730,3 +1770,6 @@ compressHStore(HStoreValue *v, char *buffer)
 
 	return l;
 }
+
+
+

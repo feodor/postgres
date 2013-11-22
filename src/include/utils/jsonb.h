@@ -96,6 +96,7 @@ typedef struct
 #define JsonbGetDatum(p)	PointerGetDatum(p)
 
 #define PG_GETARG_JSONB(x) DatumGetJsonb(PG_GETARG_DATUM(x))
+#define PG_RETURN_JSONB(x) PG_RETURN_POINTER(x)
 
 typedef struct JsonbPair JsonbPair;
 typedef struct JsonbValue JsonbValue;
