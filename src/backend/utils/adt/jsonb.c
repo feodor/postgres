@@ -34,7 +34,7 @@ dumpJsonb(JsonbValue *p)
 	 uint32			 buflen;
 	 Jsonb			*out;
 
-	 if (p == NULL || (p->type == jbvArray && p->array.nelems == 0) || (p->type == jbvHash && p->hash.npairs == 0))
+	 if (p == NULL)
 	 {
 		  buflen = 0;
 		  out = palloc(VARHDRSZ);

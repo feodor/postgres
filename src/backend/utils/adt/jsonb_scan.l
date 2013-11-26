@@ -47,7 +47,11 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 
 <INITIAL>[\,\{\}\[\]]			{ return *yytext; }
 
-<INITIAL>\=\>					{ return DELIMITER_P; }
+<INITIAL>\=\>					{ 
+									if (inputJSON)
+										elog(ERROR, "syntax error");
+									return DELIMITER_P; 
+								}
 
 <INITIAL>\:						{ 
 									if (inputJSON)
@@ -90,6 +94,8 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 <INITIAL>\=						{	/* =<<EOF>> */
 									addchar(true, '=');
 									yylval->str = scanstring;
+									if (inputJSON)
+										elog(ERROR, "syntax error");
 									return STRING_P;
 								}
 
@@ -109,6 +115,8 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 									addchar(false, '=');
 									yylval->str = scanstring;
 									BEGIN INITIAL;
+									if (inputJSON)
+										elog(ERROR, "syntax error");
 									return STRING_P;
 								}
 
@@ -202,6 +210,9 @@ checkSpecialVal()
 		if (pg_strncasecmp("false", scanstring.val, scanstring.len) == 0)
 			res = FALSE_P;
 	}
+
+	if (inputJSON && res == STRING_P)
+		elog(ERROR, "Syntax error");
 
 	return res;
 }

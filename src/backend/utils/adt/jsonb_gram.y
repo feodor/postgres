@@ -274,8 +274,8 @@ jsonb:
 											elog(ERROR, "Wrong jsonb representation");
 										$$ = makeJsonbValueArray(lappend(NIL, $2)); 
 									}
-	| '{' '}'						{ $$ = makeJsonbValueString(NULL, NULL); }
-	| '[' ']'						{ $$ = makeJsonbValueString(NULL, NULL); }
+	| '{' '}'						{ $$ = makeJsonbValuePairs(NIL); }
+	| '[' ']'						{ $$ = makeJsonbValueArray(NIL); }
 	;
 
 scalar_value:
