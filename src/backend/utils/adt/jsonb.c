@@ -16,6 +16,7 @@
 #include "libpq/pqformat.h"
 #include "utils/builtins.h"
 #include "utils/json.h"
+#include "utils/jsonapi.h"
 #include "utils/jsonb.h"
 
 static size_t
@@ -52,10 +53,157 @@ dumpJsonb(JsonbValue *p)
 	 return out;
 }
 
+typedef struct JsonbInState
+{
+	ToJsonbState	*state;
+	JsonbValue		*res;
+}	JsonbInState;
+
+
+/*
+ * for jsonb we always want the de-escaped value - that's what's in token 
+ */
+
+static void 
+jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
+{
+	JsonbInState 	*_state = (JsonbInState *) state;
+	JsonbValue		v;
+
+	v.size = sizeof(JEntry);
+
+	switch (tokentype)
+	{
+			
+	case JSON_TOKEN_STRING:
+		v.type = jbvString;
+		v.string.len = token ? checkStringLen(strlen(token)) : 0;
+		v.string.val = token ? pnstrdup(token, v.string.len) : NULL;
+		v.size += v.string.len;
+		break;
+	case JSON_TOKEN_NUMBER:
+		v.type = jbvNumeric;
+		v.numeric = DatumGetNumeric(DirectFunctionCall3(numeric_in, CStringGetDatum(token), 0, -1));
+		v.size += VARSIZE_ANY(v.numeric) + sizeof(JEntry) /* alignment */;
+		break;
+	case JSON_TOKEN_TRUE:
+		v.type = jbvBool;
+		v.boolean = true;
+		break;
+	case JSON_TOKEN_FALSE:
+		v.type = jbvBool;
+		v.boolean = false;
+		break;
+	case JSON_TOKEN_NULL:
+		v.type = jbvNull;
+		break;
+	default: /* nothing else should be here in fact */
+		break;
+	}
+
+	if (_state->state == NULL)
+	{
+		/* single scalar */
+		JsonbValue	va;
+
+		va.type = jbvArray;
+		va.array.scalar = true;
+		va.array.nelems = 1;
+
+		_state->res = pushJsonbValue(&_state->state, WJB_BEGIN_ARRAY, &va);
+		_state->res = pushJsonbValue(&_state->state, WJB_ELEM, &v);
+		_state->res = pushJsonbValue(&_state->state, WJB_END_ARRAY, NULL);
+	}
+	else
+	{
+		JsonbValue	*o = &_state->state->v;
+
+		switch(o->type)
+		{
+			case jbvArray:
+				_state->res = pushJsonbValue(&_state->state, WJB_ELEM, &v);
+				break;
+			case jbvHash:
+				_state->res = pushJsonbValue(&_state->state, WJB_VALUE, &v);
+				break;
+			default:
+				elog(ERROR, "Wrong state");
+		}
+	}
+}
+
+static void
+jsonb_in_object_start(void *state)
+{
+	JsonbInState 	*_state = (JsonbInState *) state;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_BEGIN_OBJECT, NULL);
+}
+
+static void
+jsonb_in_object_end(void *state)
+{
+	JsonbInState 	*_state = (JsonbInState *) state;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_END_OBJECT, NULL);
+}
+
+static void
+jsonb_in_array_start(void *state)
+{
+	JsonbInState 	*_state = (JsonbInState *) state;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_BEGIN_ARRAY, NULL);
+}
+
+static void
+jsonb_in_array_end(void *state)
+{
+	JsonbInState 	*_state = (JsonbInState *) state;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_END_ARRAY, NULL);
+}
+
+static void
+jsonb_in_object_field_start(void *state, char *fname, bool isnull)
+{
+	JsonbInState 	*_state = (JsonbInState *) state;
+	JsonbValue		v;
+
+	v.type = jbvString;
+	v.string.len = fname ? checkStringLen(strlen(fname)) : 0;
+	v.string.val = fname ? pnstrdup(fname, v.string.len) : NULL;
+	v.size = sizeof(JEntry) + v.string.len;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_KEY, &v);
+}
+
 Datum
 jsonb_in(PG_FUNCTION_ARGS)
 {
-	 PG_RETURN_POINTER(dumpJsonb(parseJsonb(PG_GETARG_CSTRING(0), -1, true)));
+	char	   		*json = PG_GETARG_CSTRING(0);
+	text	   		*result = cstring_to_text(json);
+	JsonLexContext 	*lex;
+	JsonbInState 	state;
+	JsonSemAction 	sem;
+
+	memset(&state, 0, sizeof(state));
+	memset(&sem, 0, sizeof(sem));
+	lex = makeJsonLexContext(result, true);
+
+	sem.semstate = (void *) &state;
+
+	sem.object_start = jsonb_in_object_start;
+	sem.array_start = jsonb_in_array_start;
+	sem.object_end = jsonb_in_object_end;
+	sem.array_end = jsonb_in_array_end;
+	sem.scalar = jsonb_in_scalar;
+	sem.object_field_start = jsonb_in_object_field_start;
+
+	pg_parse_json(lex, &sem);
+
+	/* after parsing, the item membar has the composed jsonn structure */
+	PG_RETURN_POINTER(dumpJsonb(state.res));
 }
 
 static void recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header);

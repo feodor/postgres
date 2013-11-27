@@ -69,7 +69,7 @@ hstoreDump(HStoreValue *p)
 	uint32			buflen;
 	HStore	 	   *out;
 
-	if (p == NULL || (p->type == hsvArray && p->array.nelems == 0) || (p->type == hsvHash && p->hash.npairs == 0))
+	if (p == NULL)
 	{
 		buflen = 0;
 		out = palloc(VARHDRSZ);
