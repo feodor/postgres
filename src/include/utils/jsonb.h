@@ -147,11 +147,8 @@ struct JsonbPair {
 	uint32		order; /* to keep order of pairs with equal key */ 
 }; 
 
-
-extern JsonbValue* parseJsonb(const char *str, int len, bool json);
-
 /*
- * hstore support functios
+ * jsonb support functios
  */
 
 #define WJB_KEY         	(0x001)

@@ -130,6 +130,8 @@ typedef JsonbIterator HStoreIterator;
 
 text* HStoreValueToText(HStoreValue *v);
 
+extern HStoreValue* parseHStore(const char *str, int len, bool json);
+
 #define HStoreContainsStrategyNumber	7
 #define HStoreExistsStrategyNumber		9
 #define HStoreExistsAnyStrategyNumber	10

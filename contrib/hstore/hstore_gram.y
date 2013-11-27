@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * jsonb_gram.y
- *    Grammar definition for jsonb
+ * hstore_gram.y
+ *    Grammar definition for hstore
  *
  * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
- * src/backend/utils/adt/jsonb_gram.y
+ * contrib/hstore/hstore_gram.y 
  *
  *-------------------------------------------------------------------------
  */
@@ -17,7 +17,7 @@
 
 #include "fmgr.h"
 #include "utils/builtins.h"
-#include "utils/jsonb.h"
+#include "hstore.h"
 
 /*
  * Bison doesn't allocate anything that needs to live across parser calls,
@@ -48,15 +48,15 @@ typedef struct string {
 	int  	len;
 	int		total;
 } string;
-#include <jsonb_gram.h>
+#include <hstore_gram.h>
 
 /* flex 2.5.4 doesn't bother with a decl for this */
-int jsonb_yylex(YYSTYPE * yylval_param);
-int jsonb_yyparse(void *result);
-void jsonb_yyerror(const char *message);
+int hstore_yylex(YYSTYPE * yylval_param);
+int hstore_yyparse(void *result);
+void hstore_yyerror(const char *message);
 
-static JsonbValue*
-makeJsonbValueString(JsonbValue* v, string *s)
+static HStoreValue*
+makeHStoreValueString(HStoreValue* v, string *s)
 {
 	if (v == NULL)
 		v = palloc(sizeof(*v));
@@ -82,11 +82,11 @@ makeJsonbValueString(JsonbValue* v, string *s)
 	return v;
 }
 
-static JsonbValue*
-makeJsonbValueNumeric(string *s)
+static HStoreValue*
+makeHStoreValueNumeric(string *s)
 {
 	Numeric 	n = NULL;
-	JsonbValue	*v;
+	HStoreValue	*v;
 
 	PG_TRY();
 	{
@@ -107,15 +107,15 @@ makeJsonbValueNumeric(string *s)
 	}
 	else
 	{
-		v = makeJsonbValueString(NULL, s);
+		v = makeHStoreValueString(NULL, s);
 	}
 
 	return v;
 }
 
-static JsonbValue*
-makeJsonbValueBool(bool val) {
-	JsonbValue *v = palloc(sizeof(*v));
+static HStoreValue*
+makeHStoreValueBool(bool val) {
+	HStoreValue *v = palloc(sizeof(*v));
 
 	v->type = jbvBool;
 	v->boolean = val;
@@ -124,10 +124,10 @@ makeJsonbValueBool(bool val) {
 	return v;
 }
 
-static JsonbValue*
-makeJsonbValueArray(List *list)
+static HStoreValue*
+makeHStoreValueArray(List *list)
 {
-	JsonbValue	*v = palloc(sizeof(*v));
+	HStoreValue	*v = palloc(sizeof(*v));
 
 	v->type = jbvArray;
 	v->array.scalar = false;
@@ -139,11 +139,11 @@ makeJsonbValueArray(List *list)
 		ListCell	*cell;
 		int			i = 0;
 
-		v->array.elems = palloc(sizeof(JsonbValue) * v->array.nelems);
+		v->array.elems = palloc(sizeof(HStoreValue) * v->array.nelems);
 
 		foreach(cell, list)
 		{
-			JsonbValue	*s = (JsonbValue*)lfirst(cell);
+			HStoreValue	*s = (HStoreValue*)lfirst(cell);
 
 			v->size += s->size; 
 
@@ -161,10 +161,10 @@ makeJsonbValueArray(List *list)
 	return v;
 }
 
-static JsonbValue*
-makeJsonbValuePairs(List *list)
+static HStoreValue*
+makeHStoreValuePairs(List *list)
 {
-	JsonbValue	*v = palloc(sizeof(*v));
+	HStoreValue	*v = palloc(sizeof(*v));
 
 	v->type = jbvHash;
 	v->hash.npairs = list_length(list);
@@ -175,18 +175,18 @@ makeJsonbValuePairs(List *list)
 		ListCell	*cell;
 		int			i = 0;
 
-		v->hash.pairs = palloc(sizeof(JsonbPair) * v->hash.npairs);
+		v->hash.pairs = palloc(sizeof(HStorePair) * v->hash.npairs);
 
 		foreach(cell, list)
 		{
-			JsonbPair	*s = (JsonbPair*)lfirst(cell);
+			HStorePair	*s = (HStorePair*)lfirst(cell);
 
 			v->size += s->key.size + s->value.size; 
 			v->hash.pairs[i].order = i;
 			v->hash.pairs[i++] = *s;
 
 			if (v->size > JENTRY_POSMASK)
-				elog(ERROR, "%s is too long", inputJSON ? "jsonb" : "hstore");
+				elog(ERROR, "%s is too long", inputJSON ? "json" : "hstore");
 		}
 
 		ORDER_PAIRS(v->hash.pairs, v->hash.npairs, v->size -= ptr->key.size + ptr->value.size);
@@ -199,11 +199,11 @@ makeJsonbValuePairs(List *list)
 	return v;
 }
 
-static JsonbPair*
-makeJsonbPair(string *key, JsonbValue *value) {
-	JsonbPair	*v = palloc(sizeof(*v));
+static HStorePair*
+makeHStorePair(string *key, HStoreValue *value) {
+	HStorePair	*v = palloc(sizeof(*v));
 
-	makeJsonbValueString(&v->key, key);
+	makeHStoreValueString(&v->key, key);
 	v->value = *value;
 
 	return v;
@@ -214,23 +214,23 @@ makeJsonbPair(string *key, JsonbValue *value) {
 /* BISON Declarations */
 %pure-parser
 %expect 0
-%name-prefix="jsonb_yy"
+%name-prefix="hstore_yy"
 %error-verbose
 
 %union {
 	string 			str;
 	Numeric			numeric;
-	List			*elems; 		/* list of JsonbValue */
-	List			*pairs; 		/* list of JsonbPair */
+	List			*elems; 		/* list of HStoreValue */
+	List			*pairs; 		/* list of HStorePair */
 
-	JsonbValue		*hvalue;
-	JsonbPair		*pair;
+	HStoreValue		*hvalue;
+	HStorePair		*pair;
 }
 
 %token	<str>			DELIMITER_P NULL_P STRING_P TRUE_P FALSE_P
 						NUMERIC_P
 
-%type	<hvalue>		result jsonb value scalar_value 
+%type	<hvalue>		result hstore value scalar_value 
 %type	<str>			key
 
 %type	<pair>			pair
@@ -244,51 +244,51 @@ makeJsonbPair(string *key, JsonbValue *value) {
 result: 
 	pair_list						{ 
 										if (inputJSON)
-											elog(ERROR, "Wrong jsonb representation");
-										 *((JsonbValue**)result) = makeJsonbValuePairs($1);
+											elog(ERROR, "Wrong json representation");
+										 *((HStoreValue**)result) = makeHStoreValuePairs($1);
 									}
-	| jsonb							{ 	
+	| hstore						{ 	
 										if ($1->type == jbvNull)
-											*((JsonbValue**)result) = NULL;
+											*((HStoreValue**)result) = NULL;
 										else
-											*((JsonbValue**)result) = $1;
+											*((HStoreValue**)result) = $1;
 									}
 	| scalar_value					{ 
-										*((JsonbValue**)result) = makeJsonbValueArray(lappend(NIL, $1));
-										(*((JsonbValue**)result))->array.scalar = true;
+										*((HStoreValue**)result) = makeHStoreValueArray(lappend(NIL, $1));
+										(*((HStoreValue**)result))->array.scalar = true;
 									}
-	| /* EMPTY */					{ *((JsonbValue**)result) = NULL; }
+	| /* EMPTY */					{ *((HStoreValue**)result) = NULL; }
 	;
 
-jsonb:
-	'{' pair_list '}'				{ $$ = makeJsonbValuePairs($2); }
-	| '[' value_list ']'			{ $$ = makeJsonbValueArray($2); }
-	| '[' value ']'					{ $$ = makeJsonbValueArray(lappend(NIL, $2)); }
+hstore:
+	'{' pair_list '}'				{ $$ = makeHStoreValuePairs($2); }
+	| '[' value_list ']'			{ $$ = makeHStoreValueArray($2); }
+	| '[' value ']'					{ $$ = makeHStoreValueArray(lappend(NIL, $2)); }
 	| '{' value_list '}'			{ 
 										if (inputJSON)
-											elog(ERROR, "Wrong jsonb representation");
-										$$ = makeJsonbValueArray($2); 
+											elog(ERROR, "Wrong json representation");
+										$$ = makeHStoreValueArray($2); 
 									}
 	| '{' value '}'					{ 
 										if (inputJSON)
-											elog(ERROR, "Wrong jsonb representation");
-										$$ = makeJsonbValueArray(lappend(NIL, $2)); 
+											elog(ERROR, "Wrong json representation");
+										$$ = makeHStoreValueArray(lappend(NIL, $2)); 
 									}
-	| '{' '}'						{ $$ = makeJsonbValuePairs(NIL); }
-	| '[' ']'						{ $$ = makeJsonbValueArray(NIL); }
+	| '{' '}'						{ $$ = makeHStoreValuePairs(NIL); }
+	| '[' ']'						{ $$ = makeHStoreValueArray(NIL); }
 	;
 
 scalar_value:
-	NULL_P							{ $$ = makeJsonbValueString(NULL, NULL); }
-	| STRING_P						{ $$ = makeJsonbValueString(NULL, &$1); }
-	| TRUE_P						{ $$ = makeJsonbValueBool(true); }
-	| FALSE_P						{ $$ = makeJsonbValueBool(false); }
-	| NUMERIC_P						{ $$ = makeJsonbValueNumeric(&$1); }
+	NULL_P							{ $$ = makeHStoreValueString(NULL, NULL); }
+	| STRING_P						{ $$ = makeHStoreValueString(NULL, &$1); }
+	| TRUE_P						{ $$ = makeHStoreValueBool(true); }
+	| FALSE_P						{ $$ = makeHStoreValueBool(false); }
+	| NUMERIC_P						{ $$ = makeHStoreValueNumeric(&$1); }
 	;
 
 value:
 	scalar_value					{ $$ = $1; }
-	| jsonb							{ $$ = $1; } 
+	| hstore						{ $$ = $1; } 
 	;
 
 value_list:
@@ -308,7 +308,7 @@ key:
 	;
 
 pair:
-	key DELIMITER_P value			{ $$ = makeJsonbPair(&$1, $3); }
+	key DELIMITER_P value			{ $$ = makeHStorePair(&$1, $3); }
 	;
 
 pair_list:
@@ -318,4 +318,4 @@ pair_list:
 
 %%
 
-#include "jsonb_scan.c"
+#include "hstore_scan.c"

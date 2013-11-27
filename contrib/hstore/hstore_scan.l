@@ -1,11 +1,11 @@
 /*-------------------------------------------------------------------------
  *
- * jsonb_scan.l
- *    Lexer definition for jsonb
+ * hstore_scan.l
+ *    Lexer definition for hstore
  *
  * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
- * src/backend/utils/adt/jsonb_scan.l
+ * contrib/hstore/hstore_scan.l
  *
  *-------------------------------------------------------------------------
  */
@@ -34,7 +34,7 @@ static int checkSpecialVal(void); /* examine scanstring for the special value */
 %option nounput
 %option noyywrap
 %option warn
-%option prefix="jsonb_yy"
+%option prefix="hstore_yy"
 %option bison-bridge
 
 %x xQUOTED
@@ -166,7 +166,7 @@ yyerror(const char *message)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("bad %s representation", inputJSON ? "jsonb" : "hstore"),
+				 errmsg("bad %s representation", inputJSON ? "json" : "hstore"),
 				 /* translator: %s is typically "syntax error" */
 				 errdetail("%s at end of input", message)));
 	}
@@ -174,7 +174,7 @@ yyerror(const char *message)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("bad %s representation", inputJSON ? "jsonb" : "hstore"),
+				 errmsg("bad %s representation", inputJSON ? "json" : "hstore"),
 				 /* translator: first %s is typically "syntax error" */
 				 errdetail("%s at or near \"%s\"", message, yytext)));
 	}
@@ -220,7 +220,7 @@ checkSpecialVal()
  * Called before any actual parsing is done
  */
 static void
-jsonb_scanner_init(const char *str, int slen)
+hstore_scanner_init(const char *str, int slen)
 {
 	if (slen <= 0)
 		slen = strlen(str);
@@ -246,10 +246,10 @@ jsonb_scanner_init(const char *str, int slen)
 
 
 /*
- * Called after parsing is done to clean up after jsonb_scanner_init()
+ * Called after parsing is done to clean up after hstore_scanner_init()
  */
 static void
-jsonb_scanner_finish(void)
+hstore_scanner_finish(void)
 {
 	yy_delete_buffer(scanbufhandle);
 	pfree(scanbuf);
@@ -293,18 +293,18 @@ addchar(bool init, char s) {
 		scanstring.len++;
 }
 
-JsonbValue* 
-parseJsonb(const char *str, int len, bool json) {
-	JsonbValue		*parseresult;
+HStoreValue* 
+parseHStore(const char *str, int len, bool json) {
+	HStoreValue		*parseresult;
 
 	inputJSON = json;
 
-	jsonb_scanner_init(str, len);
+	hstore_scanner_init(str, len);
 
-	if (jsonb_yyparse((void*)&parseresult) != 0)
-		jsonb_yyerror("bugus input");
+	if (hstore_yyparse((void*)&parseresult) != 0)
+		hstore_yyerror("bugus input");
 
-	jsonb_scanner_finish();
+	hstore_scanner_finish();
 
 	return parseresult;
 }
