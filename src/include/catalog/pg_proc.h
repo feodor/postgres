@@ -4463,13 +4463,13 @@ DESCR("I/O");
 DATA(insert OID = 3774 (  regdictionarysend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "3769" _null_ _null_ _null_ _null_ regdictionarysend _null_ _null_ _null_ ));
 DESCR("I/O");
 
-DATA(insert OID =  3806 (  jsonb_in			PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3808 "2275" _null_ _null_ _null_ _null_ jsonb_in _null_ _null_ _null_ ));
+DATA(insert OID =  3806 (  jsonb_in			PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3802 "2275" _null_ _null_ _null_ _null_ jsonb_in _null_ _null_ _null_ ));
 DESCR("I/O");
-DATA(insert OID =  3805 (  jsonb_recv		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3808 "2281" _null_ _null_ _null_ _null_ jsonb_recv _null_ _null_ _null_ ));
+DATA(insert OID =  3805 (  jsonb_recv		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3802 "2281" _null_ _null_ _null_ _null_ jsonb_recv _null_ _null_ _null_ ));
 DESCR("I/O");
-DATA(insert OID =  3804 (  jsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2275 "3808" _null_ _null_ _null_ _null_ jsonb_out _null_ _null_ _null_ ));
+DATA(insert OID =  3804 (  jsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2275 "3802" _null_ _null_ _null_ _null_ jsonb_out _null_ _null_ _null_ ));
 DESCR("I/O");
-DATA(insert OID =  3803 (  jsonb_send		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "3808" _null_ _null_ _null_ _null_	jsonb_send _null_ _null_ _null_ ));
+DATA(insert OID =  3803 (  jsonb_send		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "3802" _null_ _null_ _null_ _null_	jsonb_send _null_ _null_ _null_ ));
 DESCR("I/O");
 
 /* txid */
