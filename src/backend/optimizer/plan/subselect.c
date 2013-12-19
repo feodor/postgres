@@ -2100,6 +2100,13 @@ finalize_plan(PlannerInfo *root, Plan *plan, Bitmapset *valid_params,
 			 * indexorderbyorig.
 			 */
 			context.paramids = bms_add_members(context.paramids, scan_params);
+			if (((IndexScan *) plan)->bitmapfilterplan)
+					context.paramids =
+						bms_add_members(context.paramids,
+										finalize_plan(root,
+													  (Plan *) ((IndexScan *) plan)->bitmapfilterplan,
+													  valid_params,
+													  scan_params));
 			break;
 
 		case T_IndexOnlyScan:
@@ -2112,6 +2119,13 @@ finalize_plan(PlannerInfo *root, Plan *plan, Bitmapset *valid_params,
 			 * we need not look at indextlist, since it cannot contain Params.
 			 */
 			context.paramids = bms_add_members(context.paramids, scan_params);
+			if (((IndexOnlyScan *) plan)->bitmapfilterplan)
+					context.paramids =
+						bms_add_members(context.paramids,
+										finalize_plan(root,
+													  (Plan *) ((IndexOnlyScan *) plan)->bitmapfilterplan,
+													  valid_params,
+													  scan_params));
 			break;
 
 		case T_BitmapIndexScan:

@@ -766,6 +766,7 @@ create_index_path(PlannerInfo *root,
 	pathnode->indexorderbys = indexorderbys;
 	pathnode->indexorderbycols = indexorderbycols;
 	pathnode->indexscandir = indexscandir;
+	pathnode->bitmapfilter = NULL;
 
 	cost_index(pathnode, root, loop_count);
 

@@ -1260,6 +1260,8 @@ typedef struct IndexScanState
 	ExprContext *iss_RuntimeContext;
 	Relation	iss_RelationDesc;
 	IndexScanDesc iss_ScanDesc;
+	PlanState	*BitmapFilterPlanState;
+	TIDBitmap	*BitmapFilter;
 } IndexScanState;
 
 /* ----------------
@@ -1296,6 +1298,7 @@ typedef struct IndexOnlyScanState
 	IndexScanDesc ioss_ScanDesc;
 	Buffer		ioss_VMBuffer;
 	long		ioss_HeapFetches;
+	Node		*BitmapFilter;
 } IndexOnlyScanState;
 
 /* ----------------

@@ -460,12 +460,20 @@ set_plan_refs(PlannerInfo *root, Plan *plan, int rtoffset)
 					fix_scan_list(root, splan->indexorderby, rtoffset);
 				splan->indexorderbyorig =
 					fix_scan_list(root, splan->indexorderbyorig, rtoffset);
+				if (splan->bitmapfilterplan)
+					splan->bitmapfilterplan = set_plan_refs(root,
+															splan->bitmapfilterplan,
+															rtoffset);
 			}
 			break;
 		case T_IndexOnlyScan:
 			{
 				IndexOnlyScan *splan = (IndexOnlyScan *) plan;
 
+				if (splan->bitmapfilterplan)
+					splan->bitmapfilterplan = set_plan_refs(root,
+															splan->bitmapfilterplan,
+															rtoffset);
 				return set_indexonlyscan_references(root, splan, rtoffset);
 			}
 			break;

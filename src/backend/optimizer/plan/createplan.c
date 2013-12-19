@@ -98,12 +98,14 @@ static SeqScan *make_seqscan(List *qptlist, List *qpqual, Index scanrelid);
 static IndexScan *make_indexscan(List *qptlist, List *qpqual, Index scanrelid,
 			   Oid indexid, List *indexqual, List *indexqualorig,
 			   List *indexorderby, List *indexorderbyorig,
-			   ScanDirection indexscandir);
+			   ScanDirection indexscandir,
+			   Plan *bitmapfilterplan);
 static IndexOnlyScan *make_indexonlyscan(List *qptlist, List *qpqual,
 				   Index scanrelid, Oid indexid,
 				   List *indexqual, List *indexorderby,
 				   List *indextlist,
-				   ScanDirection indexscandir);
+				   ScanDirection indexscandir,
+				   Plan *bitmapfilterplan);
 static BitmapIndexScan *make_bitmap_indexscan(Index scanrelid, Oid indexid,
 					  List *indexqual,
 					  List *indexqualorig);
@@ -1145,6 +1147,8 @@ create_indexscan_plan(PlannerInfo *root,
 	List	   *fixed_indexquals;
 	List	   *fixed_indexorderbys;
 	ListCell   *l;
+	Plan	   *filter_plan = NULL;
+
 
 	/* it should be a base rel... */
 	Assert(baserelid > 0);
@@ -1252,6 +1256,18 @@ create_indexscan_plan(PlannerInfo *root,
 			replace_nestloop_params(root, (Node *) indexorderbys);
 	}
 
+	if (best_path->bitmapfilter)
+	{
+		List	*bitmapqualorig;
+		List	*indexquals;
+		List	*indexECs;
+
+		filter_plan = create_bitmap_subplan(root, best_path->bitmapfilter,
+											&bitmapqualorig, &indexquals,
+											&indexECs);
+		elog(NOTICE,"TEODOR create_indexscan_plan %p %p", best_path->bitmapfilter, filter_plan);
+	}
+
 	/* Finally ready to build the plan node */
 	if (indexonly)
 		scan_plan = (Scan *) make_indexonlyscan(tlist,
@@ -1261,7 +1277,8 @@ create_indexscan_plan(PlannerInfo *root,
 												fixed_indexquals,
 												fixed_indexorderbys,
 											best_path->indexinfo->indextlist,
-												best_path->indexscandir);
+												best_path->indexscandir,
+												filter_plan);
 	else
 		scan_plan = (Scan *) make_indexscan(tlist,
 											qpqual,
@@ -1271,7 +1288,8 @@ create_indexscan_plan(PlannerInfo *root,
 											stripped_indexquals,
 											fixed_indexorderbys,
 											indexorderbys,
-											best_path->indexscandir);
+											best_path->indexscandir,
+											filter_plan);
 
 	copy_path_costsize(&scan_plan->plan, &best_path->path);
 
@@ -3238,7 +3256,8 @@ make_indexscan(List *qptlist,
 			   List *indexqualorig,
 			   List *indexorderby,
 			   List *indexorderbyorig,
-			   ScanDirection indexscandir)
+			   ScanDirection indexscandir,
+			   Plan *bitmapfilterplan)
 {
 	IndexScan  *node = makeNode(IndexScan);
 	Plan	   *plan = &node->scan.plan;
@@ -3255,6 +3274,7 @@ make_indexscan(List *qptlist,
 	node->indexorderby = indexorderby;
 	node->indexorderbyorig = indexorderbyorig;
 	node->indexorderdir = indexscandir;
+	node->bitmapfilterplan = bitmapfilterplan;
 
 	return node;
 }
@@ -3267,7 +3287,8 @@ make_indexonlyscan(List *qptlist,
 				   List *indexqual,
 				   List *indexorderby,
 				   List *indextlist,
-				   ScanDirection indexscandir)
+				   ScanDirection indexscandir,
+				   Plan	*bitmapfilterplan)
 {
 	IndexOnlyScan *node = makeNode(IndexOnlyScan);
 	Plan	   *plan = &node->scan.plan;
@@ -3283,6 +3304,7 @@ make_indexonlyscan(List *qptlist,
 	node->indexorderby = indexorderby;
 	node->indextlist = indextlist;
 	node->indexorderdir = indexscandir;
+	node->bitmapfilterplan = bitmapfilterplan;
 
 	return node;
 }

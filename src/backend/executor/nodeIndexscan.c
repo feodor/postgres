@@ -54,6 +54,7 @@ IndexNext(IndexScanState *node)
 	IndexScanDesc scandesc;
 	HeapTuple	tuple;
 	TupleTableSlot *slot;
+	TIDBitmap	*flttbm;
 
 	/*
 	 * extract necessary information from index scan node
@@ -72,11 +73,28 @@ IndexNext(IndexScanState *node)
 	econtext = node->ss.ps.ps_ExprContext;
 	slot = node->ss.ss_ScanTupleSlot;
 
+	if (node->BitmapFilterPlanState && node->BitmapFilter == NULL)
+		node->BitmapFilter = (TIDBitmap *) MultiExecProcNode(node->BitmapFilterPlanState);
+
+	flttbm = node->BitmapFilter;
+
+	Assert(flttbm == NULL || IsA(flttbm, TIDBitmap));
+
 	/*
 	 * ok, now that we have what we need, fetch the next tuple.
 	 */
 	while ((tuple = index_getnext(scandesc, direction)) != NULL)
 	{
+		TBMCheckResult	fltres = TBMExists;
+
+		if (flttbm)
+		{
+			fltres = tbm_check_tuple(flttbm, &scandesc->xs_ctup.t_self);
+
+			if (fltres == TBMNotFound)
+				continue;
+		}
+
 		/*
 		 * Store the scanned tuple in the scan tuple slot of the scan state.
 		 * Note: we pass 'false' because tuples returned by amgetnext are
@@ -91,7 +109,7 @@ IndexNext(IndexScanState *node)
 		 * If the index was lossy, we have to recheck the index quals using
 		 * the fetched tuple.
 		 */
-		if (scandesc->xs_recheck)
+		if (scandesc->xs_recheck || fltres == TBMRecheck)
 		{
 			econtext->ecxt_scantuple = slot;
 			ResetExprContext(econtext);
@@ -183,6 +201,15 @@ ExecReScanIndexScan(IndexScanState *node)
 								 node->iss_NumRuntimeKeys);
 	}
 	node->iss_RuntimeKeysReady = true;
+
+	if (node->BitmapFilterPlanState)
+	{
+		if (node->BitmapFilter)
+			tbm_free(node->BitmapFilter);
+		node->BitmapFilter = NULL;
+
+		ExecReScan(node->BitmapFilterPlanState);
+	}
 
 	/* reset index scan */
 	index_rescan(node->iss_ScanDesc,
@@ -421,6 +448,13 @@ ExecEndIndexScan(IndexScanState *node)
 		index_endscan(indexScanDesc);
 	if (indexRelationDesc)
 		index_close(indexRelationDesc, NoLock);
+	if (node->BitmapFilterPlanState)
+	{
+		ExecEndNode(node->BitmapFilterPlanState);
+
+		if (node->BitmapFilter)
+			tbm_free(node->BitmapFilter);
+	}
 
 	/*
 	 * close the heap relation.
@@ -526,6 +560,18 @@ ExecInitIndexScan(IndexScan *node, EState *estate, int eflags)
 	 */
 	ExecAssignResultTypeFromTL(&indexstate->ss.ps);
 	ExecAssignScanProjectionInfo(&indexstate->ss);
+
+	if (node->bitmapfilterplan)
+	{
+		indexstate->BitmapFilterPlanState = 
+			ExecInitNode(node->bitmapfilterplan, estate,
+						 eflags & ~(EXEC_FLAG_BACKWARD | EXEC_FLAG_MARK));
+
+		elog(NOTICE, "TEODOR ExecInitIndexScan");
+	}
+	else
+		indexstate->BitmapFilterPlanState = NULL;
+	indexstate->BitmapFilter = NULL;
 
 	/*
 	 * If we are just doing EXPLAIN (ie, aren't going to run the plan), stop

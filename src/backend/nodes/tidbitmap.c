@@ -1020,3 +1020,42 @@ tbm_comparator(const void *left, const void *right)
 		return 1;
 	return 0;
 }
+
+/*
+ * tbm_check_tuple - check existance of tuple in tidbitmap.
+ * return zero (TBMNotFound) if not, TBMRecheck if tuple exists
+ * and requires recheck (recheck flag set or lossy page) and
+ * TBMExists if tuple exists and doesn't require recheck
+ */
+TBMCheckResult
+tbm_check_tuple(TIDBitmap *tbm, const ItemPointer tid)
+{
+	BlockNumber		blk = ItemPointerGetBlockNumber(tid);
+	OffsetNumber	off = ItemPointerGetOffsetNumber(tid);
+	PagetableEntry *page;
+	int				wordnum,
+					bitnum;
+
+	/* safety check to ensure we don't overrun bit array bounds */
+	if (off < 1 || off > MAX_TUPLES_PER_PAGE)
+		elog(ERROR, "tuple offset out of range: %u", off);
+
+	if (tbm_page_is_lossy(tbm, blk))
+		return TBMRecheck; /* whole page is already marked */
+
+	page = tbm_get_pageentry(tbm, blk);
+	if (page->ischunk)
+	{
+		wordnum = bitnum = 0;
+	}
+	else
+	{
+		wordnum = WORDNUM(off - 1);
+		bitnum = BITNUM(off - 1);
+	}
+
+	return ( page->words[wordnum] & ((bitmapword) 1 << bitnum) ) ? 
+			( (page->ischunk || page->recheck) ? TBMRecheck : TBMExists )
+			: 
+			TBMNotFound; 
+}

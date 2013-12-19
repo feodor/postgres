@@ -335,11 +335,47 @@ create_index_paths(PlannerInfo *root, RelOptInfo *rel)
 	{
 		Path	   *bitmapqual;
 		BitmapHeapPath *bpath;
+		List			*bfpaths = NIL;
 
 		bitmapqual = choose_bitmap_and(root, rel, bitindexpaths);
 		bpath = create_bitmap_heap_path(root, rel, bitmapqual,
 										rel->lateral_relids, 1.0);
 		add_path(rel, (Path *) bpath);
+
+		foreach(lc, rel->pathlist)
+		{
+			IndexPath *ipath = (IndexPath*)lfirst(lc),
+					  *newpath;
+
+			if (!IsA(ipath, IndexPath))
+				continue;
+
+			if (ipath->indexorderbys == NIL && ipath->indexorderbycols == NIL) 
+				continue;
+
+			newpath = palloc(sizeof(*newpath));
+			memcpy(newpath, ipath, sizeof(*newpath));
+			newpath->bitmapfilter = bitmapqual;
+
+			//XXX
+			newpath->path.startup_cost /= 2.0;
+			newpath->path.total_cost /= 2.0;
+			newpath->indextotalcost /= 2.0;
+			//newpath->path.startup_cost += bitmapqual->total_cost;
+			//newpath->path.total_cost += bitmapqual->total_cost;
+			//newpath->indextotalcost += bitmapqual->total_cost;
+
+			bfpaths = lappend(bfpaths, newpath);
+
+			elog(NOTICE,"TEODOR create_index_paths");
+		}
+
+		foreach(lc, bfpaths)
+		{
+			Path 	*bfpath = (Path*)lfirst(lc);
+
+			add_path(rel, bfpath);
+		}
 	}
 
 	/*

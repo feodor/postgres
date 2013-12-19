@@ -373,6 +373,7 @@ _copyIndexScan(const IndexScan *from)
 	COPY_NODE_FIELD(indexorderby);
 	COPY_NODE_FIELD(indexorderbyorig);
 	COPY_SCALAR_FIELD(indexorderdir);
+	COPY_NODE_FIELD(bitmapfilterplan);
 
 	return newnode;
 }
@@ -398,6 +399,7 @@ _copyIndexOnlyScan(const IndexOnlyScan *from)
 	COPY_NODE_FIELD(indexorderby);
 	COPY_NODE_FIELD(indextlist);
 	COPY_SCALAR_FIELD(indexorderdir);
+	COPY_NODE_FIELD(bitmapfilterplan);
 
 	return newnode;
 }

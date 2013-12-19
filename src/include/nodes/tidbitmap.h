@@ -63,4 +63,12 @@ extern TBMIterator *tbm_begin_iterate(TIDBitmap *tbm);
 extern TBMIterateResult *tbm_iterate(TBMIterator *iterator);
 extern void tbm_end_iterate(TBMIterator *iterator);
 
+typedef enum {
+	TBMNotFound = 0,
+	TBMExists,
+	TBMRecheck
+} TBMCheckResult;
+
+extern TBMCheckResult tbm_check_tuple(TIDBitmap *tbm, const ItemPointer tid);
+
 #endif   /* TIDBITMAP_H */

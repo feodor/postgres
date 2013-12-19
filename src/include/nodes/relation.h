@@ -796,6 +796,7 @@ typedef struct IndexPath
 	ScanDirection indexscandir;
 	Cost		indextotalcost;
 	Selectivity indexselectivity;
+	Path		*bitmapfilter; /* IndexPath, BitmapAndPath or BitmapOrPath */
 } IndexPath;
 
 /*
