@@ -1298,7 +1298,8 @@ typedef struct IndexOnlyScanState
 	IndexScanDesc ioss_ScanDesc;
 	Buffer		ioss_VMBuffer;
 	long		ioss_HeapFetches;
-	Node		*BitmapFilter;
+	PlanState	*BitmapFilterPlanState;
+	TIDBitmap	*BitmapFilter;
 } IndexOnlyScanState;
 
 /* ----------------

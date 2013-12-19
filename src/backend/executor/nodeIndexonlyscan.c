@@ -55,6 +55,7 @@ IndexOnlyNext(IndexOnlyScanState *node)
 	IndexScanDesc scandesc;
 	TupleTableSlot *slot;
 	ItemPointer tid;
+	TIDBitmap	*flttbm;
 
 	/*
 	 * extract necessary information from index scan node
@@ -73,12 +74,28 @@ IndexOnlyNext(IndexOnlyScanState *node)
 	econtext = node->ss.ps.ps_ExprContext;
 	slot = node->ss.ss_ScanTupleSlot;
 
+	if (node->BitmapFilterPlanState && node->BitmapFilter == NULL)
+		node->BitmapFilter = (TIDBitmap *) MultiExecProcNode(node->BitmapFilterPlanState);
+
+	flttbm = node->BitmapFilter;
+
+	Assert(flttbm == NULL || IsA(flttbm, TIDBitmap));
+
 	/*
 	 * OK, now that we have what we need, fetch the next tuple.
 	 */
 	while ((tid = index_getnext_tid(scandesc, direction)) != NULL)
 	{
 		HeapTuple	tuple = NULL;
+		TBMCheckResult  fltres = TBMExists;
+
+		if (flttbm)
+		{
+			fltres = tbm_check_tuple(flttbm, &scandesc->xs_ctup.t_self);
+
+			if (fltres == TBMNotFound)
+				continue;
+		}
 
 		/*
 		 * We can skip the heap fetch if the TID references a heap page on
@@ -137,7 +154,7 @@ IndexOnlyNext(IndexOnlyScanState *node)
 		 * (Currently, this can never happen, but we should support the case
 		 * for possible future use, eg with GiST indexes.)
 		 */
-		if (scandesc->xs_recheck)
+		if (scandesc->xs_recheck || fltres == TBMRecheck)
 		{
 			econtext->ecxt_scantuple = slot;
 			ResetExprContext(econtext);
@@ -266,6 +283,15 @@ ExecReScanIndexOnlyScan(IndexOnlyScanState *node)
 	}
 	node->ioss_RuntimeKeysReady = true;
 
+	if (node->BitmapFilterPlanState)
+	{
+		if (node->BitmapFilter)
+			tbm_free(node->BitmapFilter);
+		node->BitmapFilter = NULL;
+
+		ExecReScan(node->BitmapFilterPlanState);
+	}
+
 	/* reset index scan */
 	index_rescan(node->ioss_ScanDesc,
 				 node->ioss_ScanKeys, node->ioss_NumScanKeys,
@@ -322,6 +348,14 @@ ExecEndIndexOnlyScan(IndexOnlyScanState *node)
 		index_endscan(indexScanDesc);
 	if (indexRelationDesc)
 		index_close(indexRelationDesc, NoLock);
+
+	if (node->BitmapFilterPlanState)
+	{
+		ExecEndNode(node->BitmapFilterPlanState);
+
+		if (node->BitmapFilter)
+			tbm_free(node->BitmapFilter);
+	}
 
 	/*
 	 * close the heap relation.
@@ -430,6 +464,18 @@ ExecInitIndexOnlyScan(IndexOnlyScan *node, EState *estate, int eflags)
 	 */
 	ExecAssignResultTypeFromTL(&indexstate->ss.ps);
 	ExecAssignScanProjectionInfo(&indexstate->ss);
+
+	if (node->bitmapfilterplan)
+	{
+		indexstate->BitmapFilterPlanState =
+			ExecInitNode(node->bitmapfilterplan, estate,
+						 eflags & ~(EXEC_FLAG_BACKWARD | EXEC_FLAG_MARK));
+
+		elog(NOTICE, "TEODOR ExecInitIndexOnlyScan");
+	}
+	else
+		indexstate->BitmapFilterPlanState = NULL;
+	indexstate->BitmapFilter = NULL;
 
 	/*
 	 * If we are just doing EXPLAIN (ie, aren't going to run the plan), stop

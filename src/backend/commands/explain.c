@@ -1223,6 +1223,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			if (plan->qual)
 				show_instrumentation_count("Rows Removed by Filter", 1,
 										   planstate, es);
+			if (((IndexScan *) plan)->bitmapfilterplan)
+				ExplainNode(((IndexScanState *) planstate)->BitmapFilterPlanState, 
+							ancestors, "Bitmap filter", NULL, es);
 			break;
 		case T_IndexOnlyScan:
 			show_scan_qual(((IndexOnlyScan *) plan)->indexqual,
@@ -1239,6 +1242,9 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			if (es->analyze)
 				ExplainPropertyLong("Heap Fetches",
 				   ((IndexOnlyScanState *) planstate)->ioss_HeapFetches, es);
+			if (((IndexOnlyScan *) plan)->bitmapfilterplan)
+				ExplainNode(((IndexOnlyScanState *) planstate)->BitmapFilterPlanState, 
+							ancestors, "Bitmap filter", NULL, es);
 			break;
 		case T_BitmapIndexScan:
 			show_scan_qual(((BitmapIndexScan *) plan)->indexqualorig,
