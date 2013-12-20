@@ -457,6 +457,47 @@ cost_index(IndexPath *path, PlannerInfo *root, double loop_count)
 	path->path.total_cost = startup_cost + run_cost;
 }
 
+/*
+ * Tweaks cost estimation of index scan with bitmap filter
+ */
+void
+cost_filtered_index(IndexPath *path)
+{
+	Path    		*bitmapqual = path->bitmapfilter;
+	double			rows;
+	Cost			reducedFilterCost;
+	Selectivity		selec = 0;
+
+	if (IsA(path, IndexPath))
+		selec = ((IndexPath *) bitmapqual)->indexselectivity;
+	else if (IsA(path, BitmapAndPath))
+		selec = ((BitmapAndPath *) bitmapqual)->bitmapselectivity;
+	else if (IsA(path, BitmapOrPath))
+		selec = ((BitmapOrPath *) bitmapqual)->bitmapselectivity;
+	else
+		elog(ERROR, "unrecognized node type: %d", nodeTag(bitmapqual));
+
+	rows = path->path.rows * selec;
+	reducedFilterCost = rows * cpu_operator_cost; 
+
+
+	//XXX
+	path->path.startup_cost /= 2.0;
+	path->path.total_cost /= 2.0;
+	path->indextotalcost /= 2.0;
+
+	//path->path.startup_cost += bitmapqual->total_cost;
+	//path->path.total_cost += bitmapqual->total_cost - reducedFilterCost;
+	//path->indextotalcost += bitmapqual->total_cost - reducedFilterCost;
+
+	if (enable_bitmapfilter == false)
+	{
+		path->path.startup_cost += disable_cost;
+		path->path.total_cost += disable_cost;
+		path->indextotalcost += disable_cost;
+	}
+} 
+
 void
 set_default_effective_cache_size(void)
 {

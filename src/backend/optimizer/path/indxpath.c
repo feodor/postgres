@@ -357,20 +357,7 @@ create_index_paths(PlannerInfo *root, RelOptInfo *rel)
 			memcpy(newpath, ipath, sizeof(*newpath));
 			newpath->bitmapfilter = bitmapqual;
 
-			//XXX
-			newpath->path.startup_cost /= 2.0;
-			newpath->path.total_cost /= 2.0;
-			newpath->indextotalcost /= 2.0;
-			//newpath->path.startup_cost += bitmapqual->total_cost;
-			//newpath->path.total_cost += bitmapqual->total_cost;
-			//newpath->indextotalcost += bitmapqual->total_cost;
-
-			if (enable_bitmapfilter)
-			{
-				newpath->path.startup_cost += disable_cost;
-				newpath->path.total_cost += disable_cost;
-				newpath->indextotalcost += disable_cost;
-			}
+			cost_filtered_index(newpath);
 
 			bfpaths = lappend(bfpaths, newpath);
 
