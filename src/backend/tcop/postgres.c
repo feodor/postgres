@@ -3201,6 +3201,9 @@ set_plan_disabling_options(const char *arg, GucContext context, GucSource source
 		case 'b':				/* bitmapscan */
 			tmp = "enable_bitmapscan";
 			break;
+		case 'f':				/* bitmapfilter */
+			tmp = "enable_bitmapfilter";
+			break;
 		case 't':				/* tidscan */
 			tmp = "enable_tidscan";
 			break;

@@ -706,6 +706,15 @@ static struct config_bool ConfigureNamesBool[] =
 		NULL, NULL, NULL
 	},
 	{
+		{"enable_bitmapfilter", PGC_USERSET, QUERY_TUNING_METHOD,
+			gettext_noop("Enables the planner's use of bitmap-filtering in index scan."),
+			NULL
+		},
+		&enable_bitmapfilter,
+		true,
+		NULL, NULL, NULL
+	},
+	{
 		{"enable_tidscan", PGC_USERSET, QUERY_TUNING_METHOD,
 			gettext_noop("Enables the planner's use of TID scan plans."),
 			NULL

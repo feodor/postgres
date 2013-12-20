@@ -365,6 +365,13 @@ create_index_paths(PlannerInfo *root, RelOptInfo *rel)
 			//newpath->path.total_cost += bitmapqual->total_cost;
 			//newpath->indextotalcost += bitmapqual->total_cost;
 
+			if (enable_bitmapfilter)
+			{
+				newpath->path.startup_cost += disable_cost;
+				newpath->path.total_cost += disable_cost;
+				newpath->indextotalcost += disable_cost;
+			}
+
 			bfpaths = lappend(bfpaths, newpath);
 
 			elog(NOTICE,"TEODOR create_index_paths");
