@@ -186,7 +186,8 @@ ghstore_compress(PG_FUNCTION_ARGS)
 
 			while((r = HStoreIteratorGet(&it, &v, false)) != 0)
 			{
-				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) && v.type != hsvNull)
+				if ((r == WHS_ELEM || r == WHS_KEY || r == WHS_VALUE) &&
+					v.type != hsvNull)
 				{
 					int   h = crc32_HStoreValue(&v, r);
 
@@ -456,7 +457,8 @@ ghstore_picksplit(PG_FUNCTION_ARGS)
 		datum_l = (GISTTYPE *) palloc(GTHDRSIZE + SIGLEN);
 		SET_VARSIZE(datum_l, GTHDRSIZE + SIGLEN);
 		datum_l->flag = 0;
-		memcpy((void *) GETSIGN(datum_l), (void *) GETSIGN(GETENTRY(entryvec, seed_1)), sizeof(BITVEC))
+		memcpy((void *) GETSIGN(datum_l),
+			   (void *) GETSIGN(GETENTRY(entryvec, seed_1)), sizeof(BITVEC))
 			;
 	}
 	if (ISALLTRUE(GETENTRY(entryvec, seed_2)))
@@ -470,7 +472,8 @@ ghstore_picksplit(PG_FUNCTION_ARGS)
 		datum_r = (GISTTYPE *) palloc(GTHDRSIZE + SIGLEN);
 		SET_VARSIZE(datum_r, GTHDRSIZE + SIGLEN);
 		datum_r->flag = 0;
-		memcpy((void *) GETSIGN(datum_r), (void *) GETSIGN(GETENTRY(entryvec, seed_2)), sizeof(BITVEC));
+		memcpy((void *) GETSIGN(datum_r),
+			   (void *) GETSIGN(GETENTRY(entryvec, seed_2)), sizeof(BITVEC));
 	}
 
 	maxoff = OffsetNumberNext(maxoff);
@@ -630,11 +633,12 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 
 		res = (GETBIT(sign, *qval)) ? true : false;
 	}
-	else if (strategy == HStoreExistsAllStrategyNumber || strategy == HStoreExistsAnyStrategyNumber)
+	else if (strategy == HStoreExistsAllStrategyNumber ||
+			 strategy == HStoreExistsAnyStrategyNumber)
 	{
 		BITVECP	arrentry;
 		int		i;
-		
+
 		arrentry = fcinfo->flinfo->fn_extra;
 		if (arrentry == NULL)
 		{
@@ -643,7 +647,8 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 			bool	   *key_nulls;
 			int			key_count;
 
-			arrentry = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(BITVEC));
+			arrentry = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+										  sizeof(BITVEC));
 			memset(arrentry, 0, sizeof(BITVEC));
 
 			deconstruct_array(query,
@@ -656,7 +661,8 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 
 				if (key_nulls[i])
 					continue;
-				crc = crc32_Key(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ);
+				crc = crc32_Key(VARDATA(key_datums[i]),
+								VARSIZE(key_datums[i]) - VARHDRSZ);
 				HASH(arrentry, crc);
 			}
 

@@ -40,12 +40,18 @@ typedef struct
 
 /* note possible multiple evaluations, also access to prior array element */
 #define HSE_ISFIRST(he_) 		(((he_).entry & HENTRY_ISFIRST) != 0)
-#define HSE_ISSTRING(he_)		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISSTRING)
-#define HSE_ISNUMERIC(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNUMERIC)
-#define HSE_ISNEST(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNEST)
-#define HSE_ISNULL(he_) 		(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISNULL)
-#define HSE_ISBOOL(he_) 		(((he_).entry & HENTRY_TYPEMASK & HENTRY_ISBOOL) == HENTRY_ISBOOL)
-#define HSE_ISBOOL_TRUE(he_) 	(((he_).entry & HENTRY_TYPEMASK) == HENTRY_ISTRUE)
+#define HSE_ISSTRING(he_)		(((he_).entry & HENTRY_TYPEMASK) == \
+								 			HENTRY_ISSTRING)
+#define HSE_ISNUMERIC(he_) 		(((he_).entry & HENTRY_TYPEMASK) == \
+								 			HENTRY_ISNUMERIC)
+#define HSE_ISNEST(he_) 		(((he_).entry & HENTRY_TYPEMASK) == \
+								 			HENTRY_ISNEST)
+#define HSE_ISNULL(he_) 		(((he_).entry & HENTRY_TYPEMASK) == \
+								 			HENTRY_ISNULL)
+#define HSE_ISBOOL(he_) 		(((he_).entry & HENTRY_ISBOOL)   == \
+								 			HENTRY_ISBOOL)
+#define HSE_ISBOOL_TRUE(he_) 	(((he_).entry & HENTRY_TYPEMASK) == \
+								 			HENTRY_ISTRUE)
 #define HSE_ISBOOL_FALSE(he_) 	(HSE_ISBOOL(he_) && !HSE_ISBOOL_TRUE(he_))
 
 #define HSE_ENDPOS(he_) ((he_).entry & HENTRY_POSMASK)
@@ -80,10 +86,14 @@ typedef struct
 #define HS_COUNT_MASK			0x0FFFFFFF
 
 #define HS_ISEMPTY(hsp_)		(VARSIZE(hsp_) <= VARHDRSZ)
-#define HS_ROOT_COUNT(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))
-#define HS_ROOT_IS_HASH(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_HSTORE))
-#define HS_ROOT_IS_ARRAY(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_ARRAY))
-#define HS_ROOT_IS_SCALAR(hsp_) (HS_ISEMPTY(hsp_) ? 0 : ( *(uint32*)VARDATA(hsp_) & HS_FLAG_SCALAR))
+#define HS_ROOT_COUNT(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : \
+								 ( *(uint32*)VARDATA(hsp_) & HS_COUNT_MASK))
+#define HS_ROOT_IS_HASH(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : \
+								 ( *(uint32*)VARDATA(hsp_) & HS_FLAG_HSTORE))
+#define HS_ROOT_IS_ARRAY(hsp_) 	(HS_ISEMPTY(hsp_) ? 0 : \
+								 ( *(uint32*)VARDATA(hsp_) & HS_FLAG_ARRAY))
+#define HS_ROOT_IS_SCALAR(hsp_) (HS_ISEMPTY(hsp_) ? 0 : \
+								 ( *(uint32*)VARDATA(hsp_) & HS_FLAG_SCALAR))
 
 /* DatumGetHStoreP includes support for reading old-format hstore values */
 extern HStore *hstoreUpgrade(Datum orig);
@@ -119,7 +129,10 @@ struct HStoreValue {
 		struct {
 			int			nelems;
 			HStoreValue	*elems;
-			bool		scalar; /* scalar actually shares representation with array */
+			/*
+			 * scalar actually shares representation with array
+			 */
+			bool		scalar;
 		} array;
 
 		struct {
@@ -133,13 +146,13 @@ struct HStoreValue {
 		} binary;
 	};
 
-}; 
+};
 
 struct HStorePair {
 	HStoreValue	key;
 	HStoreValue	value;
-	uint32		order; /* to keep order of pairs with equal key */ 
-}; 
+	uint32		order; /* to keep order of pairs with equal key */
+};
 
 
 extern HStoreValue* parseHStore(const char *str, int len, bool json);
@@ -156,9 +169,10 @@ extern HStoreValue* parseHStore(const char *str, int len, bool json);
 #define WHS_BEGIN_HASH	    (0x020)
 #define WHS_END_HASH        (0x040)
 
-typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */, 
+typedef void (*walk_hstore_cb)(void* /*arg*/, HStoreValue* /* value */,
 											uint32 /* flags */, uint32 /* level */);
-extern void walkUncompressedHStore(HStoreValue *v, walk_hstore_cb cb, void *cb_arg);
+extern void walkUncompressedHStore(HStoreValue *v,
+								   walk_hstore_cb cb, void *cb_arg);
 
 extern int compareHStoreStringValue(const void *a, const void *b, void *arg);
 extern int compareHStorePair(const void *a, const void *b, void *arg);
@@ -166,10 +180,13 @@ extern int compareHStorePair(const void *a, const void *b, void *arg);
 extern int compareHStoreBinaryValue(char *a, char *b);
 extern int compareHStoreValue(HStoreValue *a, HStoreValue *b);
 
-extern HStoreValue* findUncompressedHStoreValueByValue(char *buffer, uint32 flags, 
-												uint32 *lowbound, HStoreValue* key);
-extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags, 
-												uint32 *lowbound, char *key, uint32 keylen);
+extern HStoreValue* findUncompressedHStoreValueByValue(char *buffer,
+													   uint32 flags,
+													   uint32 *lowbound,
+													   HStoreValue* key);
+extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags,
+												uint32 *lowbound,
+												char *key, uint32 keylen);
 
 extern HStoreValue* getHStoreValue(char *buffer, uint32 flags, int32 i);
 
@@ -184,7 +201,7 @@ typedef enum HStoreOutputKind {
 } HStoreOutputKind;
 
 extern char* hstoreToCString(StringInfo out, char *in,
-							 int len /* just estimation */, 
+							 int len /* just estimation */,
 							 HStoreOutputKind kind);
 extern text* HStoreValueToText(HStoreValue *v);
 
@@ -195,7 +212,8 @@ typedef struct ToHStoreState
 	struct ToHStoreState    *next;
 } ToHStoreState;
 
-extern HStoreValue* pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v);
+extern HStoreValue* pushHStoreValue(ToHStoreState **state,
+									int r /* WHS_* */, HStoreValue *v);
 extern void uniqueHStoreValue(HStoreValue *v);
 extern uint32 compressHStore(HStoreValue *v, char *buffer);
 
@@ -212,7 +230,7 @@ typedef struct HStoreIterator
 	int						i;
 
 	/*
-	 * enum members should be freely OR'ed with HS_FLAG_ARRAY/HS_FLAG_HSTORE 
+	 * enum members should be freely OR'ed with HS_FLAG_ARRAY/HS_FLAG_HSTORE
 	 * with possiblity of decoding. See optimization in HStoreIteratorGet()
 	 */
 	enum {
@@ -226,7 +244,8 @@ typedef struct HStoreIterator
 } HStoreIterator;
 
 extern 	HStoreIterator*	HStoreIteratorInit(char *buffer);
-extern	int /* WHS_* */	HStoreIteratorGet(HStoreIterator **it, HStoreValue *v, bool skipNested);
+extern	int /* WHS_* */	HStoreIteratorGet(HStoreIterator **it, HStoreValue *v,
+										  bool skipNested);
 
 #define HStoreContainsStrategyNumber	7
 #define HStoreExistsStrategyNumber		9
