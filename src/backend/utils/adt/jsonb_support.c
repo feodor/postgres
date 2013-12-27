@@ -928,7 +928,7 @@ compressJsonb(JsonbValue *v, char *buffer) {
 
 /****************************************************************************
  *                  Iteration-like forming jsonb                            * 
- *       Note: it believ by default in already sorted keys in hash,         *
+ *       Note: it believes by default in already sorted keys in hash,         *
  *     although with r == WJB_END_OBJECT and v == NULL  it will sort itself * 
  ****************************************************************************/
 static ToJsonbState*

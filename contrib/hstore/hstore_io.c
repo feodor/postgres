@@ -69,7 +69,7 @@ hstoreDump(HStoreValue *p)
 	uint32			buflen;
 	HStore	 	   *out;
 
-	if (p == NULL || (p->type == hsvArray && p->array.nelems == 0) || (p->type == hsvHash && p->hash.npairs == 0))
+	if (p == NULL)
 	{
 		buflen = 0;
 		out = palloc(VARHDRSZ);
@@ -92,7 +92,7 @@ Datum		hstore_in(PG_FUNCTION_ARGS);
 Datum
 hstore_in(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_POINTER(hstoreDump(parseJsonb(PG_GETARG_CSTRING(0), -1, false)));
+	PG_RETURN_POINTER(hstoreDump(parseHStore(PG_GETARG_CSTRING(0), -1, false)));
 }
 
 static void
@@ -1502,7 +1502,7 @@ json_to_hstore(PG_FUNCTION_ARGS)
 {
 	text	*json = PG_GETARG_TEXT_PP(0);
 
-	PG_RETURN_POINTER(hstoreDump(parseJsonb(VARDATA_ANY(json), VARSIZE_ANY_EXHDR(json), true)));
+	PG_RETURN_POINTER(hstoreDump(parseHStore(VARDATA_ANY(json), VARSIZE_ANY_EXHDR(json), true)));
 }
 
 static Oid

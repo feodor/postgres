@@ -1973,6 +1973,8 @@ DATA(insert OID = 2232 (  pg_get_function_identity_arguments	   PGNSP PGUID 12 1
 DESCR("identity argument list of a function");
 DATA(insert OID = 2165 (  pg_get_function_result	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 25 "26" _null_ _null_ _null_ _null_ pg_get_function_result _null_ _null_ _null_ ));
 DESCR("result type of a function");
+DATA(insert OID = 3808 (  pg_get_function_arg_default   PGNSP PGUID 12 1 0 0 0 f f f f t f s 2 0 25 "26 23" _null_ _null_ _null_ _null_ pg_get_function_arg_default _null_ _null_ _null_ ));
+DESCR("function argument default");
 
 DATA(insert OID = 1686 (  pg_get_keywords		PGNSP PGUID 12 10 400 0 0 f f f f t t s 0 0 2249 "" "{25,18,25}" "{o,o,o}" "{word,catcode,catdesc}" _null_ pg_get_keywords _null_ _null_ _null_ ));
 DESCR("list of SQL keywords");
@@ -4461,13 +4463,13 @@ DESCR("I/O");
 DATA(insert OID = 3774 (  regdictionarysend PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "3769" _null_ _null_ _null_ _null_ regdictionarysend _null_ _null_ _null_ ));
 DESCR("I/O");
 
-DATA(insert OID =  3806 (  jsonb_in			PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3808 "2275" _null_ _null_ _null_ _null_ jsonb_in _null_ _null_ _null_ ));
+DATA(insert OID =  3806 (  jsonb_in			PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3802 "2275" _null_ _null_ _null_ _null_ jsonb_in _null_ _null_ _null_ ));
 DESCR("I/O");
-DATA(insert OID =  3805 (  jsonb_recv		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3808 "2281" _null_ _null_ _null_ _null_ jsonb_recv _null_ _null_ _null_ ));
+DATA(insert OID =  3805 (  jsonb_recv		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3802 "2281" _null_ _null_ _null_ _null_ jsonb_recv _null_ _null_ _null_ ));
 DESCR("I/O");
-DATA(insert OID =  3804 (  jsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2275 "3808" _null_ _null_ _null_ _null_ jsonb_out _null_ _null_ _null_ ));
+DATA(insert OID =  3804 (  jsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2275 "3802" _null_ _null_ _null_ _null_ jsonb_out _null_ _null_ _null_ ));
 DESCR("I/O");
-DATA(insert OID =  3803 (  jsonb_send		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "3808" _null_ _null_ _null_ _null_	jsonb_send _null_ _null_ _null_ ));
+DATA(insert OID =  3803 (  jsonb_send		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "3802" _null_ _null_ _null_ _null_	jsonb_send _null_ _null_ _null_ ));
 DESCR("I/O");
 
 /* txid */
