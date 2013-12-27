@@ -976,13 +976,13 @@ pg_fe_sendauth(AuthRequest areq, PGconn *conn)
 
 
 /*
- * pg_fe_getauthname -- returns a pointer to dynamic space containing whatever
- *					 name the user has authenticated to the system
+ * pg_fe_getauthname
  *
- * if there is an error, return NULL with an error message in errorMessage
+ * Returns a pointer to dynamic space containing whatever name the user
+ * has authenticated to the system.  If there is an error, return NULL.
  */
 char *
-pg_fe_getauthname(PQExpBuffer errorMessage)
+pg_fe_getauthname(void)
 {
 	const char *name = NULL;
 	char	   *authn;

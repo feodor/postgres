@@ -69,6 +69,9 @@
 #if SSLEAY_VERSION_NUMBER >= 0x0907000L
 #include <openssl/conf.h>
 #endif
+#if (OPENSSL_VERSION_NUMBER >= 0x0090800fL) && !defined(OPENSSL_NO_ECDH)
+#include <openssl/ec.h>
+#endif
 #endif   /* USE_SSL */
 
 #include "libpq/libpq.h"
@@ -111,6 +114,12 @@ static bool ssl_loaded_verify_locations = false;
 
 /* GUC variable controlling SSL cipher list */
 char	   *SSLCipherSuites = NULL;
+
+/* GUC variable for default ECHD curve. */
+char	   *SSLECDHCurve;
+
+/* GUC variable: if false, prefer client ciphers */
+bool	   SSLPreferServerCiphers;
 
 /* ------------------------------------------------------------ */
 /*						 Hardcoded values						*/
@@ -464,7 +473,10 @@ wloop:
  * non-reentrant libc facilities. We also need to call send() and recv()
  * directly so it gets passed through the socket/signals layer on Win32.
  *
- * They are closely modelled on the original socket implementations in OpenSSL.
+ * These functions are closely modelled on the standard socket BIO in OpenSSL;
+ * see sock_read() and sock_write() in OpenSSL's crypto/bio/bss_sock.c.
+ * XXX OpenSSL 1.0.1e considers many more errcodes than just EINTR as reasons
+ * to retry; do we need to adopt their logic for that?
  */
 
 static bool my_bio_initialized = false;
@@ -502,6 +514,7 @@ my_sock_write(BIO *h, const char *buf, int size)
 	int			res = 0;
 
 	res = send(h->num, buf, size, 0);
+	BIO_clear_retry_flags(h);
 	if (res <= 0)
 	{
 		if (errno == EINTR)
@@ -767,6 +780,31 @@ info_cb(const SSL *ssl, int type, int args)
 	}
 }
 
+#if (OPENSSL_VERSION_NUMBER >= 0x0090800fL) && !defined(OPENSSL_NO_ECDH)
+static void
+initialize_ecdh(void)
+{
+	EC_KEY	   *ecdh;
+	int			nid;
+
+	nid = OBJ_sn2nid(SSLECDHCurve);
+	if (!nid)
+		ereport(FATAL,
+				(errmsg("ECDH: unrecognized curve name: %s", SSLECDHCurve)));
+
+	ecdh = EC_KEY_new_by_curve_name(nid);
+	if (!ecdh)
+		ereport(FATAL,
+				(errmsg("ECDH: could not create key")));
+
+	SSL_CTX_set_options(SSL_context, SSL_OP_SINGLE_ECDH_USE);
+	SSL_CTX_set_tmp_ecdh(SSL_context, ecdh);
+	EC_KEY_free(ecdh);
+}
+#else
+#define initialize_ecdh()
+#endif
+
 /*
  *	Initialize global SSL context.
  */
@@ -846,9 +884,16 @@ initialize_SSL(void)
 	SSL_CTX_set_tmp_dh_callback(SSL_context, tmp_dh_cb);
 	SSL_CTX_set_options(SSL_context, SSL_OP_SINGLE_DH_USE | SSL_OP_NO_SSLv2);
 
+	/* set up ephemeral ECDH keys */
+	initialize_ecdh();
+
 	/* set up the allowed cipher list */
 	if (SSL_CTX_set_cipher_list(SSL_context, SSLCipherSuites) != 1)
 		elog(FATAL, "could not set the cipher list (no valid ciphers available)");
+
+	/* Let server choose order */
+	if (SSLPreferServerCiphers)
+		SSL_CTX_set_options(SSL_context, SSL_OP_CIPHER_SERVER_PREFERENCE);
 
 	/*
 	 * Load CA store, so we can verify client certificates if needed.

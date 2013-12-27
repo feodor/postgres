@@ -72,8 +72,10 @@
 #include "catalog/pg_type.h"
 #include "commands/dbcommands.h"
 #include "funcapi.h"
+#include "lib/ilist.h"
 #include "miscadmin.h"
 #include "pg_trace.h"
+#include "postmaster/autovacuum.h"
 #include "storage/lmgr.h"
 #include "storage/pmsignal.h"
 #include "storage/procarray.h"
@@ -260,13 +262,15 @@ static MultiXactId *OldestVisibleMXactId;
  */
 typedef struct mXactCacheEnt
 {
-	struct mXactCacheEnt *next;
 	MultiXactId multi;
 	int			nmembers;
+	dlist_node	node;
 	MultiXactMember members[FLEXIBLE_ARRAY_MEMBER];
 } mXactCacheEnt;
 
-static mXactCacheEnt *MXactCache = NULL;
+#define MAX_CACHE_ENTRIES	256
+static dlist_head	MXactCache = DLIST_STATIC_INIT(MXactCache);
+static int			MXactCacheMembers = 0;
 static MemoryContext MXactContext = NULL;
 
 #ifdef MULTIXACT_DEBUG
@@ -285,7 +289,6 @@ static MemoryContext MXactContext = NULL;
 
 /* internal MultiXactId management */
 static void MultiXactIdSetOldestVisible(void);
-static MultiXactId CreateMultiXactId(int nmembers, MultiXactMember *members);
 static void RecordNewMultiXact(MultiXactId multi, MultiXactOffset offset,
 				   int nmembers, MultiXactMember *members);
 static MultiXactId GetNewMultiXactId(int nmembers, MultiXactOffset *offset);
@@ -332,6 +335,9 @@ MultiXactIdCreate(TransactionId xid1, MultiXactStatus status1,
 
 	Assert(!TransactionIdEquals(xid1, xid2) || (status1 != status2));
 
+	/* MultiXactIdSetOldestMember() must have been called already. */
+	Assert(MultiXactIdIsValid(OldestMemberMXactId[MyBackendId]));
+
 	/*
 	 * Note: unlike MultiXactIdExpand, we don't bother to check that both XIDs
 	 * are still running.  In typical usage, xid2 will be our own XID and the
@@ -343,7 +349,7 @@ MultiXactIdCreate(TransactionId xid1, MultiXactStatus status1,
 	members[1].xid = xid2;
 	members[1].status = status2;
 
-	newMulti = CreateMultiXactId(2, members);
+	newMulti = MultiXactIdCreateFromMembers(2, members);
 
 	debug_elog3(DEBUG2, "Create: %s",
 				mxid_to_string(newMulti, 2, members));
@@ -383,6 +389,9 @@ MultiXactIdExpand(MultiXactId multi, TransactionId xid, MultiXactStatus status)
 	AssertArg(MultiXactIdIsValid(multi));
 	AssertArg(TransactionIdIsValid(xid));
 
+	/* MultiXactIdSetOldestMember() must have been called already. */
+	Assert(MultiXactIdIsValid(OldestMemberMXactId[MyBackendId]));
+
 	debug_elog5(DEBUG2, "Expand: received multi %u, xid %u status %s",
 				multi, xid, mxstatus_to_string(status));
 
@@ -406,7 +415,7 @@ MultiXactIdExpand(MultiXactId multi, TransactionId xid, MultiXactStatus status)
 		 */
 		member.xid = xid;
 		member.status = status;
-		newMulti = CreateMultiXactId(1, &member);
+		newMulti = MultiXactIdCreateFromMembers(1, &member);
 
 		debug_elog4(DEBUG2, "Expand: %u has no members, create singleton %u",
 					multi, newMulti);
@@ -433,11 +442,14 @@ MultiXactIdExpand(MultiXactId multi, TransactionId xid, MultiXactStatus status)
 	 * Determine which of the members of the MultiXactId are still of
 	 * interest. This is any running transaction, and also any transaction
 	 * that grabbed something stronger than just a lock and was committed. (An
-	 * update that aborted is of no interest here.)
+	 * update that aborted is of no interest here; and having more than one
+	 * update Xid in a multixact would cause errors elsewhere.)
 	 *
-	 * (Removing dead members is just an optimization, but a useful one. Note
-	 * we have the same race condition here as above: j could be 0 at the end
-	 * of the loop.)
+	 * Removing dead members is not just an optimization: freezing of tuples
+	 * whose Xmax are multis depends on this behavior.
+	 *
+	 * Note we have the same race condition here as above: j could be 0 at the
+	 * end of the loop.
 	 */
 	newMembers = (MultiXactMember *)
 		palloc(sizeof(MultiXactMember) * (nmembers + 1));
@@ -455,7 +467,7 @@ MultiXactIdExpand(MultiXactId multi, TransactionId xid, MultiXactStatus status)
 
 	newMembers[j].xid = xid;
 	newMembers[j++].status = status;
-	newMulti = CreateMultiXactId(j, newMembers);
+	newMulti = MultiXactIdCreateFromMembers(j, newMembers);
 
 	pfree(members);
 	pfree(newMembers);
@@ -660,16 +672,16 @@ ReadNextMultiXactId(void)
 }
 
 /*
- * CreateMultiXactId
- *		Make a new MultiXactId
+ * MultiXactIdCreateFromMembers
+ *		Make a new MultiXactId from the specified set of members
  *
  * Make XLOG, SLRU and cache entries for a new MultiXactId, recording the
  * given TransactionIds as members.  Returns the newly created MultiXactId.
  *
  * NB: the passed members[] array will be sorted in-place.
  */
-static MultiXactId
-CreateMultiXactId(int nmembers, MultiXactMember *members)
+MultiXactId
+MultiXactIdCreateFromMembers(int nmembers, MultiXactMember *members)
 {
 	MultiXactId multi;
 	MultiXactOffset offset;
@@ -700,6 +712,13 @@ CreateMultiXactId(int nmembers, MultiXactMember *members)
 	 * Assign the MXID and offsets range to use, and make sure there is space
 	 * in the OFFSETs and MEMBERs files.  NB: this routine does
 	 * START_CRIT_SECTION().
+	 *
+	 * Note: unlike MultiXactIdCreate and MultiXactIdExpand, we do not check
+	 * that we've called MultiXactIdSetOldestMember here.  This is because
+	 * this routine is used in some places to create new MultiXactIds of which
+	 * the current backend is not a member, notably during freezing of multis
+	 * in vacuum.  During vacuum, in particular, it would be unacceptable to
+	 * keep OldestMulti set, in case it runs for long.
 	 */
 	multi = GetNewMultiXactId(nmembers, &offset);
 
@@ -756,7 +775,8 @@ CreateMultiXactId(int nmembers, MultiXactMember *members)
  * RecordNewMultiXact
  *		Write info about a new multixact into the offsets and members files
  *
- * This is broken out of CreateMultiXactId so that xlog replay can use it.
+ * This is broken out of MultiXactIdCreateFromMembers so that xlog replay can
+ * use it.
  */
 static void
 RecordNewMultiXact(MultiXactId multi, MultiXactOffset offset,
@@ -859,9 +879,6 @@ GetNewMultiXactId(int nmembers, MultiXactOffset *offset)
 	MultiXactOffset nextOffset;
 
 	debug_elog3(DEBUG2, "GetNew: for %d xids", nmembers);
-
-	/* MultiXactIdSetOldestMember() must have been called already */
-	Assert(MultiXactIdIsValid(OldestMemberMXactId[MyBackendId]));
 
 	/* safety check, we should never get this far in a HS slave */
 	if (RecoveryInProgress())
@@ -1051,7 +1068,8 @@ GetMultiXactIdMembers(MultiXactId multi, MultiXactMember **members,
 
 	debug_elog3(DEBUG2, "GetMembers: asked for %u", multi);
 
-	Assert(MultiXactIdIsValid(multi));
+	if (!MultiXactIdIsValid(multi))
+		return -1;
 
 	/* See if the MultiXactId is in the local cache */
 	length = mXactCacheGetById(multi, members);
@@ -1257,6 +1275,39 @@ retry:
 }
 
 /*
+ * MultiXactHasRunningRemoteMembers
+ * 		Does the given multixact have still-live members from
+ * 		transactions other than our own?
+ */
+bool
+MultiXactHasRunningRemoteMembers(MultiXactId multi)
+{
+	MultiXactMember *members;
+	int			nmembers;
+	int			i;
+
+	nmembers = GetMultiXactIdMembers(multi, &members, true);
+	if (nmembers <= 0)
+		return false;
+
+	for (i = 0; i < nmembers; i++)
+	{
+		/* not interested in our own members */
+		if (TransactionIdIsCurrentTransactionId(members[i].xid))
+			continue;
+
+		if (TransactionIdIsInProgress(members[i].xid))
+		{
+			pfree(members);
+			return true;
+		}
+	}
+
+	pfree(members);
+	return false;
+}
+
+/*
  * mxactMemberComparator
  *		qsort comparison function for MultiXactMember
  *
@@ -1296,7 +1347,7 @@ mxactMemberComparator(const void *arg1, const void *arg2)
 static MultiXactId
 mXactCacheGetBySet(int nmembers, MultiXactMember *members)
 {
-	mXactCacheEnt *entry;
+	dlist_iter	iter;
 
 	debug_elog3(DEBUG2, "CacheGet: looking for %s",
 				mxid_to_string(InvalidMultiXactId, nmembers, members));
@@ -1304,8 +1355,10 @@ mXactCacheGetBySet(int nmembers, MultiXactMember *members)
 	/* sort the array so comparison is easy */
 	qsort(members, nmembers, sizeof(MultiXactMember), mxactMemberComparator);
 
-	for (entry = MXactCache; entry != NULL; entry = entry->next)
+	dlist_foreach(iter, &MXactCache)
 	{
+		mXactCacheEnt *entry = dlist_container(mXactCacheEnt, node, iter.cur);
+
 		if (entry->nmembers != nmembers)
 			continue;
 
@@ -1316,6 +1369,7 @@ mXactCacheGetBySet(int nmembers, MultiXactMember *members)
 		if (memcmp(members, entry->members, nmembers * sizeof(MultiXactMember)) == 0)
 		{
 			debug_elog3(DEBUG2, "CacheGet: found %u", entry->multi);
+			dlist_move_head(&MXactCache, iter.cur);
 			return entry->multi;
 		}
 	}
@@ -1335,12 +1389,14 @@ mXactCacheGetBySet(int nmembers, MultiXactMember *members)
 static int
 mXactCacheGetById(MultiXactId multi, MultiXactMember **members)
 {
-	mXactCacheEnt *entry;
+	dlist_iter	iter;
 
 	debug_elog3(DEBUG2, "CacheGet: looking for %u", multi);
 
-	for (entry = MXactCache; entry != NULL; entry = entry->next)
+	dlist_foreach(iter, &MXactCache)
 	{
+		mXactCacheEnt *entry = dlist_container(mXactCacheEnt, node, iter.cur);
+
 		if (entry->multi == multi)
 		{
 			MultiXactMember *ptr;
@@ -1356,6 +1412,14 @@ mXactCacheGetById(MultiXactId multi, MultiXactMember **members)
 						mxid_to_string(multi,
 									   entry->nmembers,
 									   entry->members));
+
+			/*
+			 * Note we modify the list while not using a modifiable iterator.
+			 * This is acceptable only because we exit the iteration
+			 * immediately afterwards.
+			 */
+			dlist_move_head(&MXactCache, iter.cur);
+
 			return entry->nmembers;
 		}
 	}
@@ -1399,8 +1463,22 @@ mXactCachePut(MultiXactId multi, int nmembers, MultiXactMember *members)
 	/* mXactCacheGetBySet assumes the entries are sorted, so sort them */
 	qsort(entry->members, nmembers, sizeof(MultiXactMember), mxactMemberComparator);
 
-	entry->next = MXactCache;
-	MXactCache = entry;
+	dlist_push_head(&MXactCache, &entry->node);
+	if (MXactCacheMembers++ >= MAX_CACHE_ENTRIES)
+	{
+		dlist_node *node;
+		mXactCacheEnt *entry;
+
+		node = dlist_tail_node(&MXactCache);
+		dlist_delete(node);
+		MXactCacheMembers--;
+
+		entry = dlist_container(mXactCacheEnt, node, node);
+		debug_elog3(DEBUG2, "CachePut: pruning cached multi %u",
+					entry->multi);
+
+		pfree(entry);
+	}
 }
 
 static char *
@@ -1475,7 +1553,8 @@ AtEOXact_MultiXact(void)
 	 * a child of TopTransactionContext, we needn't delete it explicitly.
 	 */
 	MXactContext = NULL;
-	MXactCache = NULL;
+	dlist_init(&MXactCache);
+	MXactCacheMembers = 0;
 }
 
 /*
@@ -1541,7 +1620,8 @@ PostPrepare_MultiXact(TransactionId xid)
 	 * Discard the local MultiXactId cache like in AtEOX_MultiXact
 	 */
 	MXactContext = NULL;
-	MXactCache = NULL;
+	dlist_init(&MXactCache);
+	MXactCacheMembers = 0;
 }
 
 /*
@@ -1767,14 +1847,37 @@ MaybeExtendOffsetSlru(void)
  *
  * StartupXLOG has already established nextMXact/nextOffset by calling
  * MultiXactSetNextMXact and/or MultiXactAdvanceNextMXact, and the oldestMulti
- * info from pg_control and/or MultiXactAdvanceOldest.	Note that we may
- * already have replayed WAL data into the SLRU files.
- *
- * We don't need any locks here, really; the SLRU locks are taken
- * only because slru.c expects to be called with locks held.
+ * info from pg_control and/or MultiXactAdvanceOldest, but we haven't yet
+ * replayed WAL.
  */
 void
 StartupMultiXact(void)
+{
+	MultiXactId multi = MultiXactState->nextMXact;
+	MultiXactOffset offset = MultiXactState->nextOffset;
+	int			pageno;
+
+	/*
+	 * Initialize offset's idea of the latest page number.
+	 */
+	pageno = MultiXactIdToOffsetPage(multi);
+	MultiXactOffsetCtl->shared->latest_page_number = pageno;
+
+	/*
+	 * Initialize member's idea of the latest page number.
+	 */
+	pageno = MXOffsetToMemberPage(offset);
+	MultiXactMemberCtl->shared->latest_page_number = pageno;
+}
+
+/*
+ * This must be called ONCE at the end of startup/recovery.
+ *
+ * We don't need any locks here, really; the SLRU locks are taken only because
+ * slru.c expects to be called with locks held.
+ */
+void
+TrimMultiXact(void)
 {
 	MultiXactId multi = MultiXactState->nextMXact;
 	MultiXactOffset offset = MultiXactState->nextOffset;
@@ -1784,7 +1887,9 @@ StartupMultiXact(void)
 
 	/*
 	 * During a binary upgrade, make sure that the offsets SLRU is large
-	 * enough to contain the next value that would be created.
+	 * enough to contain the next value that would be created. It's fine to do
+	 * this here and not in StartupMultiXact() since binary upgrades should
+	 * never need crash recovery.
 	 */
 	if (IsBinaryUpgrade)
 		MaybeExtendOffsetSlru();
@@ -1793,7 +1898,7 @@ StartupMultiXact(void)
 	LWLockAcquire(MultiXactOffsetControlLock, LW_EXCLUSIVE);
 
 	/*
-	 * Initialize our idea of the latest page number.
+	 * (Re-)Initialize our idea of the latest page number.
 	 */
 	pageno = MultiXactIdToOffsetPage(multi);
 	MultiXactOffsetCtl->shared->latest_page_number = pageno;
@@ -1823,7 +1928,7 @@ StartupMultiXact(void)
 	LWLockAcquire(MultiXactMemberControlLock, LW_EXCLUSIVE);
 
 	/*
-	 * Initialize our idea of the latest page number.
+	 * (Re-)Initialize our idea of the latest page number.
 	 */
 	pageno = MXOffsetToMemberPage(offset);
 	MultiXactMemberCtl->shared->latest_page_number = pageno;
@@ -1958,6 +2063,10 @@ SetMultiXactIdLimit(MultiXactId oldest_datminmxid, Oid oldest_datoid)
 	/*
 	 * We'll refuse to continue assigning MultiXactIds once we get within 100
 	 * multi of data loss.
+	 *
+	 * Note: This differs from the magic number used in
+	 * SetTransactionIdLimit() since vacuum itself will never generate new
+	 * multis.
 	 */
 	multiStopLimit = multiWrapLimit - 100;
 	if (multiStopLimit < FirstMultiXactId)
@@ -1979,9 +2088,12 @@ SetMultiXactIdLimit(MultiXactId oldest_datminmxid, Oid oldest_datoid)
 
 	/*
 	 * We'll start trying to force autovacuums when oldest_datminmxid gets to
-	 * be more than 200 million transactions old.
+	 * be more than autovacuum_freeze_max_age mxids old.
+	 *
+	 * It's a bit ugly to just reuse limits for xids that way, but it doesn't
+	 * seem worth adding separate GUCs for that purpose.
 	 */
-	multiVacLimit = oldest_datminmxid + 200000000;
+	multiVacLimit = oldest_datminmxid + autovacuum_freeze_max_age;
 	if (multiVacLimit < FirstMultiXactId)
 		multiVacLimit += FirstMultiXactId;
 
@@ -2250,9 +2362,15 @@ SlruScanDirCbFindEarliest(SlruCtl ctl, char *filename, int segpage, void *data)
  * Remove all MultiXactOffset and MultiXactMember segments before the oldest
  * ones still of interest.
  *
- * This is called by vacuum after it has successfully advanced a database's
- * datminmxid value; the cutoff value we're passed is the minimum of all
- * databases' datminmxid values.
+ * On a primary, this is called by vacuum after it has successfully advanced a
+ * database's datminmxid value; the cutoff value we're passed is the minimum of
+ * all databases' datminmxid values.
+ *
+ * During crash recovery, it's called from CreateRestartPoint() instead.  We
+ * rely on the fact that xlog_redo() will already have called
+ * MultiXactAdvanceOldest().  Our latest_page_number will already have been
+ * initialized by StartupMultiXact() and kept up to date as new pages are
+ * zeroed.
  */
 void
 TruncateMultiXact(MultiXactId oldestMXact)
@@ -2365,6 +2483,21 @@ MultiXactIdPrecedes(MultiXactId multi1, MultiXactId multi2)
 
 	return (diff < 0);
 }
+
+/*
+ * MultiXactIdPrecedesOrEquals -- is multi1 logically <= multi2?
+ *
+ * XXX do we need to do something special for InvalidMultiXactId?
+ * (Doesn't look like it.)
+ */
+bool
+MultiXactIdPrecedesOrEquals(MultiXactId multi1, MultiXactId multi2)
+{
+	int32		diff = (int32) (multi1 - multi2);
+
+	return (diff <= 0);
+}
+
 
 /*
  * Decide which of two offsets is earlier.

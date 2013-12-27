@@ -110,7 +110,7 @@ CheckRelationOwnership(RangeVar *rel, bool noCatalogs)
 	if (noCatalogs)
 	{
 		if (!allowSystemTableMods &&
-			IsSystemClass((Form_pg_class) GETSTRUCT(tuple)))
+			IsSystemClass(relOid, (Form_pg_class) GETSTRUCT(tuple)))
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permission denied: \"%s\" is a system catalog",
@@ -685,6 +685,11 @@ standard_ProcessUtility(Node *parsetree,
 
 		case T_ExplainStmt:
 			ExplainQuery((ExplainStmt *) parsetree, queryString, params, dest);
+			break;
+
+		case T_AlterSystemStmt:
+			PreventTransactionChain(isTopLevel, "ALTER SYSTEM");
+			AlterSystemSetConfigFile((AlterSystemStmt *) parsetree);
 			break;
 
 		case T_VariableSetStmt:
@@ -2157,6 +2162,10 @@ CreateCommandTag(Node *parsetree)
 			tag = "REFRESH MATERIALIZED VIEW";
 			break;
 
+		case T_AlterSystemStmt:
+			tag = "ALTER SYSTEM";
+			break;
+
 		case T_VariableSetStmt:
 			switch (((VariableSetStmt *) parsetree)->kind)
 			{
@@ -2724,6 +2733,10 @@ GetCommandLogLevel(Node *parsetree)
 
 		case T_RefreshMatViewStmt:
 			lev = LOGSTMT_DDL;
+			break;
+
+		case T_AlterSystemStmt:
+			lev = LOGSTMT_ALL;
 			break;
 
 		case T_VariableSetStmt:

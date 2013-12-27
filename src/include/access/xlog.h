@@ -189,6 +189,7 @@ extern bool XLogArchiveMode;
 extern char *XLogArchiveCommand;
 extern bool EnableHotStandby;
 extern bool fullPageWrites;
+extern bool walLogHints;
 extern bool log_checkpoints;
 extern int	num_xloginsert_slots;
 
@@ -197,7 +198,8 @@ typedef enum WalLevel
 {
 	WAL_LEVEL_MINIMAL = 0,
 	WAL_LEVEL_ARCHIVE,
-	WAL_LEVEL_HOT_STANDBY
+	WAL_LEVEL_HOT_STANDBY,
+	WAL_LEVEL_LOGICAL
 } WalLevel;
 extern int	wal_level;
 
@@ -210,8 +212,22 @@ extern int	wal_level;
  */
 #define XLogIsNeeded() (wal_level >= WAL_LEVEL_ARCHIVE)
 
-/* Do we need to WAL-log information required only for Hot Standby? */
+/*
+ * Is a full-page image needed for hint bit updates?
+ *
+ * Normally, we don't WAL-log hint bit updates, but if checksums are enabled,
+ * we have to protect them against torn page writes.  When you only set
+ * individual bits on a page, it's still consistent no matter what combination
+ * of the bits make it to disk, but the checksum wouldn't match.  Also WAL-log
+ * them if forced by wal_log_hints=on.
+ */
+#define XLogHintBitIsNeeded() (DataChecksumsEnabled() || walLogHints)
+
+/* Do we need to WAL-log information required only for Hot Standby and logical replication? */
 #define XLogStandbyInfoActive() (wal_level >= WAL_LEVEL_HOT_STANDBY)
+
+/* Do we need to WAL-log information required only for logical replication? */
+#define XLogLogicalInfoActive() (wal_level >= WAL_LEVEL_LOGICAL)
 
 #ifdef WAL_DEBUG
 extern bool XLOG_DEBUG;

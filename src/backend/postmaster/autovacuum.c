@@ -110,6 +110,7 @@
  */
 bool		autovacuum_start_daemon = false;
 int			autovacuum_max_workers;
+int			autovacuum_work_mem = -1;
 int			autovacuum_naptime;
 int			autovacuum_vac_thresh;
 double		autovacuum_vac_scale;
@@ -493,9 +494,8 @@ AutoVacLauncherMain(int argc, char *argv[])
 		HOLD_INTERRUPTS();
 
 		/* Forget any pending QueryCancel or timeout request */
-		QueryCancelPending = false;
 		disable_all_timeouts(false);
-		QueryCancelPending = false;		/* again in case timeout occurred */
+		QueryCancelPending = false;		/* second to avoid race condition */
 
 		/* Report the error to the server log */
 		EmitErrorReport();
