@@ -155,7 +155,7 @@ recvHStore(StringInfo buf, HStoreValue *v, uint32 level, uint32 header)
 				v->size += v->hash.pairs[i].key.size + v->hash.pairs[i].value.size;
 			}
 
-			ORDER_PAIRS(v->hash.pairs, v->hash.npairs, v->size -= ptr->key.size + ptr->value.size);
+			uniqueHStoreValue(v);
 		}
 	}
 	else if (hentry == HENTRY_ISARRAY || hentry == HENTRY_ISCALAR)
@@ -551,7 +551,7 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	ORDER_PAIRS(v.hash.pairs, v.hash.npairs, v.size -= ptr->key.size + ptr->value.size);
+	uniqueHStoreValue(&v);
 
 
 	PG_RETURN_POINTER(hstoreDump(&v));
@@ -639,7 +639,7 @@ hstore_from_array(PG_FUNCTION_ARGS)
 		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	ORDER_PAIRS(v.hash.pairs, v.hash.npairs, v.size -= ptr->key.size + ptr->value.size);
+	uniqueHStoreValue(&v);
 
 	PG_RETURN_POINTER(hstoreDump(&v));
 }
@@ -825,7 +825,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	ORDER_PAIRS(v.hash.pairs, v.hash.npairs, v.size -= ptr->key.size + ptr->value.size);
+	uniqueHStoreValue(&v);
 
 	out = hstoreDump(&v);
 
@@ -1784,4 +1784,6 @@ _PG_init(void)
 		NULL,
 		NULL
 	);
+
+	EmitWarningsOnPlaceholders("hstore");
 }

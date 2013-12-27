@@ -71,8 +71,14 @@ makeHStoreValueString(HStoreValue* v, string *s)
 static HStoreValue*
 makeHStoreValueNumeric(string *s)
 {
-	Numeric 	n = NULL;
-	HStoreValue	*v;
+	Numeric 		n = NULL;
+	HStoreValue		*v;
+	MemoryContext 	ccxt = CurrentMemoryContext;
+
+	/*
+	 * ignore ERRCODE_INVALID_TEXT_REPRESENTATION in parse: our
+	 * test stringIsNumber could be not agree with numeric_in
+	 */
 
 	PG_TRY();
 	{
@@ -80,7 +86,21 @@ makeHStoreValueNumeric(string *s)
 	}
 	PG_CATCH();
 	{
-		n = NULL;
+		ErrorData  		*errdata;
+		MemoryContext	ecxt;
+
+		ecxt = MemoryContextSwitchTo(ccxt);
+		errdata = CopyErrorData();
+		if (errdata->sqlerrcode == ERRCODE_INVALID_TEXT_REPRESENTATION)
+		{
+			FlushErrorState();
+			n = NULL;
+		}
+		else
+		{
+			MemoryContextSwitchTo(ecxt);
+			PG_RE_THROW();
+		}
 	}
 	PG_END_TRY();
 
@@ -175,7 +195,7 @@ makeHStoreValuePairs(List *list)
 				elog(ERROR, "hstore is too long");
 		}
 
-		ORDER_PAIRS(v->hash.pairs, v->hash.npairs, v->size -= ptr->key.size + ptr->value.size);
+		uniqueHStoreValue(v);
 	}
 	else
 	{

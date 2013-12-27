@@ -175,6 +175,47 @@ compareHStoreBinaryValue(char *a, char *b)
 	return res;
 }
 
+/*
+ * Sort and unique pairs in hash-like HStoreValue
+ */
+void
+uniqueHStoreValue(HStoreValue *v)
+{
+	bool	hasNonUniq = false;
+
+	Assert(v->type == hsvHash);
+
+	if (v->hash.npairs > 1)
+		qsort_arg(v->hash.pairs, v->hash.npairs, sizeof(*v->hash.pairs),
+				  compareHStorePair, &hasNonUniq);
+
+	if (hasNonUniq)
+	{
+		HStorePair  *ptr = v->hash.pairs + 1,
+					*res = v->hash.pairs;
+
+		while(ptr - v->hash.pairs < v->hash.npairs)
+		{
+			if (ptr->key.string.len == res->key.string.len &&
+				memcmp(ptr->key.string.val, res->key.string.val,
+					   ptr->key.string.len) == 0)
+			{
+				v->size -= ptr->key.size + ptr->value.size;
+			}
+			else
+			{
+				res++;
+				if (ptr != res)
+					memcpy(res, ptr, sizeof(*res));
+			}
+			ptr++;
+		}
+
+		v->hash.npairs = res + 1 - v->hash.pairs;
+	}
+}
+
+
 /****************************************************************************
  *                         find string key in hash or array                 * 
  ****************************************************************************/
@@ -1027,7 +1068,7 @@ pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v) {
 		case WHS_END_HASH:
 			h = &(*state)->v;
 			if (v == NULL)
-				ORDER_PAIRS(h->hash.pairs, h->hash.npairs, (void)0);
+				uniqueHStoreValue(h);
 		case WHS_END_ARRAY:
 			h = &(*state)->v;
 			*state = (*state)->next;

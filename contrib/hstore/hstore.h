@@ -186,7 +186,7 @@ typedef enum HStoreOutputKind {
 extern char* hstoreToCString(StringInfo out, char *in,
 							 int len /* just estimation */, 
 							 HStoreOutputKind kind);
-text* HStoreValueToText(HStoreValue *v);
+extern text* HStoreValueToText(HStoreValue *v);
 
 typedef struct ToHStoreState
 {
@@ -196,42 +196,8 @@ typedef struct ToHStoreState
 } ToHStoreState;
 
 extern HStoreValue* pushHStoreValue(ToHStoreState **state, int r /* WHS_* */, HStoreValue *v);
-
-/* be aware: size effects for n argument */
-#define ORDER_PAIRS(a, n, delaction)												\
-	do {																			\
-		bool	hasNonUniq = false;													\
-																					\
-		if ((n) > 1)																\
-			qsort_arg((a), (n), sizeof(HStorePair), compareHStorePair, &hasNonUniq);\
-																					\
-		if (hasNonUniq)																\
-		{																			\
-			HStorePair	*ptr = (a) + 1,												\
-						*res = (a);													\
-																					\
-			while (ptr - (a) < (n))													\
-			{																		\
-				if (ptr->key.string.len == res->key.string.len && 					\
-					memcmp(ptr->key.string.val, res->key.string.val,				\
-						   ptr->key.string.len) == 0)								\
-				{																	\
-					delaction;														\
-				}																	\
-				else																\
-				{																	\
-					res++;															\
-					if (ptr != res)													\
-						memcpy(res, ptr, sizeof(*res));								\
-				}																	\
-				ptr++;																\
-			}																		\
-																					\
-			(n) = res + 1 - (a);													\
-		}																			\
-	} while(0)																		
-
-uint32 compressHStore(HStoreValue *v, char *buffer);
+extern void uniqueHStoreValue(HStoreValue *v);
+extern uint32 compressHStore(HStoreValue *v, char *buffer);
 
 
 typedef struct HStoreIterator
