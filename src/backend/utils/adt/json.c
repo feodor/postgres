@@ -26,6 +26,7 @@
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
 #include "utils/json.h"
+#include "utils/jsonb.h"
 #include "utils/jsonapi.h"
 #include "utils/typcache.h"
 #include "utils/syscache.h"
@@ -1796,11 +1797,27 @@ escape_json(StringInfo buf, const char *str)
 Datum
 json_typeof(PG_FUNCTION_ARGS)
 {
-	text	   *json = PG_GETARG_TEXT_P(0);
+	Oid			val_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	text	   *json;
 
-	JsonLexContext *lex = makeJsonLexContext(json, false);
+	JsonLexContext *lex;
 	JsonTokenType tok;
 	char *type;
+
+	Assert(val_type == JSONOID || val_type == JSONBOID);
+	if (val_type == JSONOID)
+	{
+		/* just get the text */
+		json = PG_GETARG_TEXT_P(0);
+	}
+	else
+	{
+		Jsonb      *jb = PG_GETARG_JSONB(0);
+
+		json = cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb)));
+	}
+
+	lex = makeJsonLexContext(json, false);
 
 	/* Lex exactly one token from the input and check its type. */
 	json_lex(lex);
@@ -1831,4 +1848,10 @@ json_typeof(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_TEXT_P(cstring_to_text(type));
+}
+
+Datum
+jsonb_typeof(PG_FUNCTION_ARGS)
+{
+	return json_typeof(fcinfo);
 }

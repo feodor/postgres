@@ -341,8 +341,8 @@ putEscapedValue(StringInfo out, JsonbValue *v)
 	 }
 }
 
-static char*
-JsonbToCString(StringInfo out, char *in, int len /* just estimation */)
+char*
+JsonbToCString(StringInfo out, char *in, int estimated_len)
 {
 	 bool			first = true;
 	 JsonbIterator  *it;
@@ -359,7 +359,7 @@ JsonbToCString(StringInfo out, char *in, int len /* just estimation */)
 		  return out->data;
 	 }
 
-	 enlargeStringInfo(out, (len >= 0) ? len : 64);
+	 enlargeStringInfo(out, (estimated_len >= 0) ? estimated_len : 64);
 
 	 it = JsonbIteratorInit(in);
 
