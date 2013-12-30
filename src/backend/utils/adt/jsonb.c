@@ -558,8 +558,7 @@ jsonb_typeof(PG_FUNCTION_ARGS)
 			 result = "number";
 			 break;
 		 default:
-			 result = "odd";
-			 elog(NOTICE, "Wrong type: %u", v.type);
+			 elog(ERROR, "Wrong jsonb scalar type: %u", v.type);
 		 }
 	 }
 	 
