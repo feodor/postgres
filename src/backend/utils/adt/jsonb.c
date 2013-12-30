@@ -518,3 +518,50 @@ jsonb_send(PG_FUNCTION_ARGS)
 
 	 PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
+
+Datum
+jsonb_typeof(PG_FUNCTION_ARGS)
+{
+	 Jsonb			 *in = PG_GETARG_JSONB(0);
+	 JsonbIterator   *it;
+	 int			  type;
+	 JsonbValue	      v;
+	 char            *result;
+
+	 if (JB_ROOT_IS_OBJECT(in))
+		 result = "object";
+	 else if (JB_ROOT_IS_ARRAY(in) && ! JB_ROOT_IS_SCALAR(in))
+		 result = "array";
+	 else
+	 {
+		 Assert(JB_ROOT_IS_SCALAR(in));
+
+		 it = JsonbIteratorInit(VARDATA_ANY(in));
+		 /* 
+		  * a root scalar is stored as an array of one element, 
+		  * so we get the array and then its first (and only) member.
+		  */
+		 type = JsonbIteratorGet(&it, &v, true);
+		 type = JsonbIteratorGet(&it, &v, true);
+		 switch(v.type)
+		 {
+		 case jbvNull:
+			 result = "null";
+			 break;
+		 case jbvString:
+			 result = "string";
+			 break;
+		 case jbvBool:
+			 result = "boolean";
+			 break;
+		 case jbvNumeric:
+			 result = "number";
+			 break;
+		 default:
+			 result = "odd";
+			 elog(NOTICE, "Wrong type: %u", v.type);
+		 }
+	 }
+	 
+	PG_RETURN_TEXT_P(cstring_to_text(result));		 
+}
