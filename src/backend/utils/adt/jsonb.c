@@ -524,7 +524,6 @@ jsonb_typeof(PG_FUNCTION_ARGS)
 {
 	 Jsonb			 *in = PG_GETARG_JSONB(0);
 	 JsonbIterator   *it;
-	 int			  type;
 	 JsonbValue	      v;
 	 char            *result;
 
@@ -541,8 +540,8 @@ jsonb_typeof(PG_FUNCTION_ARGS)
 		  * a root scalar is stored as an array of one element, 
 		  * so we get the array and then its first (and only) member.
 		  */
-		 type = JsonbIteratorGet(&it, &v, true);
-		 type = JsonbIteratorGet(&it, &v, true);
+		 (void) JsonbIteratorGet(&it, &v, true);
+		 (void) JsonbIteratorGet(&it, &v, true);
 		 switch(v.type)
 		 {
 		 case jbvNull:

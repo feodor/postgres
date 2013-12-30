@@ -221,7 +221,7 @@ typedef struct PopulateRecordsetState
  *
  * This SRF operates in value-per-call mode. It processes the
  * object during the first call, and the keys are simply stashed
- * in an array, whise size is expanded as necessary. This is probably
+ * in an array, whose size is expanded as necessary. This is probably
  * safe enough for a list of keys of a single object, since they are
  * limited in size to NAMEDATALEN and the number of keys is unlikely to
  * be so huge that it has major memory implications.
@@ -230,7 +230,75 @@ typedef struct PopulateRecordsetState
 Datum
 jsonb_object_keys(PG_FUNCTION_ARGS)
 {
-	return json_object_keys(fcinfo);
+	FuncCallContext *funcctx;
+	OkeysState *state;
+	int			i;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext    oldcontext;
+		Jsonb           *jb = PG_GETARG_JSONB(0);
+		bool             skipNested = false;
+		JsonbIterator   *it;
+		JsonbValue	     v;
+		int              r = 0;
+
+	 
+		if (JB_ROOT_IS_SCALAR(jb))
+			elog(ERROR,"Cannot call jsonb_object_keys on a scalar");
+		else if (JB_ROOT_IS_ARRAY(jb))
+			elog(ERROR,"Cannot call jsonb_object_keys on an array");
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		state = palloc(sizeof(OkeysState));
+
+		state->result_size = JB_ROOT_COUNT(jb);
+		state->result_count = 0;
+		state->sent_count = 0;
+		state->result = palloc(state->result_size * sizeof(char *));
+
+		it = JsonbIteratorInit(VARDATA_ANY(jb));
+
+		while((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+		{
+			skipNested = true;
+			
+			if (r == WJB_KEY)
+			{
+				char * cstr;
+
+				cstr = palloc(v.string.len+1 * sizeof(char));
+				memcpy(cstr,v.string.val, v.string.len);
+				cstr[v.string.len] = '\0';
+				state->result[state->result_count++] = cstr;
+			}
+		}
+
+
+		MemoryContextSwitchTo(oldcontext);
+		funcctx->user_fctx = (void *) state;
+
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	state = (OkeysState *) funcctx->user_fctx;
+
+	if (state->sent_count < state->result_count)
+	{
+		char	   *nxt = state->result[state->sent_count++];
+
+		SRF_RETURN_NEXT(funcctx, CStringGetTextDatum(nxt));
+	}
+
+	/* cleanup to reduce or eliminate memory leaks */
+	for (i = 0; i < state->result_count; i++)
+		pfree(state->result[i]);
+	pfree(state->result);
+	pfree(state);
+
+	SRF_RETURN_DONE(funcctx);
 }
 
 
