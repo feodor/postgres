@@ -3,7 +3,7 @@
  * allpaths.c
  *	  Routines to find possible search paths for processing a query
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -362,17 +362,6 @@ set_plain_rel_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Mark rel with estimated output rows, width, etc */
 	set_baserel_size_estimates(root, rel);
-
-	/*
-	 * Check to see if we can extract any restriction conditions from join
-	 * quals that are OR-of-AND structures.  If so, add them to the rel's
-	 * restriction list, and redo the above steps.
-	 */
-	if (create_or_index_quals(root, rel))
-	{
-		check_partial_indexes(root, rel);
-		set_baserel_size_estimates(root, rel);
-	}
 }
 
 /*
