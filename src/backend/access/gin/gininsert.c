@@ -4,7 +4,7 @@
  *	  insert routines for the postgres inverted index access method.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -163,9 +163,12 @@ ginEntryInsert(GinState *ginstate,
 			   GinStatsData *buildStats)
 {
 	GinBtreeData btree;
+	GinBtreeEntryInsertData insertdata;
 	GinBtreeStack *stack;
 	IndexTuple	itup;
 	Page		page;
+
+	insertdata.isDelete = FALSE;
 
 	/* During index build, count the to-be-inserted entry */
 	if (buildStats)
@@ -173,7 +176,7 @@ ginEntryInsert(GinState *ginstate,
 
 	ginPrepareEntryScan(&btree, attnum, key, category, ginstate);
 
-	stack = ginFindLeafPage(&btree, GIN_ROOT_BLKNO, false);
+	stack = ginFindLeafPage(&btree, false);
 	page = BufferGetPage(stack->buffer);
 
 	if (btree.findItem(&btree, stack))
@@ -201,7 +204,7 @@ ginEntryInsert(GinState *ginstate,
 		itup = addItemPointersToLeafTuple(ginstate, itup,
 										  items, nitem, buildStats);
 
-		btree.isDelete = TRUE;
+		insertdata.isDelete = TRUE;
 	}
 	else
 	{
@@ -211,8 +214,8 @@ ginEntryInsert(GinState *ginstate,
 	}
 
 	/* Insert the new or modified leaf tuple */
-	btree.entry = itup;
-	ginInsertValue(&btree, stack, buildStats);
+	insertdata.entry = itup;
+	ginInsertValue(&btree, stack, &insertdata, buildStats);
 	pfree(itup);
 }
 
@@ -432,10 +435,10 @@ ginbuildempty(PG_FUNCTION_ARGS)
 	START_CRIT_SECTION();
 	GinInitMetabuffer(MetaBuffer);
 	MarkBufferDirty(MetaBuffer);
-	log_newpage_buffer(MetaBuffer);
+	log_newpage_buffer(MetaBuffer, false);
 	GinInitBuffer(RootBuffer, GIN_LEAF);
 	MarkBufferDirty(RootBuffer);
-	log_newpage_buffer(RootBuffer);
+	log_newpage_buffer(RootBuffer, false);
 	END_CRIT_SECTION();
 
 	/* Unlock and release the buffers. */

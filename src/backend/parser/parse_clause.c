@@ -3,7 +3,7 @@
  * parse_clause.c
  *	  handle clauses in parser
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -75,9 +75,6 @@ static TargetEntry *findTargetlistEntrySQL99(ParseState *pstate, Node *node,
 						 List **tlist, ParseExprKind exprKind);
 static int get_matching_location(int sortgroupref,
 					  List *sortgrouprefs, List *exprs);
-static List *addTargetToSortList(ParseState *pstate, TargetEntry *tle,
-					List *sortlist, List *targetlist, SortBy *sortby,
-					bool resolveUnknown);
 static List *addTargetToGroupList(ParseState *pstate, TargetEntry *tle,
 					 List *grouplist, List *targetlist, int location,
 					 bool resolveUnknown);
@@ -207,6 +204,10 @@ setTargetTable(ParseState *pstate, RangeVar *relation,
 
 	/*
 	 * If UPDATE/DELETE, add table to joinlist and namespace.
+	 *
+	 * Note: some callers know that they can find the new ParseNamespaceItem
+	 * at the end of the pstate->p_namespace list.  This is a bit ugly but not
+	 * worth complicating this function's signature for.
 	 */
 	if (alsoSource)
 		addRTEtoQuery(pstate, rte, true, true, true);
@@ -655,25 +656,25 @@ transformRangeFunction(ParseState *pstate, RangeFunction *r)
 	 * expansion) and no WITH ORDINALITY.  The reason for the latter
 	 * restriction is that it's not real clear whether the ordinality column
 	 * should be in the coldeflist, and users are too likely to make mistakes
-	 * in one direction or the other.  Putting the coldeflist inside TABLE()
-	 * is much clearer in this case.
+	 * in one direction or the other.  Putting the coldeflist inside ROWS
+	 * FROM() is much clearer in this case.
 	 */
 	if (r->coldeflist)
 	{
 		if (list_length(funcexprs) != 1)
 		{
-			if (r->is_table)
+			if (r->is_rowsfrom)
 				ereport(ERROR,
 						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("TABLE() with multiple functions cannot have a column definition list"),
-						 errhint("Put a separate column definition list for each function inside TABLE()."),
+						 errmsg("ROWS FROM() with multiple functions cannot have a column definition list"),
+						 errhint("Put a separate column definition list for each function inside ROWS FROM()."),
 						 parser_errposition(pstate,
 									 exprLocation((Node *) r->coldeflist))));
 			else
 				ereport(ERROR,
 						(errcode(ERRCODE_SYNTAX_ERROR),
 						 errmsg("UNNEST() with multiple arguments cannot have a column definition list"),
-						 errhint("Use separate UNNEST() calls inside TABLE(), and attach a column definition list to each one."),
+						 errhint("Use separate UNNEST() calls inside ROWS FROM(), and attach a column definition list to each one."),
 						 parser_errposition(pstate,
 									 exprLocation((Node *) r->coldeflist))));
 		}
@@ -681,7 +682,7 @@ transformRangeFunction(ParseState *pstate, RangeFunction *r)
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("WITH ORDINALITY cannot be used with a column definition list"),
-				   errhint("Put the column definition list inside TABLE()."),
+				   errhint("Put the column definition list inside ROWS FROM()."),
 					 parser_errposition(pstate,
 									 exprLocation((Node *) r->coldeflist))));
 
@@ -2011,6 +2012,20 @@ transformDistinctClause(ParseState *pstate,
 									  true);
 	}
 
+	/*
+	 * Complain if we found nothing to make DISTINCT.  Returning an empty list
+	 * would cause the parsed Query to look like it didn't have DISTINCT, with
+	 * results that would probably surprise the user.  Note: this case is
+	 * presently impossible for aggregates because of grammar restrictions,
+	 * but we check anyway.
+	 */
+	if (result == NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				 is_agg ?
+				 errmsg("an aggregate with DISTINCT must have at least one argument") :
+				 errmsg("SELECT DISTINCT must have at least one column")));
+
 	return result;
 }
 
@@ -2115,6 +2130,11 @@ transformDistinctOnClause(ParseState *pstate, List *distinctlist,
 									  true);
 	}
 
+	/*
+	 * An empty result list is impossible here because of grammar restrictions.
+	 */
+	Assert(result != NIL);
+
 	return result;
 }
 
@@ -2158,7 +2178,7 @@ get_matching_location(int sortgroupref, List *sortgrouprefs, List *exprs)
  *
  * Returns the updated SortGroupClause list.
  */
-static List *
+List *
 addTargetToSortList(ParseState *pstate, TargetEntry *tle,
 					List *sortlist, List *targetlist, SortBy *sortby,
 					bool resolveUnknown)

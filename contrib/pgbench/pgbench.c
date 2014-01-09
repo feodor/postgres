@@ -5,7 +5,7 @@
  * Originally written by Tatsuo Ishii and enhanced by many contributors.
  *
  * contrib/pgbench/pgbench.c
- * Copyright (c) 2000-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2014, PostgreSQL Global Development Group
  * ALL RIGHTS RESERVED;
  *
  * Permission to use, copy, modify, and distribute this software and its
@@ -1720,11 +1720,11 @@ init(bool is_no_vacuum)
 			INSTR_TIME_SUBTRACT(diff, start);
 
 			elapsed_sec = INSTR_TIME_GET_DOUBLE(diff);
-			remaining_sec = (scale * naccounts - j) * elapsed_sec / j;
+			remaining_sec = ((double) scale * naccounts - j) * elapsed_sec / j;
 
 			fprintf(stderr, INT64_FORMAT " of " INT64_FORMAT " tuples (%d%%) done (elapsed %.2f s, remaining %.2f s).\n",
 					j, (int64) naccounts * scale,
-					(int) (((int64) j * 100) / (naccounts * scale)),
+					(int) (((int64) j * 100) / (naccounts * (int64) scale)),
 					elapsed_sec, remaining_sec);
 		}
 		/* let's not call the timing for each row, but only each 100 rows */
@@ -1734,14 +1734,14 @@ init(bool is_no_vacuum)
 			INSTR_TIME_SUBTRACT(diff, start);
 
 			elapsed_sec = INSTR_TIME_GET_DOUBLE(diff);
-			remaining_sec = (scale * naccounts - j) * elapsed_sec / j;
+			remaining_sec = ((double) scale * naccounts - j) * elapsed_sec / j;
 
 			/* have we reached the next interval (or end)? */
 			if ((j == scale * naccounts) || (elapsed_sec >= log_interval * LOG_STEP_SECONDS))
 			{
 				fprintf(stderr, INT64_FORMAT " of " INT64_FORMAT " tuples (%d%%) done (elapsed %.2f s, remaining %.2f s).\n",
 						j, (int64) naccounts * scale,
-						(int) (((int64) j * 100) / (naccounts * scale)), elapsed_sec, remaining_sec);
+						(int) (((int64) j * 100) / (naccounts * (int64) scale)), elapsed_sec, remaining_sec);
 
 				/* skip to the next interval */
 				log_interval = (int) ceil(elapsed_sec / LOG_STEP_SECONDS);

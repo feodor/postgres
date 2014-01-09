@@ -43,7 +43,7 @@
  * overflow.)
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -397,12 +397,13 @@ void
 errfinish(int dummy,...)
 {
 	ErrorData  *edata = &errordata[errordata_stack_depth];
-	int			elevel = edata->elevel;
+	int			elevel;
 	MemoryContext oldcontext;
 	ErrorContextCallback *econtext;
 
 	recursion_depth++;
 	CHECK_STACK_DEPTH();
+	elevel = edata->elevel;
 
 	/*
 	 * Do processing in ErrorContext, which we hope has enough reserved space

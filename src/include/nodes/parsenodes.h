@@ -10,7 +10,7 @@
  * the location.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/parsenodes.h
@@ -281,7 +281,8 @@ typedef struct CollateClause
 /*
  * FuncCall - a function or aggregate invocation
  *
- * agg_order (if not NIL) indicates we saw 'foo(... ORDER BY ...)'.
+ * agg_order (if not NIL) indicates we saw 'foo(... ORDER BY ...)', or if
+ * agg_within_group is true, it was 'foo(...) WITHIN GROUP (ORDER BY ...)'.
  * agg_star indicates we saw a 'foo(*)' construct, while agg_distinct
  * indicates we saw 'foo(DISTINCT ...)'.  In any of these cases, the
  * construct *must* be an aggregate call.  Otherwise, it might be either an
@@ -298,6 +299,7 @@ typedef struct FuncCall
 	List	   *args;			/* the arguments (list of exprs) */
 	List	   *agg_order;		/* ORDER BY (list of SortBy) */
 	Node	   *agg_filter;		/* FILTER clause, if any */
+	bool		agg_within_group;		/* ORDER BY appeared in WITHIN GROUP */
 	bool		agg_star;		/* argument was really '*' */
 	bool		agg_distinct;	/* arguments were labeled DISTINCT */
 	bool		func_variadic;	/* last argument was labeled VARIADIC */
@@ -466,11 +468,11 @@ typedef struct RangeSubselect
  * RangeFunction - function call appearing in a FROM clause
  *
  * functions is a List because we use this to represent the construct
- * TABLE(func1(...), func2(...), ...).	Each element of this list is a
+ * ROWS FROM(func1(...), func2(...), ...).	Each element of this list is a
  * two-element sublist, the first element being the untransformed function
  * call tree, and the second element being a possibly-empty list of ColumnDef
  * nodes representing any columndef list attached to that function within the
- * TABLE() syntax.
+ * ROWS FROM() syntax.
  *
  * alias and coldeflist represent any alias and/or columndef list attached
  * at the top level.  (We disallow coldeflist appearing both here and
@@ -481,7 +483,7 @@ typedef struct RangeFunction
 	NodeTag		type;
 	bool		lateral;		/* does it have LATERAL prefix? */
 	bool		ordinality;		/* does it have WITH ORDINALITY suffix? */
-	bool		is_table;		/* is result of TABLE() syntax? */
+	bool		is_rowsfrom;	/* is result of ROWS FROM() syntax? */
 	List	   *functions;		/* per-function information, see above */
 	Alias	   *alias;			/* table alias & optional column aliases */
 	List	   *coldeflist;		/* list of ColumnDef nodes to describe result
@@ -2470,6 +2472,16 @@ typedef struct DropdbStmt
 	char	   *dbname;			/* database to drop */
 	bool		missing_ok;		/* skip error if db is missing? */
 } DropdbStmt;
+
+/* ----------------------
+ *		Alter System Statement
+ * ----------------------
+ */
+typedef struct AlterSystemStmt
+{
+	NodeTag		type;
+	VariableSetStmt *setstmt;	/* SET subcommand */
+}	AlterSystemStmt;
 
 /* ----------------------
  *		Cluster Statement (support pbrown's cluster index implementation)

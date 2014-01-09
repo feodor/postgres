@@ -89,7 +89,8 @@ arrayToHStoreSortedArray(ArrayType *a)
 }
 
 static HStoreValue*
-findInHStoreSortedArray(HStoreValue *a, uint32 *lowbound, char *key, uint32 keylen)
+findInHStoreSortedArray(HStoreValue *a, uint32 *lowbound,
+						char *key, uint32 keylen)
 {
 	HStoreValue		*stopLow = a->array.elems + ((lowbound) ? *lowbound : 0),
 					*stopHigh = a->array.elems + a->array.nelems,
@@ -139,8 +140,11 @@ hstore_fetchval(PG_FUNCTION_ARGS)
 	text		*out;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
-										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+		v = findUncompressedHStoreValue(VARDATA(hs),
+										HS_FLAG_HASH | HS_FLAG_ARRAY,
+										NULL,
+										VARDATA_ANY(key),
+										VARSIZE_ANY_EXHDR(key));
 
 	if ((out = HStoreValueToText(v)) == NULL)
 		PG_RETURN_NULL();
@@ -158,8 +162,11 @@ hstore_fetchval_numeric(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
-										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+		v = findUncompressedHStoreValue(VARDATA(hs),
+										HS_FLAG_HASH | HS_FLAG_ARRAY,
+										NULL,
+										VARDATA_ANY(key),
+										VARSIZE_ANY_EXHDR(key));
 
 	if (v && v->type == hsvNumeric)
 	{
@@ -182,8 +189,11 @@ hstore_fetchval_boolean(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
-										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+		v = findUncompressedHStoreValue(VARDATA(hs),
+										HS_FLAG_HASH | HS_FLAG_ARRAY,
+										NULL,
+										VARDATA_ANY(key),
+										VARSIZE_ANY_EXHDR(key));
 
 	if (v && v->type == hsvBool)
 		PG_RETURN_BOOL(v->boolean);
@@ -208,7 +218,7 @@ hstore_fetchval_n(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	else
 		PG_RETURN_TEXT_P(out);
-}	
+}
 
 PG_FUNCTION_INFO_V1(hstore_fetchval_n_numeric);
 Datum		hstore_fetchval_n_numeric(PG_FUNCTION_ARGS);
@@ -231,7 +241,7 @@ hstore_fetchval_n_numeric(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_NULL();
-}	
+}
 
 PG_FUNCTION_INFO_V1(hstore_fetchval_n_boolean);
 Datum		hstore_fetchval_n_boolean(PG_FUNCTION_ARGS);
@@ -249,7 +259,7 @@ hstore_fetchval_n_boolean(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(v->boolean);
 
 	PG_RETURN_NULL();
-}	
+}
 
 static bool
 h_atoi(char *c, int l, int *acc)
@@ -339,13 +349,16 @@ hstoreDeepFetch(HStore *in, ArrayType *path)
 		if (header & HS_FLAG_HASH)
 		{
 			v = findUncompressedHStoreValue(v->binary.data, HS_FLAG_HASH,
-											NULL, VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]));
+											NULL,
+											VARDATA_ANY(path_elems[i]),
+											VARSIZE_ANY_EXHDR(path_elems[i]));
 		}
 		else if (header & HS_FLAG_ARRAY)
 		{
 			int ith;
 
-			if (h_atoi(VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]), &ith) == false)
+			if (h_atoi(VARDATA_ANY(path_elems[i]),
+					   VARSIZE_ANY_EXHDR(path_elems[i]), &ith) == false)
 				return NULL;
 
 			if (ith < 0)
@@ -371,7 +384,7 @@ hstoreDeepFetch(HStore *in, ArrayType *path)
 
 	return v;
 }
-		
+
 PG_FUNCTION_INFO_V1(hstore_fetchval_path);
 Datum		hstore_fetchval_path(PG_FUNCTION_ARGS);
 Datum
@@ -437,7 +450,8 @@ HStoreValueToHStore(HStoreValue *v)
 	{
 		out = NULL;
 	}
-	else if (v->type == hsvString || v->type == hsvBool || v->type == hsvNumeric)
+	else if (v->type == hsvString || v->type == hsvBool ||
+			 v->type == hsvNumeric)
 	{
 		ToHStoreState	*state = NULL;
 		HStoreValue		*res;
@@ -481,9 +495,11 @@ hstore_fetchval_hstore(PG_FUNCTION_ARGS)
 	HStore		*out;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
-										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
-
+		v = findUncompressedHStoreValue(VARDATA(hs),
+										HS_FLAG_HASH | HS_FLAG_ARRAY,
+										NULL,
+										VARDATA_ANY(key),
+										VARSIZE_ANY_EXHDR(key));
 
 	if ((out = HStoreValueToHStore(v)) == NULL)
 		PG_RETURN_NULL();
@@ -535,8 +551,11 @@ hstore_exists(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
-										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+		v = findUncompressedHStoreValue(VARDATA(hs),
+										HS_FLAG_HASH | HS_FLAG_ARRAY,
+										NULL,
+										VARDATA_ANY(key),
+										VARSIZE_ANY_EXHDR(key));
 
 	PG_RETURN_BOOL(v != NULL);
 }
@@ -552,7 +571,7 @@ hstore_exists_idx(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = getHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, ith); 
+		v = getHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, ith);
 
 	PG_RETURN_BOOL(v != NULL);
 }
@@ -595,7 +614,7 @@ hstore_exists_any(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, plowbound, 
+		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, plowbound,
 											   v->array.elems + i) != NULL)
 		{
 			res = true;
@@ -632,13 +651,15 @@ hstore_exists_all(PG_FUNCTION_ARGS)
 		plowbound = &lowbound;
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
-	 * increasing order to narrow the findUncompressedHStoreValue search; each search can
-	 * start one entry past the previous "found" entry, or at the lower bound
-	 * of the last search.
+	 * increasing order to narrow the findUncompressedHStoreValue search;
+	 * each search can start one entry past the previous "found" entry,
+	 * or at the lower bound of the last search.
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, plowbound, 
+		if (findUncompressedHStoreValueByValue(VARDATA(hs),
+											   HS_FLAG_HASH | HS_FLAG_ARRAY,
+											   plowbound,
 											   v->array.elems + i) == NULL)
 		{
 			res = false;
@@ -660,8 +681,11 @@ hstore_defined(PG_FUNCTION_ARGS)
 	HStoreValue	*v = NULL;
 
 	if (!HS_ISEMPTY(hs))
-		v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, 
-										NULL, VARDATA_ANY(key), VARSIZE_ANY_EXHDR(key));
+		v = findUncompressedHStoreValue(VARDATA(hs),
+										HS_FLAG_HASH | HS_FLAG_ARRAY,
+										NULL,
+										VARDATA_ANY(key),
+										VARSIZE_ANY_EXHDR(key));
 
 	PG_RETURN_BOOL(!(v == NULL || v->type == hsvNull));
 }
@@ -695,7 +719,8 @@ hstore_delete(PG_FUNCTION_ARGS)
 		skipNested = true;
 
 		if ((r == WHS_ELEM || r == WHS_KEY) &&
-			(v.type == hsvString && keylen == v.string.len && memcmp(keyptr, v.string.val, keylen) == 0))
+			(v.type == hsvString && keylen == v.string.len &&
+			 memcmp(keyptr, v.string.val, keylen) == 0))
 		{
 			if (r == WHS_KEY)
 				/* skip corresponding value */
@@ -707,7 +732,7 @@ hstore_delete(PG_FUNCTION_ARGS)
 		res = pushHStoreValue(&toState, r, &v);
 	}
 
-	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) ||
 					   (res->type == hsvHash && res->hash.npairs == 0) )
 	{
 		SET_VARSIZE(out, VARHDRSZ);
@@ -728,14 +753,14 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 {
 	HStore	   		*in = PG_GETARG_HS(0);
 	HStore	   		*out = palloc(VARSIZE(in));
-	HStoreValue 	*a = arrayToHStoreSortedArray(PG_GETARG_ARRAYTYPE_P(1)); 
+	HStoreValue 	*a = arrayToHStoreSortedArray(PG_GETARG_ARRAYTYPE_P(1));
 	HStoreIterator	*it;
 	ToHStoreState	*toState = NULL;
 	uint32			r, i = 0;
 	HStoreValue		v, *res = NULL;
 	bool			skipNested = false;
 	bool			isHash = false;
-	
+
 
 	if (HS_ISEMPTY(in) || a == NULL || a->array.nelems == 0)
 	{
@@ -755,14 +780,16 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 			skipNested = true;
 		}
 
-		if ((r == WHS_ELEM || r == WHS_KEY) && v.type == hsvString && i < a->array.nelems)
+		if ((r == WHS_ELEM || r == WHS_KEY) && v.type == hsvString &&
+			i < a->array.nelems)
 		{
 			int diff;
 
 			if (isHash)
 			{
 				do {
-					diff = compareHStoreStringValue(&v, a->array.elems + i, NULL);
+					diff = compareHStoreStringValue(&v, a->array.elems + i,
+													NULL);
 
 					if (diff >= 0)
 						i++;
@@ -770,7 +797,9 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 			}
 			else
 			{
-				diff = (findInHStoreSortedArray(a, NULL, v.string.val, v.string.len) == NULL) ? 1 : 0;
+				diff = (findInHStoreSortedArray(a, NULL,
+												v.string.val,
+												v.string.len) == NULL) ? 1 : 0;
 			}
 
 			if (diff == 0)
@@ -786,7 +815,7 @@ hstore_delete_array(PG_FUNCTION_ARGS)
 		res = pushHStoreValue(&toState, r, &v);
 	}
 
-	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) ||
 					   (res->type == hsvHash && res->hash.npairs == 0) )
 	{
 		SET_VARSIZE(out, VARHDRSZ);
@@ -845,7 +874,8 @@ hstore_delete_hstore(PG_FUNCTION_ARGS)
 				if (keyIsDef)
 					r2 = WHS_KEY;
 
-				while(keyIsDef || (r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
+				while(keyIsDef ||
+					  (r2 = HStoreIteratorGet(&it2, &v2, true)) != 0)
 				{
 					if (r2 != WHS_KEY)
 						continue;
@@ -921,7 +951,7 @@ hstore_delete_hstore(PG_FUNCTION_ARGS)
 		}
 	}
 
-	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) ||
 					   (res->type == hsvHash && res->hash.npairs == 0) )
 	{
 		SET_VARSIZE(out, VARHDRSZ);
@@ -936,7 +966,8 @@ hstore_delete_hstore(PG_FUNCTION_ARGS)
 }
 
 static HStoreValue*
-deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_len,
+deletePathDo(HStoreIterator **it, Datum	*path_elems,
+			 bool *path_nulls, int path_len,
 			 ToHStoreState	**st, int level)
 {
 	HStoreValue	v, *res = NULL;
@@ -950,8 +981,9 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 		uint32	n = v.array.nelems;
 
 		skipIdx = n;
-		if (level >= path_len || path_nulls[level] || 
-			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &skipIdx) == false)
+		if (level >= path_len || path_nulls[level] ||
+			h_atoi(VARDATA_ANY(path_elems[level]),
+				   VARSIZE_ANY_EXHDR(path_elems[level]), &skipIdx) == false)
 		{
 			skipIdx = n;
 		}
@@ -998,7 +1030,8 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 		}
 		else
 		{
-			res = deletePathDo(it, path_elems, path_nulls, path_len, st, level + 1);
+			res = deletePathDo(it, path_elems, path_nulls, path_len, st,
+							   level + 1);
 		}
 
 		for(i = skipIdx + 1; i<n; i++) {
@@ -1023,8 +1056,10 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 			r = HStoreIteratorGet(it, &k, false);
 			Assert(r == WHS_KEY);
 
-			if ( path_nulls[level] == false && k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
-				 memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
+			if ( path_nulls[level] == false &&
+				 k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+				 memcmp(k.string.val, VARDATA_ANY(path_elems[level]),
+						k.string.len) == 0)
 			{
 				r = HStoreIteratorGet(it, &v, true);
 				Assert(r == WHS_VALUE);
@@ -1055,7 +1090,8 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 
 			if (done == false &&
 				k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
-				memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
+				memcmp(k.string.val, VARDATA_ANY(path_elems[level]),
+					   k.string.len) == 0)
 			{
 				done = true;
 
@@ -1067,7 +1103,8 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems, bool *path_nulls, int path_
 				else
 				{
 					pushHStoreValue(st, r, &k);
-					res = deletePathDo(it, path_elems, path_nulls, path_len, st, level + 1);
+					res = deletePathDo(it, path_elems, path_nulls, path_len,
+									   st, level + 1);
 					if (res == NULL)
 					{
 						v.type = hsvNull;
@@ -1116,7 +1153,7 @@ hstore_delete_path(PG_FUNCTION_ARGS)
 	int				path_len;
 	HStoreIterator	*it;
 	ToHStoreState	*st = NULL;
- 
+
 	Assert(ARR_ELEMTYPE(path) == TEXTOID);
 
 	if (ARR_NDIM(path) > 1)
@@ -1141,7 +1178,7 @@ hstore_delete_path(PG_FUNCTION_ARGS)
 
 	it = HStoreIteratorInit(VARDATA(in));
 
-	res = deletePathDo(&it, path_elems, path_nulls, path_len, &st, 0); 
+	res = deletePathDo(&it, path_elems, path_nulls, path_len, &st, 0);
 
 	if (res == NULL)
 	{
@@ -1216,7 +1253,7 @@ hstore_delete_idx(PG_FUNCTION_ARGS)
 		res = pushHStoreValue(&toState, r, &v);
 	}
 
-	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) ||
 					   (res->type == hsvHash && res->hash.npairs == 0) )
 	{
 		SET_VARSIZE(out, VARHDRSZ);
@@ -1246,7 +1283,8 @@ convertScalarToString(HStoreValue *v)
 		case hsvNumeric:
 			v->type = hsvString;
 			v->string.val = DatumGetCString(
-							DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
+							DirectFunctionCall1(numeric_out,
+												PointerGetDatum(v->numeric)));
 			v->string.len = strlen(v->string.val);
 			v->size = sizeof(HEntry) + v->string.len;
 			break;
@@ -1258,7 +1296,8 @@ convertScalarToString(HStoreValue *v)
 }
 
 static HStoreValue *
-IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toState)
+IteratorConcat(HStoreIterator **it1, HStoreIterator **it2,
+			   ToHStoreState **toState)
 {
 	uint32			r1, r2, rk1, rk2;
 	HStoreValue		v1, v2, *res = NULL;
@@ -1294,7 +1333,7 @@ IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toSta
 					diff = compareHStoreStringValue(&v1, &v2, NULL);
 
 					if (diff > 0)
-					{	
+					{
 						if (keyIsDef)
 							keyIsDef = false;
 
@@ -1339,7 +1378,8 @@ IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toSta
 					if (keyIsDef)
 						r2 = WHS_KEY;
 
-					while(keyIsDef || (r2 = HStoreIteratorGet(it2, &v2, true)) != 0)
+					while(keyIsDef ||
+						  (r2 = HStoreIteratorGet(it2, &v2, true)) != 0)
 					{
 						if (r2 != WHS_KEY)
 							continue;
@@ -1359,9 +1399,11 @@ IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toSta
 			res = pushHStoreValue(toState, r1, &v1);
 		}
 	}
-	else if ((rk1 == WHS_BEGIN_HASH || rk1 == WHS_BEGIN_ARRAY) && (rk2 == WHS_BEGIN_HASH || rk2 == WHS_BEGIN_ARRAY)) 
+	else if ((rk1 == WHS_BEGIN_HASH || rk1 == WHS_BEGIN_ARRAY) &&
+			 (rk2 == WHS_BEGIN_HASH || rk2 == WHS_BEGIN_ARRAY))
 	{
-		if (rk1 == WHS_BEGIN_HASH && rk2 == WHS_BEGIN_ARRAY && v2.array.nelems % 2 != 0)
+		if (rk1 == WHS_BEGIN_HASH && rk2 == WHS_BEGIN_ARRAY &&
+			v2.array.nelems % 2 != 0)
 			elog(ERROR, "hstore's array must have even number of elements");
 
 		res = pushHStoreValue(toState, r1, &v1);
@@ -1371,7 +1413,7 @@ IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toSta
 			r1 = HStoreIteratorGet(it1, &v1, true);
 			if (r1 == WHS_END_HASH || r1 == WHS_END_ARRAY)
 				break;
-			Assert(r1 == WHS_KEY || r1 == WHS_VALUE || r1 == WHS_ELEM); 
+			Assert(r1 == WHS_KEY || r1 == WHS_VALUE || r1 == WHS_ELEM);
 			pushHStoreValue(toState, r1, &v1);
 		}
 
@@ -1394,7 +1436,9 @@ IteratorConcat(HStoreIterator **it1, HStoreIterator **it2, ToHStoreState **toSta
 			}
 		}
 
-		res = pushHStoreValue(toState, (rk1 == WHS_BEGIN_HASH) ? WHS_END_HASH : WHS_END_ARRAY, NULL/* signal to sort */);
+		res = pushHStoreValue(toState,
+							  (rk1 == WHS_BEGIN_HASH) ? WHS_END_HASH : WHS_END_ARRAY,
+							  NULL/* signal to sort */);
 	}
 	else if ((rk1 & (WHS_VALUE | WHS_ELEM)) != 0)
 	{
@@ -1447,7 +1491,7 @@ hstore_concat(PG_FUNCTION_ARGS)
 
 	res = IteratorConcat(&it1, &it2, &toState);
 
-	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) || 
+	if (res == NULL || (res->type == hsvArray && res->array.nelems == 0) ||
 					   (res->type == hsvHash && res->hash.npairs == 0) )
 	{
 		SET_VARSIZE(out, VARHDRSZ);
@@ -1496,11 +1540,14 @@ hstore_slice_to_array(PG_FUNCTION_ARGS)
 		HStoreValue	*v = NULL;
 
 		if (key_nulls[i] == false)
-			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, NULL,
-											VARDATA(key), VARSIZE(key) - VARHDRSZ);
+			v = findUncompressedHStoreValue(VARDATA(hs),
+											HS_FLAG_HASH | HS_FLAG_ARRAY,
+											NULL,
+											VARDATA(key),
+											VARSIZE(key) - VARHDRSZ);
 
 		out_datums[i] = PointerGetDatum(HStoreValueToText(v));
-		out_nulls[i] = (DatumGetPointer(out_datums[i]) == NULL) ? true : false;	
+		out_nulls[i] = (DatumGetPointer(out_datums[i]) == NULL) ? true : false;
 	}
 
 	aout = construct_md_array(out_datums, out_nulls,
@@ -1529,7 +1576,7 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 
 	out = palloc(VARSIZE(hs));
 
-	if (a == NULL || a->array.nelems == 0 || HS_ISEMPTY(hs)) 
+	if (a == NULL || a->array.nelems == 0 || HS_ISEMPTY(hs))
 	{
 		memcpy(out, hs, VARSIZE(hs));
 		PG_RETURN_POINTER(out);
@@ -1545,10 +1592,12 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 		plowbound = NULL;
 		pushHStoreValue(&state, WHS_BEGIN_ARRAY, NULL);
 	}
-		
+
 	for (i = 0; i < a->array.nelems; ++i)
 	{
-		HStoreValue	*v = findUncompressedHStoreValueByValue(VARDATA(hs), HS_FLAG_HASH | HS_FLAG_ARRAY, plowbound,
+		HStoreValue	*v = findUncompressedHStoreValueByValue(VARDATA(hs),
+															HS_FLAG_HASH | HS_FLAG_ARRAY,
+															plowbound,
 															a->array.elems + i);
 
 		if (v)
@@ -1586,8 +1635,9 @@ hstore_slice_to_hstore(PG_FUNCTION_ARGS)
 }
 
 static HStoreValue*
-replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_len,
-			 ToHStoreState  **st, int level, HStoreValue *newval)
+replacePathDo(HStoreIterator **it, Datum *path_elems,
+			  bool *path_nulls, int path_len,
+			  ToHStoreState  **st, int level, HStoreValue *newval)
 {
 	HStoreValue v, *res = NULL;
 	int			r;
@@ -1601,7 +1651,8 @@ replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path
 
 		idx = n;
 		if (level >= path_len || path_nulls[level] ||
-			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &idx) == false)
+			h_atoi(VARDATA_ANY(path_elems[level]),
+				   VARSIZE_ANY_EXHDR(path_elems[level]), &idx) == false)
 		{
 			idx = n;
 		}
@@ -1630,7 +1681,8 @@ replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path
 				}
 				else
 				{
-					res = replacePathDo(it, path_elems, path_nulls, path_len, st, level + 1, newval);
+					res = replacePathDo(it, path_elems, path_nulls, path_len,
+										st, level + 1, newval);
 				}
 			}
 			else
@@ -1653,7 +1705,7 @@ replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path
 		bool		done = false;
 
 		pushHStoreValue(st, WHS_BEGIN_HASH, &v);
-		
+
 		if (level >= path_len || path_nulls[level])
 			done = true;
 
@@ -1665,7 +1717,8 @@ replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path
 
 			if (done == false &&
 				k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
-				memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
+				memcmp(k.string.val, VARDATA_ANY(path_elems[level]),
+					   k.string.len) == 0)
 			{
 				if (level == path_len - 1)
 				{
@@ -1675,7 +1728,8 @@ replacePathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path
 				}
 				else
 				{
-					res = replacePathDo(it, path_elems, path_nulls, path_len, st, level + 1, newval);
+					res = replacePathDo(it, path_elems, path_nulls, path_len,
+										st, level + 1, newval);
 				}
 			}
 			else
@@ -1719,7 +1773,7 @@ hstore_replace(PG_FUNCTION_ARGS)
 	int				path_len;
 	HStoreIterator	*it;
 	ToHStoreState	*st = NULL;
- 
+
 	Assert(ARR_ELEMTYPE(path) == TEXTOID);
 
 	if (ARR_NDIM(path) > 1)
@@ -1757,7 +1811,7 @@ hstore_replace(PG_FUNCTION_ARGS)
 
 	it = HStoreIteratorInit(VARDATA(in));
 
-	res = replacePathDo(&it, path_elems, path_nulls, path_len, &st, 0, &value); 
+	res = replacePathDo(&it, path_elems, path_nulls, path_len, &st, 0, &value);
 
 	if (res == NULL)
 	{
@@ -1775,7 +1829,8 @@ hstore_replace(PG_FUNCTION_ARGS)
 }
 
 static HStoreValue*
-concatPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_len,
+concatPathDo(HStoreIterator **it, Datum *path_elems,
+			 bool *path_nulls, int path_len,
 			 ToHStoreState  **st, int level, HStoreIterator	*toConcat)
 {
 	HStoreValue v, *res = NULL;
@@ -1790,7 +1845,8 @@ concatPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_
 
 		idx = n;
 		if (level >= path_len || path_nulls[level] ||
-			h_atoi(VARDATA_ANY(path_elems[level]), VARSIZE_ANY_EXHDR(path_elems[level]), &idx) == false)
+			h_atoi(VARDATA_ANY(path_elems[level]),
+				   VARSIZE_ANY_EXHDR(path_elems[level]), &idx) == false)
 		{
 			idx = n;
 		}
@@ -1814,7 +1870,8 @@ concatPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_
 				if (level == path_len - 1)
 					res = IteratorConcat(it, &toConcat, st);
 				else
-					res = concatPathDo(it, path_elems, path_nulls, path_len, st, level + 1, toConcat);
+					res = concatPathDo(it, path_elems, path_nulls, path_len,
+									   st, level + 1, toConcat);
 			}
 			else
 			{
@@ -1846,13 +1903,16 @@ concatPathDo(HStoreIterator **it, Datum *path_elems, bool *path_nulls, int path_
 			Assert(r == WHS_KEY);
 			res = pushHStoreValue(st, r, &k);
 
-			if (done == false && level < path_len && k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
-				memcmp(k.string.val, VARDATA_ANY(path_elems[level]), k.string.len) == 0)
+			if (done == false && level < path_len &&
+				k.string.len == VARSIZE_ANY_EXHDR(path_elems[level]) &&
+				memcmp(k.string.val, VARDATA_ANY(path_elems[level]),
+					   k.string.len) == 0)
 			{
 				if (level == path_len - 1)
 					res = IteratorConcat(it, &toConcat, st);
 				else
-					res = concatPathDo(it, path_elems, path_nulls, path_len, st, level + 1, toConcat);
+					res = concatPathDo(it, path_elems, path_nulls, path_len,
+									   st, level + 1, toConcat);
 			}
 			else
 			{
@@ -1962,7 +2022,7 @@ hstore_akeys(PG_FUNCTION_ARGS)
 		skipNested = true;
 
 		if ((r == WHS_ELEM && v.type != hsvNull) || r == WHS_KEY)
-			d[i++] = PointerGetDatum(HStoreValueToText(&v)); 
+			d[i++] = PointerGetDatum(HStoreValueToText(&v));
 	}
 
 	a = construct_array(d, i,
@@ -2025,7 +2085,7 @@ hstore_to_array_internal(HStore *hs, int ndims)
 	int				lb[2] = {1, 1};
 	Datum		   *out_datums;
 	bool	   		*out_nulls;
-	bool			isHash = HS_ROOT_IS_HASH(hs) ? true : false; 
+	bool			isHash = HS_ROOT_IS_HASH(hs) ? true : false;
 	int				i = 0, r = 0;
 	HStoreIterator	*it;
 	HStoreValue		v;
@@ -2195,7 +2255,9 @@ setup_firstcall(FuncCallContext *funcctx, HStore *hs, ArrayType *path,
 
 			if (path_nulls[i])
 				st->path[i].varKind = pathAny;
-			else if (h_atoi(VARDATA_ANY(path_elems[i]), VARSIZE_ANY_EXHDR(path_elems[i]), &st->path[i].varInt))
+			else if (h_atoi(VARDATA_ANY(path_elems[i]),
+							VARSIZE_ANY_EXHDR(path_elems[i]),
+							&st->path[i].varInt))
 				st->path[i].varKind = pathInt;
 			else
 				st->path[i].varKind = pathStr;
@@ -2244,7 +2306,7 @@ hstore_skeys(PG_FUNCTION_ARGS)
 		if (r == WHS_KEY || r == WHS_ELEM)
 		{
 			text	   *item = HStoreValueToText(&v);
-	
+
 			if (item == NULL)
 				SRF_RETURN_NEXT_NULL(funcctx);
 			else
@@ -2279,7 +2341,7 @@ hstore_svals(PG_FUNCTION_ARGS)
 		if (r == WHS_VALUE || r == WHS_ELEM)
 		{
 			text	   *item = HStoreValueToText(&v);
-	
+
 			if (item == NULL)
 				SRF_RETURN_NEXT_NULL(funcctx);
 			else
@@ -2314,7 +2376,7 @@ hstore_hvals(PG_FUNCTION_ARGS)
 		if (r == WHS_VALUE || r == WHS_ELEM)
 		{
 			HStore	   *item = HStoreValueToHStore(&v);
-	
+
 			if (item == NULL)
 				SRF_RETURN_NEXT_NULL(funcctx);
 			else
@@ -2359,11 +2421,14 @@ getNextValsPath(SetReturningState *st)
 		{
 			if (st->path[st->level].varKind == pathAny)
 			{
-				v = getHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_HASH, st->path[st->level].i++);
+				v = getHStoreValue(st->path[st->level].v.binary.data, 
+								   HS_FLAG_HASH, 
+								   st->path[st->level].i++);
 			}
 			else
 			{
-				v = findUncompressedHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_HASH, NULL, 
+				v = findUncompressedHStoreValue(st->path[st->level].v.binary.data, 
+												HS_FLAG_HASH, NULL, 
 												VARDATA_ANY(st->path[st->level].varStr),
 												VARSIZE_ANY_EXHDR(st->path[st->level].varStr));
 			}
@@ -2372,7 +2437,8 @@ getNextValsPath(SetReturningState *st)
 		{
 			if (st->path[st->level].varKind == pathAny)
 			{
-				v = getHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_ARRAY, st->path[st->level].i++);
+				v = getHStoreValue(st->path[st->level].v.binary.data,
+								   HS_FLAG_ARRAY, st->path[st->level].i++);
 			}
 			else if (st->path[st->level].varKind == pathInt)
 			{
@@ -2399,7 +2465,8 @@ getNextValsPath(SetReturningState *st)
 					}
 				}
 
-				v = getHStoreValue(st->path[st->level].v.binary.data, HS_FLAG_ARRAY, ith);
+				v = getHStoreValue(st->path[st->level].v.binary.data,
+								   HS_FLAG_ARRAY, ith);
 			}
 			else
 			{
@@ -2459,7 +2526,7 @@ hstore_svals_path(PG_FUNCTION_ARGS)
 	if ((v = getNextValsPath(st)) != NULL)
 	{
 		text	*item = HStoreValueToText(v);
-	
+
 		if (item == NULL)
 			SRF_RETURN_NEXT_NULL(funcctx);
 		else
@@ -2481,7 +2548,8 @@ hstore_hvals_path(PG_FUNCTION_ARGS)
 	if (SRF_IS_FIRSTCALL())
 	{
 		funcctx = SRF_FIRSTCALL_INIT();
-		st = setup_firstcall(funcctx, PG_GETARG_HS(0), PG_GETARG_ARRAYTYPE_P(1), NULL);
+		st = setup_firstcall(funcctx, PG_GETARG_HS(0),
+							 PG_GETARG_ARRAYTYPE_P(1), NULL);
 	}
 
 	funcctx = SRF_PERCALL_SETUP();
@@ -2490,7 +2558,7 @@ hstore_hvals_path(PG_FUNCTION_ARGS)
 	if ((v = getNextValsPath(st)) != NULL)
 	{
 		HStore	   *item = HStoreValueToHStore(v);
-	
+
 		if (item == NULL)
 			SRF_RETURN_NEXT_NULL(funcctx);
 		else
@@ -2636,7 +2704,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 	HStoreValue		v1, v2;
 	bool			res = true;
 
-	r1 = HStoreIteratorGet(it1, &v1, false); 
+	r1 = HStoreIteratorGet(it1, &v1, false);
 	r2 = HStoreIteratorGet(it2, &v2, false);
 
 	if (r1 != r2)
@@ -2655,7 +2723,9 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 
 			Assert(r2 == WHS_KEY);
 
-			v = findUncompressedHStoreValueByValue((*it1)->buffer, HS_FLAG_HASH, &lowbound, &v2);
+			v = findUncompressedHStoreValueByValue((*it1)->buffer,
+												   HS_FLAG_HASH,
+												   &lowbound, &v2);
 
 			if (v == NULL)
 			{
@@ -2671,7 +2741,8 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 				res = false;
 				break;
 			}
-			else if (v->type == hsvString || v->type == hsvNull || v->type == hsvBool || v->type == hsvNumeric)
+			else if (v->type == hsvString || v->type == hsvNull ||
+					 v->type == hsvBool || v->type == hsvNumeric)
 			{
 				if (compareHStoreValue(v, &v2) != 0)
 				{
@@ -2682,7 +2753,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 			else
 			{
 				HStoreIterator	*it1a, *it2a;
-				
+
 				Assert(v2.type == hsvBinary);
 				Assert(v->type == hsvBinary);
 
@@ -2707,9 +2778,12 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 
 			Assert(r2 == WHS_ELEM);
 
-			if (v2.type == hsvString || v2.type == hsvNull || v2.type == hsvBool || v2.type == hsvNumeric)
+			if (v2.type == hsvString || v2.type == hsvNull ||
+				v2.type == hsvBool || v2.type == hsvNumeric)
 			{
-				v = findUncompressedHStoreValueByValue((*it1)->buffer, HS_FLAG_ARRAY, NULL, &v2);
+				v = findUncompressedHStoreValueByValue((*it1)->buffer,
+													   HS_FLAG_ARRAY, NULL,
+													   &v2);
 				if (v == NULL)
 				{
 					res = false;
@@ -2748,7 +2822,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 				for(i = 0; res == false && i<nelems; i++)
 				{
 					HStoreIterator	*it1a, *it2a;
-				
+
 					it1a = HStoreIteratorInit(av[i].binary.data);
 					it2a = HStoreIteratorInit(v2.binary.data);
 
@@ -2778,7 +2852,8 @@ hstore_contains(PG_FUNCTION_ARGS)
 	bool			res = true;
 	HStoreIterator	*it1, *it2;
 
-	if (HS_ROOT_COUNT(val) < HS_ROOT_COUNT(tmpl) || HS_ROOT_IS_HASH(val) != HS_ROOT_IS_HASH(tmpl))
+	if (HS_ROOT_COUNT(val) < HS_ROOT_COUNT(tmpl) ||
+		HS_ROOT_IS_HASH(val) != HS_ROOT_IS_HASH(tmpl))
 		PG_RETURN_BOOL(false);
 
 	it1 = HStoreIteratorInit(VARDATA(val));

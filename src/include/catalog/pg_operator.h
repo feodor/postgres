@@ -5,7 +5,7 @@
  *	  along with the relation's initial contents.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_operator.h
@@ -128,8 +128,10 @@ DATA(insert OID =  95 ( "<"		   PGNSP PGUID b f f	21	21	16 520 524 int2lt scalar
 DESCR("less than");
 DATA(insert OID =  96 ( "="		   PGNSP PGUID b t t	23	23	16	96 518 int4eq eqsel eqjoinsel ));
 DESCR("equal");
+#define Int4EqualOperator	96
 DATA(insert OID =  97 ( "<"		   PGNSP PGUID b f f	23	23	16 521 525 int4lt scalarltsel scalarltjoinsel ));
 DESCR("less than");
+#define Int4LessOperator	97
 DATA(insert OID =  98 ( "="		   PGNSP PGUID b t t	25	25	16	98 531 texteq eqsel eqjoinsel ));
 DESCR("equal");
 #define TextEqualOperator	98
@@ -1751,17 +1753,17 @@ DATA(insert OID = 3966 (  "#>"	   PGNSP PGUID b f f 114 1009 114 0 0 json_extrac
 DESCR("get value from json with path elements");
 DATA(insert OID = 3967 (  "#>>"    PGNSP PGUID b f f 114 1009 25 0 0 json_extract_path_text_op - - ));
 DESCR("get value from json as text with path elements");
-DATA(insert OID = 3986 (  "->"	   PGNSP PGUID b f f 3802 25 3802 0 0 jsonb_object_field - - ));
+DATA(insert OID = 3211 (  "->"	   PGNSP PGUID b f f 3802 25 3802 0 0 jsonb_object_field - - ));
 DESCR("get jsonb object field");
-DATA(insert OID = 3987 (  "->>"    PGNSP PGUID b f f 3802 25 25 0 0 jsonb_object_field_text - - ));
+DATA(insert OID = 3204 (  "->>"    PGNSP PGUID b f f 3802 25 25 0 0 jsonb_object_field_text - - ));
 DESCR("get jsonb object field as text");
-DATA(insert OID = 3988 (  "->"	   PGNSP PGUID b f f 3802 23 3802 0 0 jsonb_array_element - - ));
+DATA(insert OID = 3212 (  "->"	   PGNSP PGUID b f f 3802 23 3802 0 0 jsonb_array_element - - ));
 DESCR("get jsonb array element");
-DATA(insert OID = 3989 (  "->>"    PGNSP PGUID b f f 3802 23 25 0 0 jsonb_array_element_text - - ));
+DATA(insert OID = 3205 (  "->>"    PGNSP PGUID b f f 3802 23 25 0 0 jsonb_array_element_text - - ));
 DESCR("get jsonb array element as text");
-DATA(insert OID = 3990 (  "#>"	   PGNSP PGUID b f f 3802 1009 3802 0 0 jsonb_extract_path_op - - ));
+DATA(insert OID = 3213 (  "#>"	   PGNSP PGUID b f f 3802 1009 3802 0 0 jsonb_extract_path_op - - ));
 DESCR("get value from jsonb with path elements");
-DATA(insert OID = 3991 (  "#>>"    PGNSP PGUID b f f 3802 1009 25 0 0 jsonb_extract_path_text_op - - ));
+DATA(insert OID = 3206 (  "#>>"    PGNSP PGUID b f f 3802 1009 25 0 0 jsonb_extract_path_text_op - - ));
 DESCR("get value from jsonb as text with path elements");
 
 

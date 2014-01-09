@@ -132,6 +132,8 @@ text* HStoreValueToText(HStoreValue *v);
 
 extern HStoreValue* parseHStore(const char *str, int len, bool json);
 
+#define uniqueHStoreValue(v) uniqueJsonbValue(v)
+
 #define HStoreContainsStrategyNumber	7
 #define HStoreExistsStrategyNumber		9
 #define HStoreExistsAnyStrategyNumber	10

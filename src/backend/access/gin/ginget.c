@@ -4,7 +4,7 @@
  *	  fetch tuples from a GIN scan.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -20,6 +20,8 @@
 #include "utils/datum.h"
 #include "utils/memutils.h"
 
+/* GUC parameter */
+int			GinFuzzySearchLimit = 0;
 
 typedef struct pendingPosition
 {
@@ -374,7 +376,7 @@ restartScanEntry:
 	ginPrepareEntryScan(&btreeEntry, entry->attnum,
 						entry->queryKey, entry->queryCategory,
 						ginstate);
-	stackEntry = ginFindLeafPage(&btreeEntry, GIN_ROOT_BLKNO, true);
+	stackEntry = ginFindLeafPage(&btreeEntry, true);
 	page = BufferGetPage(stackEntry->buffer);
 	needUnlock = TRUE;
 

@@ -2,7 +2,7 @@
  *
  * clusterdb
  *
- * Portions Copyright (c) 2002-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2002-2014, PostgreSQL Global Development Group
  *
  * src/bin/scripts/clusterdb.c
  *
@@ -160,7 +160,7 @@ main(int argc, char *argv[])
 			else if (getenv("PGUSER"))
 				dbname = getenv("PGUSER");
 			else
-				dbname = get_user_name(progname);
+				dbname = get_user_name_or_exit(progname);
 		}
 
 		if (tables.head != NULL)

@@ -2,7 +2,7 @@
  *
  * reindexdb
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  *
  * src/bin/scripts/reindexdb.c
  *
@@ -188,7 +188,7 @@ main(int argc, char *argv[])
 			else if (getenv("PGUSER"))
 				dbname = getenv("PGUSER");
 			else
-				dbname = get_user_name(progname);
+				dbname = get_user_name_or_exit(progname);
 		}
 
 		reindex_system_catalogs(dbname, host, port, username, prompt_password,
@@ -203,7 +203,7 @@ main(int argc, char *argv[])
 			else if (getenv("PGUSER"))
 				dbname = getenv("PGUSER");
 			else
-				dbname = get_user_name(progname);
+				dbname = get_user_name_or_exit(progname);
 		}
 
 		if (indexes.head != NULL)

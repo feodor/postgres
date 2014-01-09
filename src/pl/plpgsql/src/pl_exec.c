@@ -3,7 +3,7 @@
  * pl_exec.c		- Executor for the PL/pgSQL
  *			  procedural language
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -6594,7 +6594,7 @@ format_expr_params(PLpgSQL_execstate *estate,
 
 /*
  * Return a formatted string with information about PreparedParamsData, or NULL
- * if the there are no parameters.
+ * if there are no parameters.
  */
 static char *
 format_preparedparamsdata(PLpgSQL_execstate *estate,

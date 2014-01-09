@@ -276,7 +276,7 @@ recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
 					 v->size += v->hash.pairs[i].key.size + v->hash.pairs[i].value.size;
 				}
 
-				ORDER_PAIRS(v->hash.pairs, v->hash.npairs, v->size -= ptr->key.size + ptr->value.size);
+				uniqueJsonbValue(v);
 		  }
 	 }
 	 else if (hentry == JENTRY_ISARRAY || hentry == JENTRY_ISCALAR)
