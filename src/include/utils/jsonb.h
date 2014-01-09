@@ -187,42 +187,9 @@ typedef struct ToJsonbState
 
 extern JsonbValue* pushJsonbValue(ToJsonbState **state, int r /* WJB_* */, JsonbValue *v);
 
-/* be aware: size effects for n argument */
-#define ORDER_PAIRS(a, n, delaction)												\
-	do {																			\
-		bool	hasNonUniq = false;													\
-																					\
-		if ((n) > 1)																\
-			qsort_arg((a), (n), sizeof(JsonbPair), compareJsonbPair, &hasNonUniq);\
-																					\
-		if (hasNonUniq)																\
-		{																			\
-			JsonbPair	*ptr = (a) + 1,												\
-						*res = (a);													\
-																					\
-			while (ptr - (a) < (n))													\
-			{																		\
-				if (ptr->key.string.len == res->key.string.len && 					\
-					memcmp(ptr->key.string.val, res->key.string.val,				\
-						   ptr->key.string.len) == 0)								\
-				{																	\
-					delaction;														\
-				}																	\
-				else																\
-				{																	\
-					res++;															\
-					if (ptr != res)													\
-						memcpy(res, ptr, sizeof(*res));								\
-				}																	\
-				ptr++;																\
-			}																		\
-																					\
-			(n) = res + 1 - (a);													\
-		}																			\
-	} while(0)																		
+extern void uniqueJsonbValue(JsonbValue *v);
 
-uint32 compressJsonb(JsonbValue *v, char *buffer);
-
+extern uint32 compressJsonb(JsonbValue *v, char *buffer);
 
 typedef struct JsonbIterator
 {
