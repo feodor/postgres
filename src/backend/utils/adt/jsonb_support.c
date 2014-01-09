@@ -22,7 +22,7 @@ uniqueJsonbValue(JsonbValue *v)
 {
 	bool    hasNonUniq = false;
 
-	Assert(v->type == hsvHash);
+	Assert(v->type == jbvHash);
 
 	if (v->hash.npairs > 1)
 		qsort_arg(v->hash.pairs, v->hash.npairs, sizeof(*v->hash.pairs),
@@ -50,7 +50,8 @@ uniqueJsonbValue(JsonbValue *v)
 			ptr++;
 		}
 
-	v->hash.npairs = res + 1 - v->hash.pairs;
+		v->hash.npairs = res + 1 - v->hash.pairs;
+	}
 }
 
 /****************************************************************************
