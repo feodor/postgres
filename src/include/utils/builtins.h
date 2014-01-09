@@ -4,7 +4,7 @@
  *	  Declarations for operations on built-in types.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/builtins.h
@@ -514,6 +514,21 @@ extern Datum oidvectorge(PG_FUNCTION_ARGS);
 extern Datum oidvectorgt(PG_FUNCTION_ARGS);
 extern oidvector *buildoidvector(const Oid *oids, int n);
 extern Oid	oidparse(Node *node);
+
+/* orderedsetaggs.c */
+extern Datum ordered_set_transition(PG_FUNCTION_ARGS);
+extern Datum ordered_set_transition_multi(PG_FUNCTION_ARGS);
+extern Datum percentile_disc_final(PG_FUNCTION_ARGS);
+extern Datum percentile_cont_float8_final(PG_FUNCTION_ARGS);
+extern Datum percentile_cont_interval_final(PG_FUNCTION_ARGS);
+extern Datum percentile_disc_multi_final(PG_FUNCTION_ARGS);
+extern Datum percentile_cont_float8_multi_final(PG_FUNCTION_ARGS);
+extern Datum percentile_cont_interval_multi_final(PG_FUNCTION_ARGS);
+extern Datum mode_final(PG_FUNCTION_ARGS);
+extern Datum hypothetical_rank_final(PG_FUNCTION_ARGS);
+extern Datum hypothetical_percent_rank_final(PG_FUNCTION_ARGS);
+extern Datum hypothetical_cume_dist_final(PG_FUNCTION_ARGS);
+extern Datum hypothetical_dense_rank_final(PG_FUNCTION_ARGS);
 
 /* pseudotypes.c */
 extern Datum cstring_in(PG_FUNCTION_ARGS);

@@ -2,7 +2,7 @@
  *
  * createdb
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/scripts/createdb.c
@@ -174,7 +174,7 @@ main(int argc, char *argv[])
 		else if (getenv("PGUSER"))
 			dbname = getenv("PGUSER");
 		else
-			dbname = get_user_name(progname);
+			dbname = get_user_name_or_exit(progname);
 	}
 
 	initPQExpBuffer(&sql);

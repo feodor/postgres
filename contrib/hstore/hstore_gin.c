@@ -164,7 +164,8 @@ gin_extract_hstore_query(PG_FUNCTION_ARGS)
 			/* Nulls in the array are ignored, cf hstoreArrayToPairs */
 			if (key_nulls[i])
 				continue;
-			item = makeitem(VARDATA(key_datums[i]), VARSIZE(key_datums[i]) - VARHDRSZ, KEYFLAG);
+			item = makeitem(VARDATA(key_datums[i]),
+							VARSIZE(key_datums[i]) - VARHDRSZ, KEYFLAG);
 			entries[j++] = PointerGetDatum(item);
 		}
 
@@ -310,7 +311,8 @@ hash_value(HStoreValue *v, PathHashStack *stack)
 			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */);
 			break;
 		case hsvNumeric:
-			COMP_CRC32(stack->hash_state, VARDATA_ANY(v->numeric), VARSIZE_ANY_EXHDR(v->numeric));
+			COMP_CRC32(stack->hash_state,
+					   VARDATA_ANY(v->numeric), VARSIZE_ANY_EXHDR(v->numeric));
 			break;
 		case hsvString:
 			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);

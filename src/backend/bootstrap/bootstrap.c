@@ -4,7 +4,7 @@
  *	  routines to support running postgres in 'bootstrap' mode
  *	bootstrap mode is used to create the initial template database
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -402,8 +402,8 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		/* finish setting up bufmgr.c */
 		InitBufferPoolBackend();
 
-		/* register a shutdown callback for LWLock cleanup */
-		on_shmem_exit(ShutdownAuxiliaryProcess, 0);
+		/* register a before-shutdown callback for LWLock cleanup */
+		before_shmem_exit(ShutdownAuxiliaryProcess, 0);
 	}
 
 	/*

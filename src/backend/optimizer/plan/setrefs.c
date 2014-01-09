@@ -4,7 +4,7 @@
  *	  Post-processing of a completed plan tree: fix references to subplan
  *	  vars, compute regproc values for operators, etc
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -280,7 +280,8 @@ add_rtes_to_flat_rtable(PlannerInfo *root, bool recursing)
 		 * RTEs without matching RelOptInfos, as they likewise have been
 		 * pulled up.
 		 */
-		if (rte->rtekind == RTE_SUBQUERY && !rte->inh)
+		if (rte->rtekind == RTE_SUBQUERY && !rte->inh &&
+			rti < root->simple_rel_array_size)
 		{
 			RelOptInfo *rel = root->simple_rel_array[rti];
 

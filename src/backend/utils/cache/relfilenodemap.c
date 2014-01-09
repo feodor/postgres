@@ -3,7 +3,7 @@
  * relfilenodemap.c
  *	  relfilenode to oid mapping cache.
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -33,7 +33,7 @@
 static HTAB *RelfilenodeMapHash = NULL;
 
 /* built first time through in InitializeRelfilenodeMap */
-ScanKeyData relfilenode_skey[2];
+static ScanKeyData relfilenode_skey[2];
 
 typedef struct
 {
