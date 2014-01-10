@@ -1007,7 +1007,7 @@ SELECT * FROM populate_record(
 
   <para>
    But <literal>populate_record()</> supports more complicated records and nested
-   <type>hstore</a> values, as well. It makes an effort to convert
+   <type>hstore</> values, as well. It makes an effort to convert
    from <type>hstore</> data types to PostgreSQL types, including arrays,
    <type>json</>, and <type>hstore</> values:
 <programlisting>
