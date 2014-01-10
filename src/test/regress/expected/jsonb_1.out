@@ -66,10 +66,12 @@ SELECT '"\u0000"'::jsonb;		-- OK, legal escape
  "\\u0000"
 (1 row)
 
-SELECT '"\uaBcD"'::jsonb;		-- OK, uppercase and lower case both OK
+-- use octet_length here so we don't get an odd unicode char in the
+-- output
+SELECT octet_length('"\uaBcD"'::jsonb::text); -- OK, uppercase and lower case both OK
 ERROR:  invalid input syntax for type json
-LINE 1: SELECT '"\uaBcD"'::jsonb;
-               ^
+LINE 1: SELECT octet_length('"\uaBcD"'::jsonb::text);
+                            ^
 DETAIL:  Unicode escape values cannot be used for code point values above 007F when the server encoding is not UTF8.
 CONTEXT:  JSON data, line 1: ...
 -- Numbers.
@@ -756,10 +758,10 @@ ERROR:  cannot call json_populate_recordset on a nested object
 select * from jsonb_populate_recordset(row('def',99,null)::jbpop,'[{"c":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]') q;
 ERROR:  cannot call json_populate_recordset on a nested object
 -- handling of unicode surrogate pairs
-select jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a' as correct_in_utf8;
+select octet_length((jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a')::text)  as correct_in_utf8;
 ERROR:  invalid input syntax for type json
-LINE 1: select jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a' a...
-                     ^
+LINE 1: select octet_length((jsonb '{ "a":  "\ud83d\ude04\ud83d\udc3...
+                                   ^
 DETAIL:  Unicode escape values cannot be used for code point values above 007F when the server encoding is not UTF8.
 CONTEXT:  JSON data, line 1: { "a":...
 select jsonb '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
