@@ -301,7 +301,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#&gt;</> <type>text[]</></entry>
       <entry><type>text</></entry>
       <entry>get value for key path (<literal>NULL</> if not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; yellow}'::hstore #&gt; '[foo,bar]'</literal></entry>
+      <entry><literal>'foo =&gt; {bar =&gt; yellow}'::hstore #&gt; '{foo,bar}'</literal></entry>
       <entry><literal>yellow</literal></entry>
      </row>
 
@@ -309,7 +309,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#^&gt;</> <type>text[]</></entry>
       <entry><type>numeric</></entry>
       <entry>get numeric value for key path (<literal>NULL</> if not numeric or not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; 99}'::hstore #^&gt; '[foo,bar]'</literal></entry>
+      <entry><literal>'foo =&gt; {bar =&gt; 99}'::hstore #^&gt; '{foo,bar}'</literal></entry>
       <entry><literal>99</literal></entry>
      </row>
 
@@ -317,7 +317,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#?&gt;</> <type>text[]</></entry>
       <entry><type>boolean</></entry>
       <entry>get boolean value for key path (<literal>NULL</> if not boolean or not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; true}'::hstore #?&gt; '[foo,bar]'</literal></entry>
+      <entry><literal>'foo =&gt; {bar =&gt; true}'::hstore #?&gt; '{foo,bar}'</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -333,7 +333,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>%&gt;</> <type>integer</></entry>
       <entry><type>hstore</></entry>
       <entry>get hstore value array index (<literal>NULL</> if not present)</entry>
-      <entry><literal>'[1, 2, {foo=>hi}]'::hstore %> 2'</literal></entry>
+      <entry><literal>'[1, 2, {foo=>hi}]'::hstore %> 2</literal></entry>
       <entry><literal>"foo"=&gt;"hi"</literal></entry>
      </row>
 
@@ -341,7 +341,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#%&gt;</> <type>text[]</></entry>
       <entry><type>hstore</></entry>
       <entry>get hstore value for key path (<literal>NULL</> if not present)</entry>
-      <entry><literal>'a =&gt; 1, b =&gt; {c =&gt; [44,44]}'::hstore #%&gt; '[b,c]'</literal></entry>
+      <entry><literal>'a =&gt; 1, b =&gt; {c =&gt; [44,44]}'::hstore #%&gt; '{b,c}'</literal></entry>
       <entry><literal>[44, 44]</literal></entry>
      </row>
 
@@ -373,7 +373,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>?</> <type>integer</></entry>
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain array index?</entry>
-      <entry><literal>'a,b,c'::hstore ? 2</literal></entry>
+      <entry><literal>'[a,b,c]'::hstore ? 2</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -381,7 +381,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#?</> <type>text[]</></entry>
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain key path?</entry>
-      <entry><literal>'[1, 2, {foo=&gt;hi}]'::hstore #? '[2,foo]'</literal></entry>
+      <entry><literal>'[1, 2, {foo=&gt;hi}]'::hstore #? '{2,foo}'</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -429,7 +429,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>-</> <type>integer</></entry>
       <entry><type>hstore</></entry>
       <entry>delete index from left operand</entry>
-      <entry><literal>'[2, 3, 4, 6, 8]'::hstore - 1;</literal></entry>
+      <entry><literal>'[2, 3, 4, 6, 8]'::hstore - 1</literal></entry>
       <entry><literal>[2, 4, 6, 8]</literal></entry>
      </row>
 
