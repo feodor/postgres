@@ -153,8 +153,7 @@ CreateEventTrigger(CreateEventTrigStmt *stmt)
 	/* Validate event name. */
 	if (strcmp(stmt->eventname, "ddl_command_start") != 0 &&
 		strcmp(stmt->eventname, "ddl_command_end") != 0 &&
-		strcmp(stmt->eventname, "sql_drop") != 0 &&
-		strcmp(stmt->eventname, "transaction_commit") != 0)
+		strcmp(stmt->eventname, "sql_drop") != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("unrecognized event name \"%s\"",
@@ -1294,43 +1293,4 @@ pg_event_trigger_dropped_objects(PG_FUNCTION_ARGS)
 	tuplestore_donestoring(tupstore);
 
 	return (Datum) 0;
-}
-
-/*
- * PreCommitTriggersFire
- *
- * fire triggers set for the commit event.
- *
- * This will be called just before deferred RI and Constraint triggers are
- * fired.
- */
-void
-PreCommitTriggersFire(void)
-{
-	List * trigger_list;
-	EventTriggerData trigdata;
-	List	   *runlist = NIL;
-	ListCell   *lc;
-
-	trigger_list = EventCacheLookup(EVT_Commit);
-
-	foreach(lc, trigger_list)
-	{
-		EventTriggerCacheItem *item = lfirst(lc);
-
-		runlist = lappend_oid(runlist, item->fnoid);
-	}
-
-	/* don't spend any more time on this if no functions to run */
-	if (runlist == NIL)
-		return;
-
-	trigdata.type = T_EventTriggerData;
-	trigdata.event = "transaction_commit";
-	trigdata.parsetree = NULL;
-	trigdata.tag = "COMMIT";
-
-	EventTriggerInvoke(runlist, &trigdata);
-
-	list_free(runlist);
 }
