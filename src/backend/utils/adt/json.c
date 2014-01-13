@@ -1259,7 +1259,7 @@ datum_to_json(Datum val, bool is_null, StringInfo result,
 			pfree(outputstr);
 			break;
 		case TYPCATEGORY_JSON:
-			/* JSON will already be escaped */
+			/* JSON and JSONB will already be escaped */
 			outputstr = OidOutputFunctionCall(typoutputfunc, val);
 			appendStringInfoString(result, outputstr);
 			pfree(outputstr);
@@ -1387,7 +1387,7 @@ array_to_json_internal(Datum array, StringInfo result, bool use_line_feeds)
 		tcategory = TYPCATEGORY_JSON_CAST;
 	else if (element_type == RECORDOID)
 		tcategory = TYPCATEGORY_COMPOSITE;
-	else if (element_type == JSONOID)
+	else if (element_type == JSONOID || element_type == JSONBOID)
 		tcategory = TYPCATEGORY_JSON;
 	else
 		tcategory = TypeCategory(element_type);
@@ -1482,7 +1482,8 @@ composite_to_json(Datum composite, StringInfo result, bool use_line_feeds)
 			tcategory = TYPCATEGORY_ARRAY;
 		else if (tupdesc->attrs[i]->atttypid == RECORDOID)
 			tcategory = TYPCATEGORY_COMPOSITE;
-		else if (tupdesc->attrs[i]->atttypid == JSONOID)
+		else if (tupdesc->attrs[i]->atttypid == JSONOID || 
+				 tupdesc->attrs[i]->atttypid == JSONBOID)
 			tcategory = TYPCATEGORY_JSON;
 		else
 			tcategory = TypeCategory(tupdesc->attrs[i]->atttypid);
@@ -1608,7 +1609,7 @@ to_json(PG_FUNCTION_ARGS)
 		tcategory = TYPCATEGORY_ARRAY;
 	else if (val_type == RECORDOID)
 		tcategory = TYPCATEGORY_COMPOSITE;
-	else if (val_type == JSONOID)
+	else if (val_type == JSONOID || val_type == JSONBOID)
 		tcategory = TYPCATEGORY_JSON;
 	else
 		tcategory = TypeCategory(val_type);
@@ -1702,7 +1703,7 @@ json_agg_transfn(PG_FUNCTION_ARGS)
 		tcategory = TYPCATEGORY_ARRAY;
 	else if (val_type == RECORDOID)
 		tcategory = TYPCATEGORY_COMPOSITE;
-	else if (val_type == JSONOID)
+	else if (val_type == JSONOID || val_type == JSONBOID)
 		tcategory = TYPCATEGORY_JSON;
 	else
 		tcategory = TypeCategory(val_type);

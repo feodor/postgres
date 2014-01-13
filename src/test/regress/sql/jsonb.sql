@@ -59,6 +59,10 @@ SELECT 'trues'::jsonb;			-- ERROR, not a keyword
 SELECT ''::jsonb;				-- ERROR, no value
 SELECT '    '::jsonb;			-- ERROR, no value
 
+-- make sure jsonb is passed throught json generators without being escaped
+select array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
+
+
 -- jsonb extraction functions
 
 CREATE TEMP TABLE test_jsonb (
