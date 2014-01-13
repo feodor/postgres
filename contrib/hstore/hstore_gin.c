@@ -388,8 +388,8 @@ gin_extract_hstore_hash(PG_FUNCTION_ARGS)
 				break;
 			case WHS_VALUE:
 			case WHS_ELEM:
-				path_crc32 = stack->hash_state;
 				hash_value(&v, stack);
+				path_crc32 = stack->hash_state;
 				FIN_CRC32(path_crc32);
 				entries[i++] = path_crc32;
 				break;
