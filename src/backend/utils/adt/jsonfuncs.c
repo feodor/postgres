@@ -427,9 +427,9 @@ okeys_scalar(void *state, char *token, JsonTokenType tokentype)
 }
 
 /*
- * json getter functions
+ * json and jsonb getter functions
  * these implement the -> ->> #> and #>> operators
- * and the json_extract_path*(json, text, ...) functions
+ * and the json{b?}_extract_path*(json, text, ...) functions
  */
 
 
@@ -524,18 +524,40 @@ Datum
 jsonb_array_element(PG_FUNCTION_ARGS)
 {
 	Jsonb      *jb = PG_GETARG_JSONB(0);
-	text       *jsontext;
-	text	   *result;
 	int			element = PG_GETARG_INT32(1);
+	JsonbIterator   *it;
+	JsonbValue       v;
+	int              r = 0;
+	bool             skipNested = false;
+	int              element_number = 0;
 
-	jsontext = cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb)));
-	
-	result = get_worker(jsontext, NULL, element, NULL, NULL, -1, false);
+    
+   if (JB_ROOT_IS_SCALAR(jb))
+       elog(ERROR,"Cannot call jsonb_array_element on a scalar");
+   else if (JB_ROOT_IS_OBJECT(jb))
+       elog(ERROR,"Cannot call jsonb_array_element on an object");
 
-	if (result != NULL)
-		PG_RETURN_JSONB(DirectFunctionCall1(jsonb_in, CStringGetDatum(text_to_cstring(result))));
-	else
-		PG_RETURN_NULL();
+   Assert(JB_ROOT_IS_ARRAY(jb));
+
+	it = JsonbIteratorInit(VARDATA_ANY(jb));
+
+	while((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	{
+		skipNested = true;
+		
+		// elog(NOTICE, "r = %d",r);
+		
+		if (r == WJB_ELEM)
+		{
+			
+			if (element_number++ == element)
+			{
+				PG_RETURN_JSONB(JsonbValueToJsonb(&v));
+			}
+		}
+	}
+
+	PG_RETURN_NULL(); 
 }
 
 Datum
@@ -557,18 +579,59 @@ Datum
 jsonb_array_element_text(PG_FUNCTION_ARGS)
 {
 	Jsonb      *jb = PG_GETARG_JSONB(0);
-	text       *jsontext;
-	text	   *result;
 	int			element = PG_GETARG_INT32(1);
+	JsonbIterator   *it;
+	JsonbValue       v;
+	int              r = 0;
+	bool             skipNested = false;
+	int              element_number = 0;
 
-	jsontext = cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb)));
-	
-	result = get_worker(jsontext, NULL, element, NULL, NULL, -1, true);
+    
+   if (JB_ROOT_IS_SCALAR(jb))
+       elog(ERROR,"Cannot call jsonb_array_element_text on a scalar");
+   else if (JB_ROOT_IS_OBJECT(jb))
+       elog(ERROR,"Cannot call jsonb_array_element_text on an object");
 
-	if (result != NULL)
-		PG_RETURN_TEXT_P(result);
-	else
-		PG_RETURN_NULL();
+   Assert(JB_ROOT_IS_ARRAY(jb));
+
+	it = JsonbIteratorInit(VARDATA_ANY(jb));
+
+	while((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	{
+		skipNested = true;
+		
+		// elog(NOTICE, "r = %d",r);
+		
+		if (r == WJB_ELEM)
+		{
+			
+			if (element_number++ == element)
+			{
+				/* 
+				 * if it's a scalar string it needs to be de-escaped, 
+				 * otherwise just return the text 
+				 */
+				text *result;
+				if (v.type == jbvString)
+				{
+					result = cstring_to_text_with_len(v.string.val, v.string.len);
+				}
+				else if (v.type == jbvNull)
+				{
+					PG_RETURN_NULL(); 
+				}
+				else
+				{
+					StringInfo jtext = makeStringInfo();
+					(void) JsonbToCString(jtext, JsonbValueToJsonb(&v), -1);
+					result = cstring_to_text_with_len(jtext->data, jtext->len);
+				}
+				PG_RETURN_TEXT_P(result);
+			}
+		}
+	}
+
+	PG_RETURN_NULL(); 
 }
 
 Datum

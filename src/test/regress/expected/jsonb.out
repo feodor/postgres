@@ -345,7 +345,7 @@ WHERE json_type = 'object';
 SELECT test_json -> 2
 FROM test_jsonb
 WHERE json_type = 'scalar';
-ERROR:  cannot extract element from a scalar
+ERROR:  Cannot call jsonb_array_element on a scalar
 SELECT test_json -> 2
 FROM test_jsonb
 WHERE json_type = 'array';
@@ -357,7 +357,7 @@ WHERE json_type = 'array';
 SELECT test_json -> 2
 FROM test_jsonb
 WHERE json_type = 'object';
-ERROR:  cannot extract array element from a non-array
+ERROR:  Cannot call jsonb_array_element on an object
 SELECT test_json->>2
 FROM test_jsonb
 WHERE json_type = 'array';
