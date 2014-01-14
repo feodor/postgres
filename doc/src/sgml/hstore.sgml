@@ -115,7 +115,7 @@
 SELECT 'a=&gt;1,a=&gt;2'::hstore;
   hstore
 ----------
- "a"=&gt;"1"
+ "a"=&gt;1
 </programlisting>
   </para>
 
@@ -286,7 +286,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>get boolean value for key (<literal>NULL</> if not boolean or not present)</entry>
       <entry><literal>'a =&gt; 42.0, b =&gt; true'::hstore ?&gt; 'b'</literal></entry>
-      <entry><literal>t</literal></entry>
+      <entry><literal>true</literal></entry>
      </row>
 
      <row>
@@ -294,7 +294,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>get boolean value for array index (<literal>NULL</> if not boolean or not present)</entry>
       <entry><literal>'[false,null,44]'::hstore ?&gt; 0</literal></entry>
-      <entry><literal>f</literal></entry>
+      <entry><literal>false</literal></entry>
      </row>
 
      <row>
@@ -318,7 +318,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>get boolean value for key path (<literal>NULL</> if not boolean or not present)</entry>
       <entry><literal>'foo =&gt; {bar =&gt; true}'::hstore #?&gt; '{foo,bar}'</literal></entry>
-      <entry><literal>t</literal></entry>
+      <entry><literal>true</literal></entry>
      </row>
 
      <row>
@@ -350,7 +350,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>text[]</></entry>
       <entry>get values for keys (<literal>NULL</> if not present)</entry>
       <entry><literal>'a=&gt;x, b=&gt;y, c=&gt;z'::hstore -&gt; ARRAY['c','a']</literal></entry>
-      <entry><literal>{"z","x"}</literal></entry>
+      <entry><literal>{z,x}</literal></entry>
      </row>
 
      <row>
@@ -366,7 +366,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain key?</entry>
       <entry><literal>'a=&gt;1'::hstore ? 'a'</literal></entry>
-      <entry><literal>t</literal></entry>
+      <entry><literal>true</literal></entry>
      </row>
 
      <row>
@@ -374,7 +374,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain array index?</entry>
       <entry><literal>'[a,b,c]'::hstore ? 2</literal></entry>
-      <entry><literal>t</literal></entry>
+      <entry><literal>true</literal></entry>
      </row>
 
      <row>
@@ -382,7 +382,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain key path?</entry>
       <entry><literal>'[1, 2, {foo=&gt;hi}]'::hstore #? '{2,foo}'</literal></entry>
-      <entry><literal>t</literal></entry>
+      <entry><literal>true</literal></entry>
      </row>
 
      <row>
@@ -390,7 +390,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain all specified keys?</entry>
       <entry><literal>'a=&gt;1,b=&gt;2'::hstore ?&amp; ARRAY['a','b']</literal></entry>
-      <entry><literal>t</literal></entry>
+      <entry><literal>true</literal></entry>
      </row>
 
      <row>
@@ -398,7 +398,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain any of the specified keys?</entry>
       <entry><literal>'a=&gt;1,b=&gt;2'::hstore ?| ARRAY['b','c']</literal></entry>
-      <entry><literal>t</literal></entry>
+      <entry><literal>true</literal></entry>
      </row>
 
      <row>
@@ -406,7 +406,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>does left operand contain right?</entry>
       <entry><literal>'a=&gt;b, b=&gt;1, c=&gt;NULL'::hstore @&gt; 'b=&gt;1'</literal></entry>
-      <entry><literal>t</literal></entry>
+      <entry><literal>true</literal></entry>
      </row>
 
      <row>
@@ -414,7 +414,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>boolean</></entry>
       <entry>is left operand contained in right?</entry>
       <entry><literal>'a=&gt;c'::hstore &lt;@ 'a=&gt;b, b=&gt;1, c=&gt;NULL'</literal></entry>
-      <entry><literal>f</literal></entry>
+      <entry><literal>false</literal></entry>
      </row>
 
      <row>
@@ -422,7 +422,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</></entry>
       <entry>delete key from left operand</entry>
       <entry><literal>'a=&gt;1, b=&gt;2, c=&gt;3'::hstore - 'b'::text</literal></entry>
-      <entry><literal>"a"=&gt;"1", "c"=&gt;"3"</literal></entry>
+      <entry><literal>"a"=&gt;1, "c"=&gt;3</literal></entry>
      </row>
 
      <row>
@@ -438,7 +438,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</></entry>
       <entry>delete keys from left operand</entry>
       <entry><literal>'a=&gt;1, b=&gt;2, c=&gt;3'::hstore - ARRAY['a','b']</literal></entry>
-      <entry><literal>"c"=&gt;"3"</literal></entry>
+      <entry><literal>"c"=&gt;3</literal></entry>
      </row>
 
      <row>
@@ -446,14 +446,14 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</></entry>
       <entry>delete matching pairs from left operand</entry>
       <entry><literal>'a=&gt;1, b=&gt;2, c=&gt;3'::hstore - 'a=&gt;4, b=&gt;2'::hstore</literal></entry>
-      <entry><literal>"a"=&gt;"1", "c"=&gt;"3"</literal></entry>
+      <entry><literal>"a"=&gt;1, "c"=&gt;3</literal></entry>
      </row>
 
      <row>
       <entry><type>hstore</> <literal>#-</> <type>text[]</></entry>
       <entry><type>hstore</></entry>
       <entry>delete key path from left operand</entry>
-      <entry><literal>'{a =&gt; {b =&gt; { c =&gt; [1,2]}}}'::hstore #- '[a,b,c,0]'</literal></entry>
+      <entry><literal>'{a =&gt; {b =&gt; { c =&gt; [1,2]}}}'::hstore #- '{a,b,c,0}'</literal></entry>
       <entry><literal>"a"=&gt;{"b"=&gt;{"c"=&gt;[2]}}</literal></entry>
      </row>
 
@@ -534,7 +534,7 @@ postgres=# SELECT 'a=&gt;[1,2,{c=&gt;3, x=&gt;4}], c=&gt;b'::hstore @&gt; 'a=&gt
       <entry>construct an <type>hstore</> from an array, which may be either
        a key/value array, or a two-dimensional array</entry>
       <entry><literal>hstore(ARRAY['a','1','b','2']) || hstore(ARRAY[['c','3'],['d','4']])</literal></entry>
-      <entry><literal>a=&gt;1, b=&gt;2, c=&gt;3, d=&gt;4</literal></entry>
+      <entry><literal>a=&gt;"1", b=&gt;"2", c=&gt;"3", d=&gt;"4"</literal></entry>
      </row>
 
      <row>
@@ -683,7 +683,7 @@ b
       <entry><type>json</type></entry>
       <entry>get <type>hstore</type> as a <type>json</type> value</entry>
       <entry><literal>hstore_to_json('"a key"=&gt;1, b=&gt;t, c=&gt;null, d=&gt;12345, e=&gt;012345, f=&gt;1.234, g=&gt;2.345e+4')</literal></entry>
-      <entry><literal>{"a key": "1", "b": "t", "c": null, "d": "12345", "e": "012345", "f": "1.234", "g": "2.345e+4"}</literal></entry>
+      <entry><literal>{ "b": true, "c": null, "d": 12345, "e": 12345, "f": 1.234, "g": 23450, "a key": 1}</literal></entry>
      </row>
 
      <row>
@@ -691,7 +691,7 @@ b
       <entry><type>json</type></entry>
       <entry>get <type>hstore</type> as a <type>json</type> value, but attempt to distinguish numerical and Boolean values so they are unquoted in the JSON</entry>
       <entry><literal>hstore_to_json_loose('"a key"=&gt;1, b=&gt;t, c=&gt;null, d=&gt;12345, e=&gt;012345, f=&gt;1.234, g=&gt;2.345e+4')</literal></entry>
-      <entry><literal>{"a key": 1, "b": true, "c": null, "d": 12345, "e": "012345", "f": 1.234, "g": 2.345e+4}</literal></entry>
+      <entry><literal>{ "b": true, "c": null, "d": 12345, "e": 12345, "f": 1.234, "g": 23450, "a key": 1}</literal></entry>
      </row>
 
      <row>
@@ -707,7 +707,7 @@ b
       <entry><type>hstore</type></entry>
       <entry>extract a subset of an <type>hstore</></entry>
       <entry><literal>slice('a=&gt;1,b=&gt;2,c=&gt;3'::hstore, ARRAY['b','c','x'])</literal></entry>
-      <entry><literal>"b"=&gt;"2", "c"=&gt;"3"</literal></entry>
+      <entry><literal>"b"=&gt;2, "c"=&gt;3</literal></entry>
      </row>
 
      <row>
@@ -766,15 +766,15 @@ b
       <entry><function>replace(hstore,text[],hstore)</function><indexterm><primary>replace</primary></indexterm></entry>
       <entry><type>hstore</type></entry>
       <entry>replace value at the specified path</entry>
-      <entry><literal>replace('a=&gt;1,b=&gt;{c=&gt;3,d=&gt;[4,5,6]}'::hstore,'[b,d]', '1')</literal></entry>
-      <entry><literal>"a"=&gt;1, "b"=&gt;{"c"=&gt;3, "d"=&gt;}</literal></entry>
+      <entry><literal>replace('a=&gt;1,b=&gt;{c=&gt;3,d=&gt;[4,5,6]}'::hstore,'{b,d}', '1')</literal></entry>
+      <entry><literal>"a"=&gt;1, "b"=&gt;{"c"=&gt;3, "d"=&gt;1}</literal></entry>
      </row>
 
      <row>
       <entry><function>concat_path(hstore,text[],hstore)</function><indexterm><primary>concat_path</primary></indexterm></entry>
       <entry><type>hstore</type></entry>
       <entry>concatenate <type>hstore</> value at the specified path</entry>
-      <entry><literal>concat_path('b=&gt;{c=&gt;3,d=&gt;[4,5,6]}'::hstore,'[b,d]', '1')</literal></entry>
+      <entry><literal>concat_path('b=&gt;{c=&gt;3,d=&gt;[4,5,6]}'::hstore,'{b,d}', '1')</literal></entry>
       <entry><literal>"b"=&gt;{"c"=&gt;3, "d"=&gt;[4, 5, 6, 1]}</literal></entry>
      </row>
 
@@ -783,7 +783,7 @@ b
       <entry><type>hstore</type></entry>
       <entry>delete pair with matching key</entry>
       <entry><literal>delete('a=&gt;1,b=&gt;2','b')</literal></entry>
-      <entry><literal>"a"=>"1"</literal></entry>
+      <entry><literal>"a"=>1</literal></entry>
      </row>
 
      <row>
@@ -791,7 +791,7 @@ b
       <entry><type>hstore</type></entry>
       <entry>delete pairs with matching keys</entry>
       <entry><literal>delete('a=&gt;1,b=&gt;2,c=&gt;3',ARRAY['a','b'])</literal></entry>
-      <entry><literal>"c"=>"3"</literal></entry>
+      <entry><literal>"c"=>3</literal></entry>
      </row>
 
      <row>
@@ -799,7 +799,7 @@ b
       <entry><type>hstore</type></entry>
       <entry>delete pairs matching those in the second argument</entry>
       <entry><literal>delete('a=&gt;1,b=&gt;2','a=&gt;4,b=&gt;2'::hstore)</literal></entry>
-      <entry><literal>"a"=>"1"</literal></entry>
+      <entry><literal>"a"=>1</literal></entry>
      </row>
 
      <row>
@@ -858,6 +858,13 @@ b
 CREATE INDEX hidx ON testhstore USING GIST (h);
 
 CREATE INDEX hidx ON testhstore USING GIN (h);
+</programlisting>
+
+<para>
+GIN index opclass gin_hstore_hash_ops supports <literal>@&gt;</> operator.
+</para>
+<programlisting>
+CREATE INDEX hidx ON testhstore USING GIN (h gin_hstore_hash_ops);
 </programlisting>
 
   <para>
@@ -1051,7 +1058,7 @@ INSERT INTO test VALUES (123, 'foo', 'bar');
 SELECT hstore(t) FROM test AS t;
                    hstore                    
 ---------------------------------------------
- "col1"=&gt;"123", "col2"=&gt;"foo", "col3"=&gt;"bar"
+ "col1"=&gt;123, "col2"=&gt;"foo", "col3"=&gt;"bar"
 (1 row)
 </programlisting>
   </para>
