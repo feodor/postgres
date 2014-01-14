@@ -120,6 +120,8 @@ typedef JsonbValue HStoreValue;
 typedef ToJsonbState ToHStoreState;
 #define pushHStoreValue(state, r /* WHS_* */, v)	pushJsonbValue((state), (r), (v))
 
+extern bool stringIsNumber(char *string, int len, bool jsonNumber);
+
 extern uint32 compressHStore(HStoreValue *v, char *buffer);
 
 typedef JsonbIterator HStoreIterator;

@@ -1325,7 +1325,7 @@ each_object_field_end_jsonb(void *state, char *fname, bool isnull)
 		cstr = palloc(len+1 * sizeof(char));
 		memcpy(cstr,_state->result_start,len);
 		cstr[len] = '\0';
-		val = DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(cstr)));
+		val = (Jsonb*)DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(cstr)));
 		values[1] = PointerGetDatum(val);
 	}
 
@@ -1527,7 +1527,7 @@ elements_array_element_end_jsonb(void *state, bool isnull)
 	cstr = palloc(len+1 * sizeof(char));
 	memcpy(cstr,_state->result_start,len);
 	cstr[len] = '\0';
-	jbval = DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(cstr)));
+	jbval = (Jsonb*)DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(cstr)));
 	values[0] = PointerGetDatum(jbval);
 
 	tuple = heap_form_tuple(_state->ret_tdesc, values, nulls);

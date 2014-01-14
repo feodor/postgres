@@ -216,7 +216,7 @@ select hstore(v) from testhstore1 v;
 select hstore(null::testhstore0);
 select hstore(null::testhstore1);
 select pg_column_size(hstore(v))
-         = pg_column_size('a=>"1", b=>"foo", c=>1.2, d=>"3", e=>"0"'::hstore)
+         = pg_column_size('a=>1, b=>"foo", c=>1.2, d=>3, e=>0'::hstore)
   from testhstore1 v;
 select populate_record(v, hstore('c', '3.45')) from testhstore1 v;
 select populate_record(v, hstore('d', '3.45')) from testhstore1 v;

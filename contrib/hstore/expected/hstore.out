@@ -925,9 +925,9 @@ select pg_column_size(hstore(ARRAY['a','b','asd'], ARRAY['g','h','i']))
 
 -- records
 select hstore(v) from (values (1, 'foo', 1.2, 3::float8)) v(a,b,c,d);
-                  hstore                  
-------------------------------------------
- "a"=>"1", "b"=>"foo", "c"=>1.2, "d"=>"3"
+                hstore                
+--------------------------------------
+ "a"=>1, "b"=>"foo", "c"=>1.2, "d"=>3
 (1 row)
 
 create domain hstestdom1 as integer not null default 0;
@@ -936,9 +936,9 @@ create table testhstore1 (a integer, b text, c numeric, d float8, e hstestdom1);
 insert into testhstore0 values (1, 'foo', 1.2, 3::float8);
 insert into testhstore1 values (1, 'foo', 1.2, 3::float8);
 select hstore(v) from testhstore1 v;
-                       hstore                       
-----------------------------------------------------
- "a"=>"1", "b"=>"foo", "c"=>1.2, "d"=>"3", "e"=>"0"
+                    hstore                    
+----------------------------------------------
+ "a"=>1, "b"=>"foo", "c"=>1.2, "d"=>3, "e"=>0
 (1 row)
 
 select hstore(null::testhstore0);
@@ -954,7 +954,7 @@ select hstore(null::testhstore1);
 (1 row)
 
 select pg_column_size(hstore(v))
-         = pg_column_size('a=>"1", b=>"foo", c=>1.2, d=>"3", e=>"0"'::hstore)
+         = pg_column_size('a=>1, b=>"foo", c=>1.2, d=>3, e=>0'::hstore)
   from testhstore1 v;
  ?column? 
 ----------
@@ -1501,37 +1501,37 @@ RESET enable_seqscan;
 drop index hidx;
 -- json
 select hstore_to_json('"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4');
-                                    hstore_to_json                                     
----------------------------------------------------------------------------------------
- {"b": true, "c": null, "d": 12345, "e": "012345", "f": 1.234, "g": 23450, "a key": 1}
+                                   hstore_to_json                                   
+------------------------------------------------------------------------------------
+ {"b": true, "c": null, "d": 12345, "e": 12345, "f": 1.234, "g": 23450, "a key": 1}
 (1 row)
 
 select cast( hstore  '"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4' as json);
-                                         json                                          
----------------------------------------------------------------------------------------
- {"b": true, "c": null, "d": 12345, "e": "012345", "f": 1.234, "g": 23450, "a key": 1}
+                                        json                                        
+------------------------------------------------------------------------------------
+ {"b": true, "c": null, "d": 12345, "e": 12345, "f": 1.234, "g": 23450, "a key": 1}
 (1 row)
 
 select hstore_to_json_loose('"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4');
-                                 hstore_to_json_loose                                  
----------------------------------------------------------------------------------------
- {"b": true, "c": null, "d": 12345, "e": "012345", "f": 1.234, "g": 23450, "a key": 1}
+                                hstore_to_json_loose                                
+------------------------------------------------------------------------------------
+ {"b": true, "c": null, "d": 12345, "e": 12345, "f": 1.234, "g": 23450, "a key": 1}
 (1 row)
 
 create table test_json_agg (f1 text, f2 hstore);
 insert into test_json_agg values ('rec1','"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4'),
        ('rec2','"a key" =>2, b => f, c => "null", d=> -12345, e => 012345.6, f=> -1.234, g=> 0.345e-4');
 select json_agg(q) from test_json_agg q;
-                                                       json_agg                                                        
------------------------------------------------------------------------------------------------------------------------
- [{"f1":"rec1","f2":{"b": true, "c": null, "d": 12345, "e": "012345", "f": 1.234, "g": 23450, "a key": 1}},           +
-  {"f1":"rec2","f2":{"b": false, "c": "null", "d": -12345, "e": "012345.6", "f": -1.234, "g": 0.0000345, "a key": 2}}]
+                                                      json_agg                                                      
+--------------------------------------------------------------------------------------------------------------------
+ [{"f1":"rec1","f2":{"b": true, "c": null, "d": 12345, "e": 12345, "f": 1.234, "g": 23450, "a key": 1}},           +
+  {"f1":"rec2","f2":{"b": false, "c": "null", "d": -12345, "e": 12345.6, "f": -1.234, "g": 0.0000345, "a key": 2}}]
 (1 row)
 
 select json_agg(q) from (select f1, hstore_to_json_loose(f2) as f2 from test_json_agg) q;
-                                                       json_agg                                                        
------------------------------------------------------------------------------------------------------------------------
- [{"f1":"rec1","f2":{"b": true, "c": null, "d": 12345, "e": "012345", "f": 1.234, "g": 23450, "a key": 1}},           +
-  {"f1":"rec2","f2":{"b": false, "c": "null", "d": -12345, "e": "012345.6", "f": -1.234, "g": 0.0000345, "a key": 2}}]
+                                                      json_agg                                                      
+--------------------------------------------------------------------------------------------------------------------
+ [{"f1":"rec1","f2":{"b": true, "c": null, "d": 12345, "e": 12345, "f": 1.234, "g": 23450, "a key": 1}},           +
+  {"f1":"rec2","f2":{"b": false, "c": "null", "d": -12345, "e": 12345.6, "f": -1.234, "g": 0.0000345, "a key": 2}}]
 (1 row)
 
