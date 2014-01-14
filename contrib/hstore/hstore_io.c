@@ -10,6 +10,7 @@
 #include "catalog/pg_cast.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
+#include "parser/parse_coerce.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
 #include "utils/json.h"
@@ -32,6 +33,7 @@ static bool	pretty_print_var = false;
 
 static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level,
 					   uint32 header);
+static Oid searchCast(Oid src, Oid dst, CoercionMethod *method);
 
 static size_t
 hstoreCheckKeyLen(size_t len)
@@ -809,10 +811,27 @@ hstore_from_record(PG_FUNCTION_ARGS)
 				v.hash.pairs[i].value.boolean = DatumGetBool(values[i]);
 				v.hash.pairs[i].value.size = sizeof(HEntry);
 			}
-			else if (column_type == NUMERICOID)
-			{	/* XXX float... int... */
+			else if (TypeCategory(column_type) == TYPCATEGORY_NUMERIC)
+			{
+				Oid				castOid = InvalidOid;
+				CoercionMethod  method;
+
 				v.hash.pairs[i].value.type = hsvNumeric;
-				v.hash.pairs[i].value.numeric = DatumGetNumeric(values[i]);
+
+				castOid = searchCast(column_type, NUMERICOID, &method);
+				if (castOid == InvalidOid)
+				{
+					if (method != COERCION_METHOD_BINARY)
+						elog(ERROR, "Could not cast numeric category type to numeric '%c'", (char)method);
+
+					v.hash.pairs[i].value.numeric = DatumGetNumeric(values[i]);
+				}
+				else
+				{
+					v.hash.pairs[i].value.numeric = 
+						DatumGetNumeric(OidFunctionCall1(castOid, values[i]));
+
+				}
 				v.hash.pairs[i].value.size = 2*sizeof(HEntry) +
 								VARSIZE_ANY(v.hash.pairs[i].value.numeric);
 			}
@@ -1608,13 +1627,19 @@ json_to_hstore(PG_FUNCTION_ARGS)
 static Oid
 searchCast(Oid src, Oid dst, CoercionMethod *method)
 {
-	Oid				funcOid = InvalidOid;
+	Oid				funcOid = InvalidOid,
+					baseSrc;
 	HeapTuple   	tuple;
+
+	if (src == dst)
+	{
+		*method = COERCION_METHOD_BINARY;
+		return InvalidOid;
+	}
 
 	tuple = SearchSysCache2(CASTSOURCETARGET,
 							ObjectIdGetDatum(src),
 							ObjectIdGetDatum(dst));
-
 
 	*method = 0;
 
@@ -1628,6 +1653,11 @@ searchCast(Oid src, Oid dst, CoercionMethod *method)
 		*method = castForm->castmethod;
 
 		ReleaseSysCache(tuple);
+	}
+	else if ((baseSrc = getBaseType(src)) != src && OidIsValid(baseSrc))
+	{	
+		/* domain type */
+		funcOid = searchCast(baseSrc, dst, method);
 	}
 
 	return funcOid;
@@ -1661,24 +1691,33 @@ array_to_hstore(PG_FUNCTION_ARGS)
 		case BOOLOID:
 			valueType = hsvBool;
 			break;
-		case INT2OID:
-		case INT4OID:
-		case INT8OID:
-		case FLOAT4OID:
-		case FLOAT8OID:
-			castOid = searchCast(ARR_ELEMTYPE(array), NUMERICOID, &method);
-			Assert(castOid != InvalidOid);
 		case NUMERICOID:
 			valueType = hsvNumeric;
 			break;
-		default:
-			castOid = searchCast(ARR_ELEMTYPE(array), TEXTOID, &method);
-
-			if (castOid == InvalidOid && method != COERCION_METHOD_BINARY)
-				elog(ERROR, "Could not cast array's element type to text");
 		case TEXTOID:
 			valueType = hsvString;
 			break;
+		default:
+			if (TypeCategory(ARR_ELEMTYPE(array)) == TYPCATEGORY_NUMERIC)
+			{
+				castOid = searchCast(ARR_ELEMTYPE(array), NUMERICOID, &method);
+
+				if (castOid == InvalidOid && method != COERCION_METHOD_BINARY)
+					elog(ERROR, "Could not cast array's element type to numeric");
+
+				valueType = hsvNumeric;
+				break;
+			}
+			else
+			{
+				castOid = searchCast(ARR_ELEMTYPE(array), TEXTOID, &method);
+
+				if (castOid == InvalidOid && method != COERCION_METHOD_BINARY)
+					elog(ERROR, "Could not cast array's element type to text");
+
+				valueType = hsvString;
+				break;
+			}
 	}
 
 	if (castOid != InvalidOid)
