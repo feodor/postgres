@@ -11,7 +11,9 @@ SELECT '"\u"'::jsonb;			-- ERROR, incomplete escape
 SELECT '"\u00"'::jsonb;			-- ERROR, incomplete escape
 SELECT '"\u000g"'::jsonb;		-- ERROR, g is not a hex digit
 SELECT '"\u0000"'::jsonb;		-- OK, legal escape
-SELECT '"\uaBcD"'::jsonb;		-- OK, uppercase and lower case both OK
+-- use octet_length here so we don't get an odd unicode char in the
+-- output
+SELECT octet_length('"\uaBcD"'::jsonb::text); -- OK, uppercase and lower case both OK
 
 -- Numbers.
 SELECT '1'::jsonb;				-- OK
@@ -56,6 +58,10 @@ SELECT 'truf'::jsonb;			-- ERROR, not a keyword
 SELECT 'trues'::jsonb;			-- ERROR, not a keyword
 SELECT ''::jsonb;				-- ERROR, no value
 SELECT '    '::jsonb;			-- ERROR, no value
+
+-- make sure jsonb is passed throught json generators without being escaped
+select array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
+
 
 -- jsonb extraction functions
 
@@ -231,7 +237,7 @@ select * from jsonb_populate_recordset(row('def',99,null)::jbpop,'[{"c":[100,200
 
 -- handling of unicode surrogate pairs
 
-select jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a' as correct_in_utf8;
+select octet_length((jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a')::text)  as correct_in_utf8;
 select jsonb '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
 select jsonb '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
 select jsonb '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate

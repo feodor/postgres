@@ -1021,18 +1021,7 @@ json_array_length(PG_FUNCTION_ARGS)
 	JsonLexContext *lex;
 	JsonSemAction *sem;
 
-	if (get_fn_expr_argtype(fcinfo->flinfo, 0) == JSONOID)
-	{
-		/* just get the text */
-		json = PG_GETARG_TEXT_P(0);
-	}
-	else
-	{
-		Jsonb      *jb = PG_GETARG_JSONB(0);
-
-		json = cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb)));
-	}
-
+	json = PG_GETARG_TEXT_P(0);
 	lex = makeJsonLexContext(json, false);
 	state = palloc0(sizeof(AlenState));
 	sem = palloc0(sizeof(JsonSemAction));
@@ -1056,7 +1045,19 @@ json_array_length(PG_FUNCTION_ARGS)
 Datum
 jsonb_array_length(PG_FUNCTION_ARGS)
 {
-	return json_array_length(fcinfo);
+	Jsonb *jb = PG_GETARG_JSONB(0);
+
+	if (JB_ROOT_IS_SCALAR(jb))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot get array length of a scalar")));
+	else if (! JB_ROOT_IS_ARRAY(jb))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot get array length of a non-array")));
+
+	PG_RETURN_INT32(JB_ROOT_COUNT(jb));
+	
 }
 
 /*

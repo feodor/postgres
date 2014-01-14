@@ -55,11 +55,11 @@
    The text representation of an <type>hstore</>, used for input and output,
    may be formatted as scalar values, hash-like values, array-like values, and
    nested array and hash values. Scalar values are simply strings, numeric
-   values, booleans, or <literal>NULL</>. Strings continaining whitespace,
+   values, booleans, or <literal>NULL</>. Strings containing whitespace,
    commas, <literal>=</>s or <literal>&gt;</>s must be double-quoted. To
    include a double quote or a backslash in a key or value, escape it with a
-   backslash. Boolean values may be represnted as <literal>true</>, <literal>t</>,
-   <literal>false</>, or <literal>f</>. Use quotation marks to represent thes
+   backslash. Boolean values may be represented as <literal>true</>, <literal>t</>,
+   <literal>false</>, or <literal>f</>. Use quotation marks to represent these
    values as strings. The <literal>NULL</> keyword is case-insensitive.
    Double-quote the <literal>NULL</> to treat it as the ordinary string
    <quote>NULL</quote>. Some examples:
@@ -87,9 +87,9 @@
   </para>
 
   <para>
-   Hashes includes zero or more
+   Hashes include zero or more
    <replaceable>key</> <literal>=&gt;</> <replaceable>value</> pairs separated
-   by commas, optionally brackted by curly braces. Keys must be strings and
+   by commas, optionally bracketed by curly braces. Keys must be strings and
    may not be <literal>NULL</>; values may be any <type>hstore</> type,
    including <literal>NULL</>. Examples:
 
@@ -291,7 +291,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
 
      <row>
       <entry><type>hstore</> <literal>?&gt;</> <type>integer</></entry>
-      <entry><type>bolean</></entry>
+      <entry><type>boolean</></entry>
       <entry>get boolean value for array index (<literal>NULL</> if not boolean or not present)</entry>
       <entry><literal>'[false,null,44]'::hstore ?&gt; 0</literal></entry>
       <entry><literal>f</literal></entry>
@@ -301,7 +301,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#&gt;</> <type>text[]</></entry>
       <entry><type>text</></entry>
       <entry>get value for key path (<literal>NULL</> if not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; yellow}'::hstore #&gt; '[foo,bar]'</literal></entry>
+      <entry><literal>'foo =&gt; {bar =&gt; yellow}'::hstore #&gt; '{foo,bar}'</literal></entry>
       <entry><literal>yellow</literal></entry>
      </row>
 
@@ -309,15 +309,15 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#^&gt;</> <type>text[]</></entry>
       <entry><type>numeric</></entry>
       <entry>get numeric value for key path (<literal>NULL</> if not numeric or not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; 99}'::hstore #^&gt; '[foo,bar]'</literal></entry>
+      <entry><literal>'foo =&gt; {bar =&gt; 99}'::hstore #^&gt; '{foo,bar}'</literal></entry>
       <entry><literal>99</literal></entry>
      </row>
 
      <row>
       <entry><type>hstore</> <literal>#?&gt;</> <type>text[]</></entry>
       <entry><type>boolean</></entry>
-      <entry>get boolean value for key path (<literal>NULL</> if not booelan or not present)</entry>
-      <entry><literal>'foo =&gt; {bar =&gt; true}'::hstore #?&gt; '[foo,bar]'</literal></entry>
+      <entry>get boolean value for key path (<literal>NULL</> if not boolean or not present)</entry>
+      <entry><literal>'foo =&gt; {bar =&gt; true}'::hstore #?&gt; '{foo,bar}'</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -333,7 +333,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>%&gt;</> <type>integer</></entry>
       <entry><type>hstore</></entry>
       <entry>get hstore value array index (<literal>NULL</> if not present)</entry>
-      <entry><literal>'[1, 2, {foo=>hi}]'::hstore %> 2'</literal></entry>
+      <entry><literal>'[1, 2, {foo=>hi}]'::hstore %> 2</literal></entry>
       <entry><literal>"foo"=&gt;"hi"</literal></entry>
      </row>
 
@@ -341,7 +341,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#%&gt;</> <type>text[]</></entry>
       <entry><type>hstore</></entry>
       <entry>get hstore value for key path (<literal>NULL</> if not present)</entry>
-      <entry><literal>'a =&gt; 1, b =&gt; {c =&gt; [44,44]}'::hstore #%&gt; '[b,c]'</literal></entry>
+      <entry><literal>'a =&gt; 1, b =&gt; {c =&gt; [44,44]}'::hstore #%&gt; '{b,c}'</literal></entry>
       <entry><literal>[44, 44]</literal></entry>
      </row>
 
@@ -373,7 +373,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>?</> <type>integer</></entry>
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain array index?</entry>
-      <entry><literal>'a,b,c'::hstore ? 2</literal></entry>
+      <entry><literal>'[a,b,c]'::hstore ? 2</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -381,7 +381,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>#?</> <type>text[]</></entry>
       <entry><type>boolean</></entry>
       <entry>does <type>hstore</> contain key path?</entry>
-      <entry><literal>'[1, 2, {foo=&gt;hi}]'::hstore #? '[2,foo]'</literal></entry>
+      <entry><literal>'[1, 2, {foo=&gt;hi}]'::hstore #? '{2,foo}'</literal></entry>
       <entry><literal>t</literal></entry>
      </row>
 
@@ -429,7 +429,7 @@ SELECT 'a=&gt;1,a=&gt;2'::hstore;
       <entry><type>hstore</> <literal>-</> <type>integer</></entry>
       <entry><type>hstore</></entry>
       <entry>delete index from left operand</entry>
-      <entry><literal>'[2, 3, 4, 6, 8]'::hstore - 1;</literal></entry>
+      <entry><literal>'[2, 3, 4, 6, 8]'::hstore - 1</literal></entry>
       <entry><literal>[2, 4, 6, 8]</literal></entry>
      </row>
 
@@ -905,7 +905,7 @@ CREATE INDEX hidx ON testhstore USING HASH (h);
 
      <row>
       <entry><literal>pretty_print</></entry>
-      <entry>Adds add newlines between values and indents nested hashes and arrays.</entry>
+      <entry>Adds newlines between values and indents nested hashes and arrays.</entry>
       <entry><literal>hstore_print('a=&gt;t, t=&gt;"f", arr=&gt;[1,2,"3"]', pretty_print := true)</literal></entry>
       <entry>
 <programlisting>
@@ -938,7 +938,7 @@ CREATE INDEX hidx ON testhstore USING HASH (h);
 
      <row>
       <entry><literal>json</></entry>
-      <entry>Retuns the value as a JSON string</entry>
+      <entry>Returns the value as a JSON string</entry>
       <entry><literal>hstore_print('arr=&gt;[1,2,"3"]', json := true)</literal></entry>
       <entry><literal>"arr": [1, 2, "3"]</literal></entry>
      </row>
@@ -1007,7 +1007,7 @@ SELECT * FROM populate_record(
 
   <para>
    But <literal>populate_record()</> supports more complicated records and nested
-   <type>hstore</a> values, as well. It makes an effort to convert
+   <type>hstore</> values, as well. It makes an effort to convert
    from <type>hstore</> data types to PostgreSQL types, including arrays,
    <type>json</>, and <type>hstore</> values:
 <programlisting>
