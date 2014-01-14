@@ -14,6 +14,51 @@
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
 
+/* turn a JsonbValue into a Jsonb */
+
+Jsonb *
+JsonbValueToJsonb(JsonbValue *v)
+{
+	Jsonb			*out;
+
+	if (v == NULL || v->type == jbvNull)
+	{
+		out = NULL;
+	}
+	else if (v->type == jbvString || v->type == jbvBool ||
+			 v->type == jbvNumeric)
+	{
+		ToJsonbState	*state = NULL;
+		JsonbValue		*res;
+		int				r;
+		JsonbValue		scalarArray;
+
+		scalarArray.type = jbvArray;
+		scalarArray.array.scalar = true;
+		scalarArray.array.nelems = 1;
+
+		pushJsonbValue(&state, WJB_BEGIN_ARRAY, &scalarArray);
+		pushJsonbValue(&state, WJB_ELEM, v);
+		res = pushJsonbValue(&state, WJB_END_ARRAY, NULL);
+
+		out = palloc(VARHDRSZ + res->size);
+		SET_VARSIZE(out, VARHDRSZ + res->size);
+		r = compressJsonb(res, VARDATA(out));
+		Assert(r <= res->size);
+		SET_VARSIZE(out, r + VARHDRSZ);
+	}
+	else
+	{
+		out = palloc(VARHDRSZ + v->size);
+
+		Assert(v->type == jbvBinary);
+		SET_VARSIZE(out, VARHDRSZ + v->binary.len);
+		memcpy(VARDATA(out), v->binary.data, v->binary.len);
+	}
+
+	return out;
+}
+
 /*
  * Sort and unique pairs in hash-like JsonbValue
  */

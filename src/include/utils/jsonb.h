@@ -225,5 +225,6 @@ extern Datum jsonb_send(PG_FUNCTION_ARGS);
 extern Datum jsonb_typeof(PG_FUNCTION_ARGS);
 
 extern char *JsonbToCString(StringInfo out, char *in, int estimated_len);
+extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
 
 #endif   /* __JSONB_H__ */
