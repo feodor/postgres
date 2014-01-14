@@ -176,8 +176,6 @@ extern JsonbValue* findUncompressedJsonbValue(char *buffer, uint32 flags,
 
 extern JsonbValue* getJsonbValue(char *buffer, uint32 flags, int32 i);
 
-extern bool JsonbStringIsNumber(char *string, int len);
-
 typedef struct ToJsonbState
 {
 	JsonbValue             v;

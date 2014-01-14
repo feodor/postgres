@@ -185,7 +185,7 @@ checkSpecialVal()
 {
 	int res = STRING_P;
 
-	if (JsonbStringIsNumber(scanstring.val, scanstring.len))
+	if (stringIsNumber(scanstring.val, scanstring.len, inputJSON))
 	{
 		/* for numeric_in() call we need to make a correct C-string */
 		addchar(false, '\0');

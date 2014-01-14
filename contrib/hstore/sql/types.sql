@@ -35,6 +35,8 @@ SELECT 'foo=>.1e'::hstore;
 SELECT 'foo=>.1e1'::hstore;
 SELECT 'foo=>.1e+1'::hstore;
 SELECT 'foo=>.1e-1'::hstore;
+SELECT 'foo=>0.1e-1'::hstore;
+SELECT 'foo=>00.1e-1'::hstore;
 
 SELECT 'foo=>+1'::hstore;
 SELECT 'foo=>+1.'::hstore;
@@ -145,3 +147,6 @@ SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::varchar[]);
 SELECT array_to_hstore('{{{1,11},{1,1},{4,41}},{{23,231},{3,31},{5,51}}}'::int4[]);
 SELECT hstore('array', array_to_hstore('{{{1,11},{1,1},{4,41}},{{23,231},{3,31},{5,51}}}'::int4[]));
 
+SELECT 'a=>"00012333", b=>"12233", c=>00012333, d=>12233'::hstore;
+SELECT hstore_to_json('a=>"00012333", b=>"12233", c=>00012333, d=>12233'::hstore);
+SELECT hstore_to_json_loose('a=>"00012333", b=>"12233", c=>00012333, d=>12233'::hstore);
