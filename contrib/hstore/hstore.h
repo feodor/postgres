@@ -190,7 +190,7 @@ extern HStoreValue* findUncompressedHStoreValue(char *buffer, uint32 flags,
 
 extern HStoreValue* getHStoreValue(char *buffer, uint32 flags, int32 i);
 
-extern bool stringIsNumber(char *string, int len);
+extern bool stringIsNumber(char *string, int len, bool jsonNumber);
 
 typedef enum HStoreOutputKind {
 	JsonOutput = 0x01,

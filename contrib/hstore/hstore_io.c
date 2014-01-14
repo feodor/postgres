@@ -1084,7 +1084,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 }
 
 bool
-stringIsNumber(char *string, int len) {
+stringIsNumber(char *string, int len, bool jsonNumber) {
 	enum {
 		SIN_FIRSTINT,
 		SIN_ZEROINT,
@@ -1111,7 +1111,7 @@ stringIsNumber(char *string, int len) {
 		switch(sinState)
 		{
 			case SIN_FIRSTINT:
-				if (*c == '0')
+				if (*c == '0' && jsonNumber)
 					sinState = SIN_ZEROINT;
 				else if (*c == '.')
 					sinState = SIN_SCALE;
@@ -1210,7 +1210,7 @@ putEscapedString(StringInfo out, HStoreOutputKind kind,
 			appendStringInfoString(out, (kind & JsonOutput) ? "true" : "t" );
 		else if (len == 1 && *string == 'f')
 			appendStringInfoString(out, (kind & JsonOutput) ? "false" : "f");
-		else if (len > 0 && stringIsNumber(string, len))
+		else if (len > 0 && stringIsNumber(string, len, true))
 			appendBinaryStringInfo(out, string, len);
 		else if (kind & JsonOutput)
 			escape_json(out, pnstrdup(string, len));
