@@ -65,7 +65,6 @@ static inline Datum each_worker_jsonb(PG_FUNCTION_ARGS, bool as_text);
 /* semantic action functions for json_each */
 static void each_object_field_start(void *state, char *fname, bool isnull);
 static void each_object_field_end(void *state, char *fname, bool isnull);
-static void each_object_field_end_jsonb(void *state, char *fname, bool isnull);
 static void each_array_start(void *state);
 static void each_scalar(void *state, char *token, JsonTokenType tokentype);
 
@@ -1392,7 +1391,6 @@ each_worker_jsonb(PG_FUNCTION_ARGS, bool as_text)
 static inline Datum
 each_worker(PG_FUNCTION_ARGS, bool as_text)
 {
-	Oid			val_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	text	   *json;
 	JsonLexContext *lex;
 	JsonSemAction *sem;
@@ -1401,18 +1399,7 @@ each_worker(PG_FUNCTION_ARGS, bool as_text)
 	TupleDesc	tupdesc;
 	EachState  *state;
 
-	Assert(val_type == JSONOID || val_type == JSONBOID);
-	if (val_type == JSONOID)
-	{
-		/* just get the text */
-		json = PG_GETARG_TEXT_P(0);
-	}
-	else
-	{
-		Jsonb      *jb = PG_GETARG_JSONB(0);
-
-		json = cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb)));
-	}
+	json = PG_GETARG_TEXT_P(0);
 
 	lex = makeJsonLexContext(json, true);
 	state = palloc0(sizeof(EachState));
@@ -1448,10 +1435,7 @@ each_worker(PG_FUNCTION_ARGS, bool as_text)
 	sem->array_start = each_array_start;
 	sem->scalar = each_scalar;
 	sem->object_field_start = each_object_field_start;
-	if (val_type == JSONOID)
-		sem->object_field_end = each_object_field_end;
-	else
-		sem->object_field_end = each_object_field_end_jsonb;
+	sem->object_field_end = each_object_field_end;
 
 	state->normalize_results = as_text;
 	state->next_scalar = false;
@@ -1529,61 +1513,6 @@ each_object_field_end(void *state, char *fname, bool isnull)
 		values[1] = PointerGetDatum(val);
 	}
 
-
-	tuple = heap_form_tuple(_state->ret_tdesc, values, nulls);
-
-	tuplestore_puttuple(_state->tuple_store, tuple);
-
-	/* clean up and switch back */
-	MemoryContextSwitchTo(old_cxt);
-	MemoryContextReset(_state->tmp_cxt);
-}
-
-static void
-each_object_field_end_jsonb(void *state, char *fname, bool isnull)
-{
-	EachState  *_state = (EachState *) state;
-	MemoryContext old_cxt;
-	int			len;
-	Jsonb	   *val;
-	HeapTuple	tuple;
-	Datum		values[2];
-	bool		nulls[2] = {false, false};
-
-	/* skip over nested objects */
-	if (_state->lex->lex_level != 1)
-		return;
-
-	/* use the tmp context so we can clean up after each tuple is done */
-	old_cxt = MemoryContextSwitchTo(_state->tmp_cxt);
-
-	values[0] = CStringGetTextDatum(fname);
-
-	if (isnull && _state->normalize_results)
-	{
-		nulls[1] = true;
-		values[1] = (Datum) NULL;
-	}
-	else if (_state->next_scalar)
-	{
-		values[1] = CStringGetTextDatum(_state->normalized_scalar);
-		_state->next_scalar = false;
-	}
-	else if (_state->normalize_results)
-	{
-		len = _state->lex->prev_token_terminator - _state->result_start;
-		values[1] = PointerGetDatum(cstring_to_text_with_len(_state->result_start, len));
-	}
-	else
-	{
-		char *cstr;
-		len = _state->lex->prev_token_terminator - _state->result_start;
-		cstr = palloc(len+1 * sizeof(char));
-		memcpy(cstr,_state->result_start,len);
-		cstr[len] = '\0';
-		val = (Jsonb*)DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(cstr)));
-		values[1] = PointerGetDatum(val);
-	}
 
 	tuple = heap_form_tuple(_state->ret_tdesc, values, nulls);
 
