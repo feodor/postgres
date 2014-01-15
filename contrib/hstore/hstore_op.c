@@ -1499,7 +1499,12 @@ hstore_concat(PG_FUNCTION_ARGS)
 	}
 	else
 	{
-		int r = compressHStore(res, VARDATA(out));
+		uint32 r;
+
+		if (res->type == hsvArray && res->array.nelems > 1)
+			res->array.scalar = false;
+
+		r = compressHStore(res, VARDATA(out));
 		SET_VARSIZE(out, r + VARHDRSZ);
 	}
 
@@ -1987,6 +1992,9 @@ hstore_deep_concat(PG_FUNCTION_ARGS)
 	else
 	{
 		int				sz;
+
+		if (res->type == hsvArray && res->array.nelems > 1)
+			res->array.scalar = false;
 
 		sz = compressHStore(res, VARDATA(out));
 		SET_VARSIZE(out, sz + VARHDRSZ);

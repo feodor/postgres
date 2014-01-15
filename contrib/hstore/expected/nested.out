@@ -411,6 +411,12 @@ SELECT '{aa,1 , b,2, cq,3}'::hstore || '{cq,l, b,g, fg,f, 1,2}'::hstore;
  ["aa", 1, "b", 2, "cq", 3, "cq", "l", "b", "g", "fg", f, 1, 2]
 (1 row)
 
+SELECT  'x'::hstore || 'a=>"1"':: hstore;
+    ?column?     
+-----------------
+ ["x", "a", "1"]
+(1 row)
+
 --slice
 SELECT slice_array(hstore 'aa=>1, b=>2, c=>3', ARRAY['g','h','i']);
    slice_array    
@@ -1747,6 +1753,12 @@ SELECT concat_path('n=>NULL, a=>1, b=>{1,2}, c=>{1=>2}, d=>{1=>{2,3}}'::hstore, 
                             concat_path                            
 -------------------------------------------------------------------
  "a"=>1, "b"=>[1, 2], "c"=>{"1"=>2}, "d"=>{"1"=>[2, 3]}, "n"=>NULL
+(1 row)
+
+SELECT concat_path('x'::hstore, '{}'::text[], 'a=>"1"':: hstore);
+   concat_path   
+-----------------
+ ["x", "a", "1"]
 (1 row)
 
 --cast 
