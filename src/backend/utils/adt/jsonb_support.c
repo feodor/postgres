@@ -21,12 +21,12 @@ JsonbValueToJsonb(JsonbValue *v)
 {
 	Jsonb			*out;
 
-	if (v == NULL || v->type == jbvNull)
+	if (v == NULL)
 	{
 		out = NULL;
 	}
 	else if (v->type == jbvString || v->type == jbvBool ||
-			 v->type == jbvNumeric)
+			 v->type == jbvNumeric || v->type == jbvNull)
 	{
 		ToJsonbState	*state = NULL;
 		JsonbValue		*res;
