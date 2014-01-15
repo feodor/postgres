@@ -313,11 +313,11 @@ INSERT INTO test_jsonb VALUES
 SELECT test_json -> 'x'
 FROM test_jsonb
 WHERE json_type = 'scalar';
-ERROR:  cannot extract element from a scalar
+ERROR:  Cannot call jsonb_object_field on a scalar
 SELECT test_json -> 'x'
 FROM test_jsonb
 WHERE json_type = 'array';
-ERROR:  cannot extract field from a non-object
+ERROR:  Cannot call jsonb_object_field on an array
 SELECT test_json -> 'x'
 FROM test_jsonb
 WHERE json_type = 'object';
