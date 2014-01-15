@@ -72,7 +72,6 @@ static void each_scalar(void *state, char *token, JsonTokenType tokentype);
 static void elements_object_start(void *state);
 static void elements_array_element_start(void *state, bool isnull);
 static void elements_array_element_end(void *state, bool isnull);
-static void elements_array_element_end_jsonb(void *state, bool isnull);
 static void elements_scalar(void *state, char *token, JsonTokenType tokentype);
 
 /* turn a json object into a hash table */
@@ -1562,15 +1561,98 @@ each_scalar(void *state, char *token, JsonTokenType tokentype)
 Datum
 jsonb_array_elements(PG_FUNCTION_ARGS)
 {
-	return json_array_elements(fcinfo);
+	Jsonb *jb = PG_GETARG_JSONB(0);
+	ReturnSetInfo *rsi;
+	Tuplestorestate *tuple_store;
+	TupleDesc	tupdesc;
+	TupleDesc	ret_tdesc;
+	MemoryContext old_cxt, tmp_cxt;
+	bool             skipNested = false;
+	JsonbIterator   *it;
+	JsonbValue	     v;
+	int              r = 0;
+
+	if (JB_ROOT_IS_SCALAR(jb)) 
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot extract elements from a scalar")));
+	else if (! JB_ROOT_IS_ARRAY(jb)) 
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot extract elements from an object")));
+
+	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
+
+	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
+		(rsi->allowedModes & SFRM_Materialize) == 0 ||
+		rsi->expectedDesc == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that "
+						"cannot accept a set")));
+
+
+	rsi->returnMode = SFRM_Materialize;
+
+	/* it's a simple type, so don't use get_call_result_type() */
+	tupdesc = rsi->expectedDesc;
+
+	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
+
+	ret_tdesc = CreateTupleDescCopy(tupdesc);
+	BlessTupleDesc(ret_tdesc);
+	tuple_store =
+		tuplestore_begin_heap(rsi->allowedModes & SFRM_Materialize_Random,
+							  false, work_mem);
+
+	MemoryContextSwitchTo(old_cxt);
+
+	tmp_cxt = AllocSetContextCreate(CurrentMemoryContext,
+									"jsonb_each temporary cxt",
+									ALLOCSET_DEFAULT_MINSIZE,
+									ALLOCSET_DEFAULT_INITSIZE,
+									ALLOCSET_DEFAULT_MAXSIZE);
+
+
+	it = JsonbIteratorInit(VARDATA_ANY(jb));
+
+	while((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	{
+		skipNested = true;
+		
+		if (r == WJB_ELEM)
+		{
+			HeapTuple	tuple;
+			Datum		values[1];
+			bool		nulls[1] = {false};
+			Jsonb      *val;
+			
+			/* use the tmp context so we can clean up after each tuple is done */
+			old_cxt = MemoryContextSwitchTo(tmp_cxt);
+
+			val = JsonbValueToJsonb(&v);
+			values[0] = PointerGetDatum(val);
+
+			tuple = heap_form_tuple(ret_tdesc, values, nulls);
+
+			tuplestore_puttuple(tuple_store, tuple);
+
+			/* clean up and switch back */
+			MemoryContextSwitchTo(old_cxt);
+			MemoryContextReset(tmp_cxt);
+		}
+	}
+
+	rsi->setResult = tuple_store;
+	rsi->setDesc = ret_tdesc;
+
+	PG_RETURN_NULL();	
 }
 
 Datum
 json_array_elements(PG_FUNCTION_ARGS)
 {
-	Oid			val_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	text	   *json;
-
 	JsonLexContext *lex;
 	JsonSemAction *sem;
 	ReturnSetInfo *rsi;
@@ -1578,18 +1660,7 @@ json_array_elements(PG_FUNCTION_ARGS)
 	TupleDesc	tupdesc;
 	ElementsState *state;
 
-	Assert(val_type == JSONOID || val_type == JSONBOID);
-	if (val_type == JSONOID)
-	{
-		/* just get the text */
-		json = PG_GETARG_TEXT_P(0);
-	}
-	else
-	{
-		Jsonb      *jb = PG_GETARG_JSONB(0);
-
-		json = cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb)));
-	}
+	json = PG_GETARG_TEXT_P(0);
 
 	/* elements doesn't need any escaped strings, so use false here */
 	lex  = makeJsonLexContext(json, false);
@@ -1627,10 +1698,7 @@ json_array_elements(PG_FUNCTION_ARGS)
 	sem->object_start = elements_object_start;
 	sem->scalar = elements_scalar;
 	sem->array_element_start = elements_array_element_start;
-	if (val_type == JSONOID)
-		sem->array_element_end = elements_array_element_end;
-	else
-		sem->array_element_end = elements_array_element_end_jsonb;
+	sem->array_element_end = elements_array_element_end;
 
 	state->lex = lex;
 	state->tmp_cxt = AllocSetContextCreate(CurrentMemoryContext,
@@ -1679,41 +1747,6 @@ elements_array_element_end(void *state, bool isnull)
 	val = cstring_to_text_with_len(_state->result_start, len);
 
 	values[0] = PointerGetDatum(val);
-
-	tuple = heap_form_tuple(_state->ret_tdesc, values, nulls);
-
-	tuplestore_puttuple(_state->tuple_store, tuple);
-
-	/* clean up and switch back */
-	MemoryContextSwitchTo(old_cxt);
-	MemoryContextReset(_state->tmp_cxt);
-}
-
-static void
-elements_array_element_end_jsonb(void *state, bool isnull)
-{
-	ElementsState *_state = (ElementsState *) state;
-	MemoryContext old_cxt;
-	int			len;
-	Jsonb      *jbval;
-	HeapTuple	tuple;
-	Datum		values[1];
-	static bool nulls[1] = {false};
-	char *cstr;
-
-	/* skip over nested objects */
-	if (_state->lex->lex_level != 1)
-		return;
-
-	/* use the tmp context so we can clean up after each tuple is done */
-	old_cxt = MemoryContextSwitchTo(_state->tmp_cxt);
-
-	len = _state->lex->prev_token_terminator - _state->result_start;
-	cstr = palloc(len+1 * sizeof(char));
-	memcpy(cstr,_state->result_start,len);
-	cstr[len] = '\0';
-	jbval = (Jsonb*)DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(cstr)));
-	values[0] = PointerGetDatum(jbval);
 
 	tuple = heap_form_tuple(_state->ret_tdesc, values, nulls);
 
