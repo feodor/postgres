@@ -14,8 +14,9 @@
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
 
-/* turn a JsonbValue into a Jsonb */
-
+/*
+ * turn a JsonbValue into a Jsonb
+ */
 Jsonb *
 JsonbValueToJsonb(JsonbValue *v)
 {
@@ -28,9 +29,11 @@ JsonbValueToJsonb(JsonbValue *v)
 	else if (v->type == jbvString || v->type == jbvBool ||
 			 v->type == jbvNumeric || v->type == jbvNull)
 	{
+		/* scalar value */
+
 		ToJsonbState	*state = NULL;
 		JsonbValue		*res;
-		int				r;
+		uint32			sz;
 		JsonbValue		scalarArray;
 
 		scalarArray.type = jbvArray;
@@ -42,14 +45,24 @@ JsonbValueToJsonb(JsonbValue *v)
 		res = pushJsonbValue(&state, WJB_END_ARRAY, NULL);
 
 		out = palloc(VARHDRSZ + res->size);
-		SET_VARSIZE(out, VARHDRSZ + res->size);
-		r = compressJsonb(res, VARDATA(out));
-		Assert(r <= res->size);
-		SET_VARSIZE(out, r + VARHDRSZ);
+		SET_VARSIZE(out, VARHDRSZ + res->size); /* reset header for a while */
+		sz = compressJsonb(res, VARDATA(out));
+		Assert(sz <= res->size);
+		SET_VARSIZE(out, sz + VARHDRSZ);
+	}
+	else if (v->type == jbvHash || v->type == jbvArray)
+	{
+		uint32	sz;
+
+		out = palloc(VARHDRSZ + v->size);
+		SET_VARSIZE(out, VARHDRSZ); /* reset header for a while */
+		sz = compressJsonb(v, VARDATA(out));
+		Assert(sz <= v->size);
+		SET_VARSIZE(out, VARHDRSZ + sz);
 	}
 	else
 	{
-		out = palloc(VARHDRSZ + v->size);
+		out = palloc(VARHDRSZ + v->binary.len);
 
 		Assert(v->type == jbvBinary);
 		SET_VARSIZE(out, VARHDRSZ + v->binary.len);
