@@ -45,7 +45,6 @@ JsonbValueToJsonb(JsonbValue *v)
 		res = pushJsonbValue(&state, WJB_END_ARRAY, NULL);
 
 		out = palloc(VARHDRSZ + res->size);
-		SET_VARSIZE(out, VARHDRSZ + res->size); /* reset header for a while */
 		sz = compressJsonb(res, VARDATA(out));
 		Assert(sz <= res->size);
 		SET_VARSIZE(out, sz + VARHDRSZ);
@@ -55,7 +54,6 @@ JsonbValueToJsonb(JsonbValue *v)
 		uint32	sz;
 
 		out = palloc(VARHDRSZ + v->size);
-		SET_VARSIZE(out, VARHDRSZ); /* reset header for a while */
 		sz = compressJsonb(v, VARDATA(out));
 		Assert(sz <= v->size);
 		SET_VARSIZE(out, VARHDRSZ + sz);
