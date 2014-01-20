@@ -33,7 +33,7 @@
  * specific parts are in the libpqwalreceiver module. It's loaded
  * dynamically to avoid linking the server with libpq.
  *
- * Portions Copyright (c) 2010-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2014, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -1007,7 +1007,10 @@ XLogWalRcvFlush(bool dying)
 
 		/* Also let the master know that we made some progress */
 		if (!dying)
+		{
 			XLogWalRcvSendReply(false, false);
+			XLogWalRcvSendHSFeedback(false);
+		}
 	}
 }
 

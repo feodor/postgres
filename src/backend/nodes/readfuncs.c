@@ -3,7 +3,7 @@
  * readfuncs.c
  *	  Reader functions for Postgres tree nodes.
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -107,6 +107,7 @@
 #define READ_LOCATION_FIELD(fldname) \
 	token = pg_strtok(&length);		/* skip :fldname */ \
 	token = pg_strtok(&length);		/* get field value */ \
+	(void) token;				/* in case not used elsewhere */ \
 	local_node->fldname = -1	/* set field to "unknown" */
 
 /* Read a Node field */
@@ -118,6 +119,7 @@
 /* Read a bitmapset field */
 #define READ_BITMAPSET_FIELD(fldname) \
 	token = pg_strtok(&length);		/* skip :fldname */ \
+	(void) token;				/* in case not used elsewhere */ \
 	local_node->fldname = _readBitmapset()
 
 /* Routine exit */
@@ -492,12 +494,14 @@ _readAggref(void)
 	READ_OID_FIELD(aggtype);
 	READ_OID_FIELD(aggcollid);
 	READ_OID_FIELD(inputcollid);
+	READ_NODE_FIELD(aggdirectargs);
 	READ_NODE_FIELD(args);
 	READ_NODE_FIELD(aggorder);
 	READ_NODE_FIELD(aggdistinct);
 	READ_NODE_FIELD(aggfilter);
 	READ_BOOL_FIELD(aggstar);
 	READ_BOOL_FIELD(aggvariadic);
+	READ_CHAR_FIELD(aggkind);
 	READ_UINT_FIELD(agglevelsup);
 	READ_LOCATION_FIELD(location);
 

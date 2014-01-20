@@ -38,7 +38,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/initdb/initdb.c
@@ -60,6 +60,7 @@
 #include "sys/mman.h"
 #endif
 
+#include "common/username.h"
 #include "mb/pg_wchar.h"
 #include "getaddrinfo.h"
 #include "getopt_long.h"
@@ -74,9 +75,6 @@ static const char *auth_methods_host[] = {"trust", "reject", "md5", "password", 
 #endif
 #ifdef ENABLE_SSPI
 	"sspi",
-#endif
-#ifdef KRB5
-	"krb5",
 #endif
 #ifdef USE_PAM
 	"pam", "pam ",

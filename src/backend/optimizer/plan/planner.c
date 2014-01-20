@@ -3,7 +3,7 @@
  * planner.c
  *	  The query optimizer external interface.
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -2659,7 +2659,9 @@ choose_hashed_grouping(PlannerInfo *root,
 	 * Executor doesn't support hashed aggregation with DISTINCT or ORDER BY
 	 * aggregates.	(Doing so would imply storing *all* the input values in
 	 * the hash table, and/or running many sorts in parallel, either of which
-	 * seems like a certain loser.)
+	 * seems like a certain loser.)  We similarly don't support ordered-set
+	 * aggregates in hashed aggregation, but that case is included in the
+	 * numOrderedAggs count.
 	 */
 	can_hash = (agg_costs->numOrderedAggs == 0 &&
 				grouping_is_hashable(parse->groupClause));

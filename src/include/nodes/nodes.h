@@ -4,7 +4,7 @@
  *	  Definitions for tagged nodes.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/nodes.h
@@ -354,6 +354,7 @@ typedef enum NodeTag
 	T_AlterUserMappingStmt,
 	T_DropUserMappingStmt,
 	T_AlterTableSpaceOptionsStmt,
+	T_AlterTableSpaceMoveStmt,
 	T_SecLabelStmt,
 	T_CreateForeignTableStmt,
 	T_CreateExtensionStmt,

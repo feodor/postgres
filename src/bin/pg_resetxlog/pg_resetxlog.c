@@ -20,7 +20,7 @@
  * step 2 ...
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/pg_resetxlog/pg_resetxlog.c
@@ -525,7 +525,7 @@ GuessControlValues(void)
 	/* minRecoveryPoint, backupStartPoint and backupEndPoint can be left zero */
 
 	ControlFile.wal_level = WAL_LEVEL_MINIMAL;
-	ControlFile.wal_log_hintbits = false;
+	ControlFile.wal_log_hints = false;
 	ControlFile.MaxConnections = 100;
 	ControlFile.max_worker_processes = 8;
 	ControlFile.max_prepared_xacts = 0;
@@ -722,7 +722,7 @@ RewriteControlFile(void)
 	 * anyway at startup.
 	 */
 	ControlFile.wal_level = WAL_LEVEL_MINIMAL;
-	ControlFile.wal_log_hintbits = false;
+	ControlFile.wal_log_hints = false;
 	ControlFile.MaxConnections = 100;
 	ControlFile.max_worker_processes = 8;
 	ControlFile.max_prepared_xacts = 0;

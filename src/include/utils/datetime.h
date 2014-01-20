@@ -6,7 +6,7 @@
  *	   including abstime, reltime, date, and time.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/datetime.h
@@ -247,6 +247,8 @@ do { \
  * Include check for leap year.
  */
 
+extern const char *const months[];		/* months (3-char abbreviations) */
+extern const char *const days[];	/* days (full names) */
 extern const int day_tab[2][13];
 
 #define isleap(y) (((y) % 4) == 0 && (((y) % 100) != 0 || ((y) % 400) == 0))

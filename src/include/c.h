@@ -9,7 +9,7 @@
  *	  polluting the namespace with lots of stuff...
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/c.h
@@ -52,6 +52,15 @@
 
 #include "pg_config.h"
 #include "pg_config_manual.h"	/* must be after pg_config.h */
+
+/*
+ * We always rely on the WIN32 macro being set by our build system,
+ * but _WIN32 is the compiler pre-defined macro. So make sure we define
+ * WIN32 whenever _WIN32 is set, to facilitate standalone building.
+ */
+#if defined(_WIN32) && !defined(WIN32)
+#define WIN32
+#endif
 
 #if !defined(WIN32) && !defined(__CYGWIN__)		/* win32 includes further down */
 #include "pg_config_os.h"		/* must be before any system header files */

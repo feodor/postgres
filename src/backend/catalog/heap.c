@@ -3,7 +3,7 @@
  * heap.c
  *	  code to create and destroy POSTGRES heap relations
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -34,6 +34,7 @@
 #include "access/sysattr.h"
 #include "access/transam.h"
 #include "access/xact.h"
+#include "catalog/binary_upgrade.h"
 #include "catalog/catalog.h"
 #include "catalog/dependency.h"
 #include "catalog/heap.h"
@@ -910,7 +911,7 @@ AddNewRelationTuple(Relation pg_class_desc,
 		 * commands/sequence.c.)
 		 */
 		new_rel_reltup->relfrozenxid = InvalidTransactionId;
-		new_rel_reltup->relfrozenxid = InvalidMultiXactId;
+		new_rel_reltup->relminmxid = InvalidMultiXactId;
 	}
 
 	new_rel_reltup->relowner = relowner;

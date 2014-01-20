@@ -6,7 +6,7 @@
  * See src/backend/utils/misc/README for more information.
  *
  *
- * Copyright (c) 2000-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2014, PostgreSQL Global Development Group
  * Written by Peter Eisentraut <peter_e@gmx.net>.
  *
  * IDENTIFICATION
@@ -881,11 +881,11 @@ static struct config_bool ConfigureNamesBool[] =
 	},
 
 	{
-		{"wal_log_hintbits", PGC_POSTMASTER, WAL_SETTINGS,
+		{"wal_log_hints", PGC_POSTMASTER, WAL_SETTINGS,
 			gettext_noop("Writes full pages to WAL when first modified after a checkpoint, even for a non-critical modifications"),
 			NULL
 		},
-		&walLogHintbits,
+		&wal_log_hints,
 		false,
 		NULL, NULL, NULL
 	},

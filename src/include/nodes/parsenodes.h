@@ -10,7 +10,7 @@
  * the location.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/parsenodes.h
@@ -281,7 +281,8 @@ typedef struct CollateClause
 /*
  * FuncCall - a function or aggregate invocation
  *
- * agg_order (if not NIL) indicates we saw 'foo(... ORDER BY ...)'.
+ * agg_order (if not NIL) indicates we saw 'foo(... ORDER BY ...)', or if
+ * agg_within_group is true, it was 'foo(...) WITHIN GROUP (ORDER BY ...)'.
  * agg_star indicates we saw a 'foo(*)' construct, while agg_distinct
  * indicates we saw 'foo(DISTINCT ...)'.  In any of these cases, the
  * construct *must* be an aggregate call.  Otherwise, it might be either an
@@ -298,6 +299,7 @@ typedef struct FuncCall
 	List	   *args;			/* the arguments (list of exprs) */
 	List	   *agg_order;		/* ORDER BY (list of SortBy) */
 	Node	   *agg_filter;		/* FILTER clause, if any */
+	bool		agg_within_group;		/* ORDER BY appeared in WITHIN GROUP */
 	bool		agg_star;		/* argument was really '*' */
 	bool		agg_distinct;	/* arguments were labeled DISTINCT */
 	bool		func_variadic;	/* last argument was labeled VARIADIC */
@@ -1667,6 +1669,7 @@ typedef struct CreateTableSpaceStmt
 	char	   *tablespacename;
 	char	   *owner;
 	char	   *location;
+	List	   *options;
 } CreateTableSpaceStmt;
 
 typedef struct DropTableSpaceStmt
@@ -1683,6 +1686,16 @@ typedef struct AlterTableSpaceOptionsStmt
 	List	   *options;
 	bool		isReset;
 } AlterTableSpaceOptionsStmt;
+
+typedef struct AlterTableSpaceMoveStmt
+{
+	NodeTag		type;
+	char	   *orig_tablespacename;
+	char	   *new_tablespacename;
+	ObjectType	objtype;
+	bool		nowait;
+	bool		move_all;
+} AlterTableSpaceMoveStmt;
 
 /* ----------------------
  *		Create/Alter Extension Statements

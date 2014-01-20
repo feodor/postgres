@@ -3,7 +3,7 @@
  *
  * PostgreSQL transaction log manager
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/xlog.h
@@ -189,7 +189,7 @@ extern bool XLogArchiveMode;
 extern char *XLogArchiveCommand;
 extern bool EnableHotStandby;
 extern bool fullPageWrites;
-extern bool walLogHintbits;
+extern bool wal_log_hints;
 extern bool log_checkpoints;
 extern int	num_xloginsert_slots;
 
@@ -219,9 +219,9 @@ extern int	wal_level;
  * we have to protect them against torn page writes.  When you only set
  * individual bits on a page, it's still consistent no matter what combination
  * of the bits make it to disk, but the checksum wouldn't match.  Also WAL-log
- * them if forced by wal_log_hintbits=on.
+ * them if forced by wal_log_hints=on.
  */
-#define XLogHintBitIsNeeded() (DataChecksumsEnabled() || walLogHintbits)
+#define XLogHintBitIsNeeded() (DataChecksumsEnabled() || wal_log_hints)
 
 /* Do we need to WAL-log information required only for Hot Standby and logical replication? */
 #define XLogStandbyInfoActive() (wal_level >= WAL_LEVEL_HOT_STANDBY)
@@ -300,6 +300,7 @@ extern void issue_xlog_fsync(int fd, XLogSegNo segno);
 
 extern bool RecoveryInProgress(void);
 extern bool HotStandbyActive(void);
+extern bool HotStandbyActiveInReplay(void);
 extern bool XLogInsertAllowed(void);
 extern void GetXLogReceiptTime(TimestampTz *rtime, bool *fromStream);
 extern XLogRecPtr GetXLogReplayRecPtr(TimeLineID *replayTLI);

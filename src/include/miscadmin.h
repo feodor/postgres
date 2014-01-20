@@ -10,7 +10,7 @@
  *	  Over time, this has also become the preferred place for widely known
  *	  resource-limitation stuff, such as work_mem and check_stack_depth().
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/miscadmin.h
@@ -80,7 +80,7 @@ extern volatile bool ProcDiePending;
 extern volatile bool ClientConnectionLost;
 
 /* these are marked volatile because they are examined by signal handlers: */
-extern volatile bool ImmediateInterruptOK;
+extern PGDLLIMPORT volatile bool ImmediateInterruptOK;
 extern PGDLLIMPORT volatile uint32 InterruptHoldoffCount;
 extern PGDLLIMPORT volatile uint32 CritSectionCount;
 

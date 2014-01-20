@@ -3,7 +3,7 @@
  * reloptions.c
  *	  Core support for relation options (pg_class.reloptions)
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -182,7 +182,7 @@ static relopt_int intRelOpts[] =
 	{
 		{
 			"autovacuum_freeze_table_age",
-			"Age at which VACUUM should perform a full table sweep to replace old Xid values with FrozenXID",
+			"Age at which VACUUM should perform a full table sweep to freeze row versions",
 			RELOPT_KIND_HEAP | RELOPT_KIND_TOAST
 		}, -1, 0, 2000000000
 	},

@@ -2,7 +2,7 @@
  * gin_private.h
  *	  header file for postgres inverted index access method implementation.
  *
- *	Copyright (c) 2006-2013, PostgreSQL Global Development Group
+ *	Copyright (c) 2006-2014, PostgreSQL Global Development Group
  *
  *	src/include/access/gin_private.h
  *--------------------------------------------------------------------------
@@ -19,7 +19,7 @@
 
 
 /*
- * Page opaque data in a inverted index page.
+ * Page opaque data in an inverted index page.
  *
  * Note: GIN does not include a page ID word as do the other index types.
  * This is OK because the opaque data is only 8 bytes and so can be reliably

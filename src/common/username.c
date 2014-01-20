@@ -3,11 +3,11 @@
  * username.c
  *	  get user name
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
- *	  src/port/username.c
+ *	  src/common/username.c
  *
  *-------------------------------------------------------------------------
  */
@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 
+#include "common/username.h"
 
 /*
  * Returns the current user name in a static buffer, or NULL on error and
@@ -50,7 +51,7 @@ get_user_name(char **errstr)
 	return pw->pw_name;
 #else
 	/* UNLEN = 256, 'static' variable remains after function exit */
-	static char username[256 + 1]; 
+	static char username[256 + 1];
 	DWORD		len = sizeof(username) - 1;
 
 	if (!GetUserName(username, &len))
@@ -71,7 +72,7 @@ const char *
 get_user_name_or_exit(const char *progname)
 {
 	const char *user_name;
-	char 	   *errstr;
+	char	   *errstr;
 
 	user_name = get_user_name(&errstr);
 

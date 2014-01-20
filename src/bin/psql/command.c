@@ -1,7 +1,7 @@
 /*
  * psql - the PostgreSQL interactive terminal
  *
- * Copyright (c) 2000-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2014, PostgreSQL Global Development Group
  *
  * src/bin/psql/command.c
  */
@@ -410,7 +410,7 @@ exec_command(const char *cmd,
 				success = listSchemas(pattern, show_verbose, show_system);
 				break;
 			case 'o':
-				success = describeOperators(pattern, show_system);
+				success = describeOperators(pattern, show_verbose, show_system);
 				break;
 			case 'O':
 				success = listCollations(pattern, show_verbose, show_system);

@@ -31,7 +31,7 @@
  * different) code.
  *
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -116,7 +116,7 @@ extern BgwHandleStatus WaitForBackgroundWorkerStartup(BackgroundWorkerHandle *
 extern void TerminateBackgroundWorker(BackgroundWorkerHandle *handle);
 
 /* This is valid in a running worker */
-extern BackgroundWorker *MyBgworkerEntry;
+extern PGDLLIMPORT BackgroundWorker *MyBgworkerEntry;
 
 /*
  * Connect to the specified database, as the specified user.  Only a worker
