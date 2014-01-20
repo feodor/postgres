@@ -29,7 +29,7 @@ typedef struct
 	BackgroundWorkerHandle *handle[FLEXIBLE_ARRAY_MEMBER];
 } worker_state;
 
-static void setup_dynamic_shared_memory(uint64 queue_size, int nworkers,
+static void setup_dynamic_shared_memory(int64 queue_size, int nworkers,
 							dsm_segment **segp,
 							test_shm_mq_header **hdrp,
 							shm_mq **outp, shm_mq **inp);
@@ -45,13 +45,13 @@ static bool check_worker_status(worker_state *wstate);
  * for a test run.
  */
 void
-test_shm_mq_setup(uint64 queue_size, int32 nworkers, dsm_segment **segp,
+test_shm_mq_setup(int64 queue_size, int32 nworkers, dsm_segment **segp,
 				  shm_mq_handle **output, shm_mq_handle **input)
 {
 	dsm_segment *seg;
 	test_shm_mq_header *hdr;
-	shm_mq	   *outq;
-	shm_mq	   *inq;
+	shm_mq	   *outq = NULL;		/* placate compiler */
+	shm_mq	   *inq = NULL;			/* placate compiler */
 	worker_state	   *wstate;
 
 	/* Set up a dynamic shared memory segment. */
@@ -86,7 +86,7 @@ test_shm_mq_setup(uint64 queue_size, int32 nworkers, dsm_segment **segp,
  * the number of workers, plus one.
  */
 static void
-setup_dynamic_shared_memory(uint64 queue_size, int nworkers,
+setup_dynamic_shared_memory(int64 queue_size, int nworkers,
 							dsm_segment **segp, test_shm_mq_header **hdrp,
 							shm_mq **outp, shm_mq **inp)
 {
@@ -101,8 +101,8 @@ setup_dynamic_shared_memory(uint64 queue_size, int nworkers,
 	if (queue_size < 0 || ((uint64) queue_size) < shm_mq_minimum_size)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("queue size must be at least " UINT64_FORMAT " bytes",
-					shm_mq_minimum_size)));
+				 errmsg("queue size must be at least %lu bytes",
+					(unsigned long) shm_mq_minimum_size)));
 
 	/*
 	 * Estimate how much shared memory we need.
@@ -279,7 +279,7 @@ wait_for_workers_to_become_ready(worker_state *wstate,
 				break;
 			}
 
-  			/* Wait to be signalled. */
+			/* Wait to be signalled. */
 			WaitLatch(&MyProc->procLatch, WL_LATCH_SET, 0);
 
 			/* An interrupt may have occurred while we were waiting. */
