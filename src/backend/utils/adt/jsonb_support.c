@@ -14,8 +14,9 @@
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
 
-/* turn a JsonbValue into a Jsonb */
-
+/*
+ * turn a JsonbValue into a Jsonb
+ */
 Jsonb *
 JsonbValueToJsonb(JsonbValue *v)
 {
@@ -28,9 +29,11 @@ JsonbValueToJsonb(JsonbValue *v)
 	else if (v->type == jbvString || v->type == jbvBool ||
 			 v->type == jbvNumeric || v->type == jbvNull)
 	{
+		/* scalar value */
+
 		ToJsonbState	*state = NULL;
 		JsonbValue		*res;
-		int				r;
+		uint32			sz;
 		JsonbValue		scalarArray;
 
 		scalarArray.type = jbvArray;
@@ -42,14 +45,22 @@ JsonbValueToJsonb(JsonbValue *v)
 		res = pushJsonbValue(&state, WJB_END_ARRAY, NULL);
 
 		out = palloc(VARHDRSZ + res->size);
-		SET_VARSIZE(out, VARHDRSZ + res->size);
-		r = compressJsonb(res, VARDATA(out));
-		Assert(r <= res->size);
-		SET_VARSIZE(out, r + VARHDRSZ);
+		sz = compressJsonb(res, VARDATA(out));
+		Assert(sz <= res->size);
+		SET_VARSIZE(out, sz + VARHDRSZ);
+	}
+	else if (v->type == jbvHash || v->type == jbvArray)
+	{
+		uint32	sz;
+
+		out = palloc(VARHDRSZ + v->size);
+		sz = compressJsonb(v, VARDATA(out));
+		Assert(sz <= v->size);
+		SET_VARSIZE(out, VARHDRSZ + sz);
 	}
 	else
 	{
-		out = palloc(VARHDRSZ + v->size);
+		out = palloc(VARHDRSZ + v->binary.len);
 
 		Assert(v->type == jbvBinary);
 		SET_VARSIZE(out, VARHDRSZ + v->binary.len);
@@ -102,6 +113,13 @@ uniqueJsonbValue(JsonbValue *v)
 /****************************************************************************
  *                         Compare Functions                                *
  ****************************************************************************/
+
+/*
+ * Compare two jbvString JsonbValue values, third argument
+ * 'arg', if it's not null, should be a pointer to bool
+ * value which will be set to true if strings are equal and
+ * untouched otherwise.
+ */
 int
 compareJsonbStringValue(const void *a, const void *b, void *arg)
 {
@@ -126,6 +144,12 @@ compareJsonbStringValue(const void *a, const void *b, void *arg)
 	return res;
 }
 
+/*
+ * qsort helper to compare JsonbPair values, third argument
+ * arg will be trasferred as is to subsequent 
+ * compareJsonbStringValue() call. Pairs with equals keys are 
+ * ordered with respect of order field.
+ */
 int
 compareJsonbPair(const void *a, const void *b, void *arg)
 {
@@ -146,6 +170,9 @@ compareJsonbPair(const void *a, const void *b, void *arg)
 	return res;
 }
 
+/*
+ * some constant order of JsonbValue
+ */
 int
 compareJsonbValue(JsonbValue *a, JsonbValue *b)
 {
@@ -209,6 +236,9 @@ compareJsonbValue(JsonbValue *a, JsonbValue *b)
 	return (a->type > b->type) ? 1 : -1;
 }
 
+/*
+ * Some order for Jsonb values
+ */
 int
 compareJsonbBinaryValue(char *a, char *b)
 {
@@ -276,10 +306,11 @@ compareJsonbBinaryValue(char *a, char *b)
 }
 
 /****************************************************************************
- *                         find string key in hash or array                 *
+ *          find string key in hash or element by value in array            *
  ****************************************************************************/
 JsonbValue*
-findUncompressedJsonbValueByValue(char *buffer, uint32 flags, uint32 *lowbound, JsonbValue *key)
+findUncompressedJsonbValueByValue(char *buffer, uint32 flags, 
+								  uint32 *lowbound, JsonbValue *key)
 {
 	uint32				header = *(uint32*)buffer;
 	static JsonbValue 	r;
@@ -435,6 +466,10 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags, uint32 *lowbound, 
 	return NULL;
 }
 
+/*
+ * Just wrapped for findUncompressedJsonbValueByValue() 
+ * with simple string key representation
+ */
 JsonbValue*
 findUncompressedJsonbValue(char *buffer, uint32 flags, uint32 *lowbound,
 						   char *key, uint32 keylen)
@@ -455,6 +490,11 @@ findUncompressedJsonbValue(char *buffer, uint32 flags, uint32 *lowbound,
 	return findUncompressedJsonbValueByValue(buffer, flags, lowbound, &v);
 }
 
+/*
+ * Get i-th value of array or hash. if i < 0 then it counts form 
+ * the end of array/hash. Note: returns pointer to statically 
+ * allocated JsonbValue.
+ */
 JsonbValue*
 getJsonbValue(char *buffer, uint32 flags, int32 i)
 {
@@ -532,7 +572,7 @@ getJsonbValue(char *buffer, uint32 flags, int32 i)
 }
 
 /****************************************************************************
- *                         Walk on tree representation of jsonb             *
+ *                    Walk on tree representation of jsonb                  *
  ****************************************************************************/
 static void
 walkUncompressedJsonbDo(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg, uint32 level) 
@@ -1020,6 +1060,9 @@ compressCallback(void *arg, JsonbValue* value, uint32 flags, uint32 level)
 	}
 }
 
+/*
+ * puts JsonbValue tree into preallocated buffer
+ */
 uint32
 compressJsonb(JsonbValue *v, char *buffer) {
 	uint32			l = 0;
@@ -1039,8 +1082,6 @@ compressJsonb(JsonbValue *v, char *buffer) {
 
 /****************************************************************************
  *                  Iteration-like forming jsonb                            *
- *       Note: it believes by default in already sorted keys in hash,       *
- *     although with r == WJB_END_OBJECT and v == NULL  it will sort itself *
  ****************************************************************************/
 static ToJsonbState*
 pushState(ToJsonbState **state)
@@ -1103,7 +1144,12 @@ appendValue(ToJsonbState *state, JsonbValue *v)
 	h->size += v->size;
 }
 
-
+/*
+ * Pushes the value into state. With r = WJB_END_OBJECT and v = NULL 
+ * it will order and unique hash's keys otherwise we believe that 
+ * pushed keys was ordered and unique.
+ * Initial state of ToJsonbState is NULL.
+ */
 JsonbValue*
 pushJsonbValue(ToJsonbState **state, int r /* WJB_* */, JsonbValue *v) {
 	JsonbValue	*h = NULL;
@@ -1151,10 +1197,20 @@ pushJsonbValue(ToJsonbState **state, int r /* WJB_* */, JsonbValue *v) {
 			break;
 		case WJB_END_OBJECT:
 			h = &(*state)->v;
+			/* v != NULL => we believe that keys was already sorted */
 			if (v == NULL)
 				uniqueJsonbValue(h);
+			/*
+			 * no break here - end of hash requres some extra work
+			 * but rest is the same as for array
+			 */
 		case WJB_END_ARRAY:
 			h = &(*state)->v;
+
+			/*
+			 * pop stack and push current array/hash as value
+			 * in parent array/hash
+			 */
 			*state = (*state)->next;
 			if (*state)
 			{

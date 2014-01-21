@@ -29,30 +29,6 @@ checkStringLen(size_t len)
 	 return len;
 }
 
-static Jsonb*
-dumpJsonb(JsonbValue *p)
-{
-	 uint32			 buflen;
-	 Jsonb			*out;
-
-	 if (p == NULL)
-	 {
-		  buflen = 0;
-		  out = palloc(VARHDRSZ);
-	 }
-	 else
-	 {
-		  buflen = VARHDRSZ + p->size;
-		  out = palloc(buflen);
-		  SET_VARSIZE(out, buflen);
-
-		  buflen = compressJsonb(p, VARDATA(out));
-	 }
-	 SET_VARSIZE(out, buflen + VARHDRSZ);
-
-	 return out;
-}
-
 typedef struct JsonbInState
 {
 	ToJsonbState	*state;
@@ -203,7 +179,7 @@ jsonb_in(PG_FUNCTION_ARGS)
 	pg_parse_json(lex, &sem);
 
 	/* after parsing, the item membar has the composed jsonn structure */
-	PG_RETURN_POINTER(dumpJsonb(state.res));
+	PG_RETURN_POINTER(JsonbValueToJsonb(state.res));
 }
 
 static void recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header);
@@ -313,7 +289,7 @@ jsonb_recv(PG_FUNCTION_ARGS)
 
 	 recvJsonb(buf, &v, 0, pq_getmsgint(buf, 4));
 
-	 PG_RETURN_POINTER(dumpJsonb(&v));
+	 PG_RETURN_POINTER(JsonbValueToJsonb(&v));
 }
 
 static void
