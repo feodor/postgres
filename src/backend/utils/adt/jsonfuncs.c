@@ -52,6 +52,7 @@ static inline Datum get_path_all(PG_FUNCTION_ARGS, bool as_text);
 static inline text *get_worker(text *json, char *field, int elem_index,
 		   char **tpath, int *ipath, int npath,
 		   bool normalize_results);
+static inline Datum get_jsonb_path_all(PG_FUNCTION_ARGS, bool as_text);
 
 /* semantic action functions for json_array_length */
 static void alen_object_start(void *state);
@@ -703,19 +704,7 @@ json_extract_path(PG_FUNCTION_ARGS)
 }
 
 Datum
-jsonb_extract_path(PG_FUNCTION_ARGS)
-{
-	return get_path_all(fcinfo, false);
-}
-
-Datum
 json_extract_path_text(PG_FUNCTION_ARGS)
-{
-	return get_path_all(fcinfo, true);
-}
-
-Datum
-jsonb_extract_path_text(PG_FUNCTION_ARGS)
 {
 	return get_path_all(fcinfo, true);
 }
@@ -1133,6 +1122,120 @@ get_scalar(void *state, char *token, JsonTokenType tokentype)
 	}
 
 }
+
+Datum
+jsonb_extract_path(PG_FUNCTION_ARGS)
+{
+	return get_jsonb_path_all(fcinfo, false);
+}
+
+Datum
+jsonb_extract_path_text(PG_FUNCTION_ARGS)
+{
+	return get_jsonb_path_all(fcinfo, true);
+}
+
+static inline Datum
+get_jsonb_path_all(PG_FUNCTION_ARGS, bool as_text)
+{
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	ArrayType  *path = PG_GETARG_ARRAYTYPE_P(1);
+	Datum	   *pathtext;
+	bool	   *pathnulls;
+	int			npath;
+	int			i;
+	Jsonb      *res;
+	bool       have_object = false, 
+		have_array = false;
+	JsonbValue *jbvp;
+	JsonbValue tv;
+
+
+	if (array_contains_nulls(path))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call function with null path elements")));
+
+	deconstruct_array(path, TEXTOID, -1, false, 'i',
+					  &pathtext, &pathnulls, &npath);
+
+	if (JB_ROOT_IS_OBJECT(jb))
+		have_object = true;
+	else if (JB_ROOT_IS_ARRAY(jb) && !JB_ROOT_IS_SCALAR(jb))
+		have_array = true;
+
+	jbvp = (JsonbValue* ) VARDATA(jb);
+	
+	for (i = 0; i < npath; i++)
+	{
+		if (have_object)
+		{
+			jbvp = findUncompressedJsonbValue((char *) jbvp, JB_FLAG_OBJECT, NULL,
+											 VARDATA_ANY(pathtext[i]),
+											 VARSIZE_ANY_EXHDR(pathtext[i]));
+		}
+		else if (have_array)
+		{
+			long lindex;
+			uint32 index;
+			char *indextext = TextDatumGetCString(pathtext[i]);
+			char *endptr;
+			lindex = strtol(indextext, &endptr, 10);
+			if (*endptr != '\0' || lindex > INT_MAX || lindex < 0)
+				PG_RETURN_NULL();
+			index = (uint32) lindex;
+			jbvp = getJsonbValue((char *) jbvp, JB_FLAG_ARRAY, index);
+		}
+		else
+		{
+			if (i == 0)
+				elog(ERROR,"cannot call extract path on a scalar");
+			PG_RETURN_NULL();
+		}
+		if (jbvp == NULL)
+			PG_RETURN_NULL();
+		if (i == npath - 1) 
+			break;
+		if (jbvp->type == jbvBinary)
+		{
+			JsonbIterator *it = JsonbIteratorInit(jbvp->binary.data);
+			int r;
+
+			r = JsonbIteratorGet(&it,&tv, true);
+			jbvp = jbvp->binary.data;
+			have_object = r == WJB_BEGIN_OBJECT ;
+			have_array = r == WJB_BEGIN_ARRAY;
+		}
+		else
+		{
+			have_object = jbvp->type == jbvHash;
+			have_array = jbvp->type == jbvArray;
+		}
+	}
+
+	if (as_text) 
+	{
+		if (jbvp->type == jbvString)
+			PG_RETURN_TEXT_P(cstring_to_text_with_len(jbvp->string.val, jbvp->string.len));
+		else if (jbvp->type == jbvNull)
+			PG_RETURN_NULL();
+	}
+
+	res = JsonbValueToJsonb(jbvp);
+
+	if (as_text)
+	{
+		PG_RETURN_TEXT_P(cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(res)) ? NULL : VARDATA(res), VARSIZE(res))));
+	}
+	else
+	{
+		/* not text mode - just hand back the jsonb */
+		PG_RETURN_JSONB(res);
+	}
+
+}
+	
+
 
 /*
  * SQL function json_array_length(json) -> int
