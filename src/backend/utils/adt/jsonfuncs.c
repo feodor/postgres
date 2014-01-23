@@ -1202,7 +1202,7 @@ get_jsonb_path_all(PG_FUNCTION_ARGS, bool as_text)
 			int r;
 
 			r = JsonbIteratorGet(&it,&tv, true);
-			jbvp = jbvp->binary.data;
+			jbvp = (JsonbValue *) jbvp->binary.data;
 			have_object = r == WJB_BEGIN_OBJECT ;
 			have_array = r == WJB_BEGIN_ARRAY;
 		}
@@ -1898,7 +1898,8 @@ elements_scalar(void *state, char *token, JsonTokenType tokentype)
  * which is in turn partly adapted from record_out.
  *
  * The json is decomposed into a hash table, in which each
- * field in the record is then looked up by name.
+ * field in the record is then looked up by name. For jsonb
+ * we fetch the values direct from the object.
  */
 Datum
 jsonb_populate_record(PG_FUNCTION_ARGS)
@@ -1912,6 +1913,7 @@ json_populate_record(PG_FUNCTION_ARGS)
 	Oid			argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	Oid         jtype = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	text	   *json;
+	Jsonb      *jb;
 	bool		use_json_as_text;
 	HTAB	   *json_hash;
 	HeapTupleHeader rec;
@@ -1925,8 +1927,6 @@ json_populate_record(PG_FUNCTION_ARGS)
 	int			i;
 	Datum	   *values;
 	bool	   *nulls;
-	char		fname[NAMEDATALEN];
-	JsonHashEntry *hashentry;
 
 	Assert(jtype == JSONOID || jtype == JSONBOID);
 
@@ -1935,7 +1935,7 @@ json_populate_record(PG_FUNCTION_ARGS)
 	if (!type_is_rowtype(argtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("first argument of json_populate_record must be a row type")));
+				 errmsg("first argument of json%s_populate_record must be a row type",  jtype == JSONBOID ? "b" : "")));
 
 	if (PG_ARGISNULL(0))
 	{
@@ -1968,24 +1968,27 @@ json_populate_record(PG_FUNCTION_ARGS)
 	{
 		/* just get the text */
 		json = PG_GETARG_TEXT_P(1);
+
+		json_hash = get_json_object_as_hash(json, "json_populate_record", use_json_as_text);
+
+		/*
+		 * if the input json is empty, we can only skip the rest if we were passed
+		 * in a non-null record, since otherwise there may be issues with domain
+		 * nulls.
+		 */
+		if (hash_get_num_entries(json_hash) == 0 && rec)
+			PG_RETURN_POINTER(rec);
+
 	}
 	else
 	{
-		Jsonb      *jb = PG_GETARG_JSONB(1);
+		jb = PG_GETARG_JSONB(1);
 		
-		json = cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb)));
+		/* same logic as for json */
+		if (JB_ISEMPTY(jb) && rec)
+			PG_RETURN_POINTER(rec);
+
 	}
-
-	json_hash = get_json_object_as_hash(json, "json_populate_record", use_json_as_text);
-
-	/*
-	 * if the input json is empty, we can only skip the rest if we were passed
-	 * in a non-null record, since otherwise there may be issues with domain
-	 * nulls.
-	 */
-	if (hash_get_num_entries(json_hash) == 0 && rec)
-		PG_RETURN_POINTER(rec);
-
 
 	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 	ncolumns = tupdesc->natts;
@@ -2048,7 +2051,9 @@ json_populate_record(PG_FUNCTION_ARGS)
 	{
 		ColumnIOData *column_info = &my_extra->columns[i];
 		Oid			column_type = tupdesc->attrs[i]->atttypid;
-		char	   *value;
+		JsonbValue *v = NULL;
+		char		fname[NAMEDATALEN];
+		JsonHashEntry *hashentry;
 
 		/* Ignore dropped columns in datatype */
 		if (tupdesc->attrs[i]->attisdropped)
@@ -2057,9 +2062,22 @@ json_populate_record(PG_FUNCTION_ARGS)
 			continue;
 		}
 
-		memset(fname, 0, NAMEDATALEN);
-		strncpy(fname, NameStr(tupdesc->attrs[i]->attname), NAMEDATALEN);
-		hashentry = hash_search(json_hash, fname, HASH_FIND, NULL);
+		if (jtype == JSONOID)
+		{
+
+			memset(fname, 0, NAMEDATALEN);
+			strncpy(fname, NameStr(tupdesc->attrs[i]->attname), NAMEDATALEN);
+			hashentry = hash_search(json_hash, fname, HASH_FIND, NULL);
+		}
+		else
+		{
+			if (!JB_ISEMPTY(jb))
+			{
+				char key  = NameStr(tupdesc->attrs[i]->attname);
+
+				v = findUncompressedJsonbValue(VARDATA(jb), JB_FLAG_OBJECT, NULL, key, strlen(key));
+			}
+		}
 
 		/*
 		 * we can't just skip here if the key wasn't found since we might have
@@ -2069,7 +2087,8 @@ json_populate_record(PG_FUNCTION_ARGS)
 		 * then every field which we don't populate needs to be run through
 		 * the input function just in case it's a domain type.
 		 */
-		if (hashentry == NULL && rec)
+		if (((jtype == JSONOID && hashentry == NULL) ||
+			 (jtype == JSONBOID &&  v == NULL)) && rec)
 			continue;
 
 		/*
@@ -2084,7 +2103,8 @@ json_populate_record(PG_FUNCTION_ARGS)
 						  fcinfo->flinfo->fn_mcxt);
 			column_info->column_type = column_type;
 		}
-		if (hashentry == NULL || hashentry->isnull)
+		if ((jtype == JSONOID && (hashentry == NULL || hashentry->isnull)) ||
+			(jtype == JSONBOID && (v == NULL || v->type == jbvNull)))
 		{
 			/*
 			 * need InputFunctionCall to happen even for nulls, so that domain
@@ -2094,12 +2114,36 @@ json_populate_record(PG_FUNCTION_ARGS)
 										  column_info->typioparam,
 										  tupdesc->attrs[i]->atttypmod);
 			nulls[i] = true;
+
 		}
 		else
 		{
-			value = hashentry->val;
 
-			values[i] = InputFunctionCall(&column_info->proc, value,
+			char *s = NULL;
+
+			if (jtype == JSONOID)
+			{
+				/* already done the hard work in the json case */
+				s = hashentry->val;
+			}
+			else
+			{
+				if (v->type == jbvString)
+					s = pnstrdup(v->string.val, v->string.len);
+				else if (v->type == jbvBool)
+					s = pnstrdup((v->boolean) ? "t" : "f", 1);
+				else if (v->type == jbvNumeric)
+					s = DatumGetCString(DirectFunctionCall1(numeric_out, 
+															PointerGetDatum(v->numeric)));
+				else if (! use_json_as_text)
+					elog(ERROR,"can't populate withe nested object");
+				else if (v->type == jbvBinary)
+					s = JsonbToCString(NULL, v->binary.data, v->binary.len); 
+				else
+					elog(PANIC, "Wrong jsonb");
+			}
+
+			values[i] = InputFunctionCall(&column_info->proc, s,
 										  column_info->typioparam,
 										  tupdesc->attrs[i]->atttypmod);
 			nulls[i] = false;
