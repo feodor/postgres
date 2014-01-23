@@ -4470,7 +4470,7 @@ DATA(insert OID =  3803 (  jsonb_send		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 
 DESCR("I/O");
 
 DATA(insert OID = 3969 (  jsonb_object_field			PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 3802 "3802 25" _null_ _null_ "{from_json, field_name}" _null_ jsonb_object_field _null_ _null_ _null_ ));
-DATA(insert OID = 3179 (  jsonb_object_field_text	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 25  "3802 25" _null_ _null_ "{from_json, field_name}" _null_ jsonb_object_field_text _null_ _null_ _null_ ));
+DATA(insert OID = 3214 (  jsonb_object_field_text	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 25  "3802 25" _null_ _null_ "{from_json, field_name}" _null_ jsonb_object_field_text _null_ _null_ _null_ ));
 DATA(insert OID = 3180 (  jsonb_array_element		PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 3802 "3802 23" _null_ _null_ "{from_json, element_index}" _null_ jsonb_array_element _null_ _null_ _null_ ));
 DATA(insert OID = 3195 (  jsonb_array_element_text	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 25  "3802 23" _null_ _null_ "{from_json, element_index}" _null_ jsonb_array_element_text _null_ _null_ _null_ ));
 DATA(insert OID = 3196 (  jsonb_extract_path			PGNSP PGUID 12 1 0 25 0 f f f f t f i 2 0 3802 "3802 1009" "{3802,1009}" "{i,v}" "{from_json,path_elems}" _null_ jsonb_extract_path _null_ _null_ _null_ ));
