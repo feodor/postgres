@@ -214,6 +214,9 @@ typedef struct PopulateRecordsetState
 	MemoryContext fn_mcxt;		/* used to stash IO funcs */
 } PopulateRecordsetState;
 
+/* turn a jsonb object into a record */
+static inline void make_row_from_rec_and_jsonb(Jsonb * element,  PopulateRecordsetState *state);
+
 /*
  * SQL function json_object-keys
  *
@@ -2314,14 +2317,124 @@ jsonb_populate_recordset(PG_FUNCTION_ARGS)
 	return json_populate_recordset(fcinfo);
 }
 
-static HeapTuple
-make_row_from_rec_and_jsonb(HeapTupleHeader rec, 
-							Jsonb * element, 
-							RecordIOData *my_extra, 
-							bool use_json_as_text, 
-							MemoryContext fn_mcxt)
+static inline void
+make_row_from_rec_and_jsonb(Jsonb * element,  PopulateRecordsetState *state)
 {
-	return (HeapTuple) NULL;
+	Datum	   *values;
+	bool	   *nulls;
+	int			i;
+	RecordIOData *my_extra = state->my_extra;
+	int			ncolumns = my_extra->ncolumns;
+	TupleDesc	tupdesc = state->ret_tdesc;
+	HeapTupleHeader rec = state->rec;
+	HeapTuple	rettuple;
+
+	values = (Datum *) palloc(ncolumns * sizeof(Datum));
+	nulls = (bool *) palloc(ncolumns * sizeof(bool));
+
+	if (state->rec)
+	{
+		HeapTupleData tuple;
+
+		/* Build a temporary HeapTuple control structure */
+		tuple.t_len = HeapTupleHeaderGetDatumLength(state->rec);
+		ItemPointerSetInvalid(&(tuple.t_self));
+		tuple.t_tableOid = InvalidOid;
+		tuple.t_data = state->rec;
+
+		/* Break down the tuple into fields */
+		heap_deform_tuple(&tuple, tupdesc, values, nulls);
+	}
+	else
+	{
+		for (i = 0; i < ncolumns; ++i)
+		{
+			values[i] = (Datum) 0;
+			nulls[i] = true;
+		}
+	}
+
+	for (i = 0; i < ncolumns; ++i)
+	{
+		ColumnIOData *column_info = &my_extra->columns[i];
+		Oid			column_type = tupdesc->attrs[i]->atttypid;
+		JsonbValue *v = NULL;
+
+		/* Ignore dropped columns in datatype */
+		if (tupdesc->attrs[i]->attisdropped)
+		{
+			nulls[i] = true;
+			continue;
+		}
+
+		if (!JB_ISEMPTY(element))
+		{
+			char *key  = NameStr(tupdesc->attrs[i]->attname);
+			
+			v = findUncompressedJsonbValue(VARDATA(element), JB_FLAG_OBJECT, NULL, key, strlen(key));
+		}
+		/*
+		 * we can't just skip here if the key wasn't found since we might have
+		 * a domain to deal with. If we were passed in a non-null record
+		 * datum, we assume that the existing values are valid (if they're
+		 * not, then it's not our fault), but if we were passed in a null,
+		 * then every field which we don't populate needs to be run through
+		 * the input function just in case it's a domain type.
+		 */
+		if (v == NULL && rec)
+			continue;
+
+		/*
+		 * Prepare to convert the column value from text
+		 */
+		if (column_info->column_type != column_type)
+		{
+			getTypeInputInfo(column_type,
+							 &column_info->typiofunc,
+							 &column_info->typioparam);
+			fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
+						  state->fn_mcxt);
+			column_info->column_type = column_type;
+		}
+		if (v == NULL || v->type == jbvNull)
+		{
+			/*
+			 * need InputFunctionCall to happen even for nulls, so that domain
+			 * checks are done
+			 */
+			values[i] = InputFunctionCall(&column_info->proc, NULL,
+										  column_info->typioparam,
+										  tupdesc->attrs[i]->atttypmod);
+			nulls[i] = true;
+		}
+		else
+		{
+			char *s = NULL;
+
+			if (v->type == jbvString)
+				s = pnstrdup(v->string.val, v->string.len);
+			else if (v->type == jbvBool)
+				s = pnstrdup((v->boolean) ? "t" : "f", 1);
+			else if (v->type == jbvNumeric)
+				s = DatumGetCString(DirectFunctionCall1(numeric_out, 
+														PointerGetDatum(v->numeric)));
+			else if (! state->use_json_as_text)
+				elog(ERROR,"can't populate with nested object");
+			else if (v->type == jbvBinary)
+				s = JsonbToCString(NULL, v->binary.data, v->binary.len); 
+			else
+				elog(PANIC, "Wrong jsonb");
+
+            values[i] = InputFunctionCall(&column_info->proc, s,
+                                          column_info->typioparam,
+                                          tupdesc->attrs[i]->atttypmod);
+            nulls[i] = false;
+		}
+	}
+
+	rettuple = heap_form_tuple(tupdesc, values, nulls);
+
+	tuplestore_puttuple(state->tuple_store, rettuple);
 }
 
 Datum
@@ -2338,8 +2451,7 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 	TupleDesc	tupdesc;
 	RecordIOData *my_extra;
 	int			ncolumns;
-	Tuplestorestate *tuple_store;
-	TupleDesc	ret_tdesc;
+	PopulateRecordsetState *state;
 
 	use_json_as_text = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 
@@ -2408,26 +2520,29 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 		my_extra->ncolumns = ncolumns;
 	}
 
+	state = palloc0(sizeof(PopulateRecordsetState));
+
 	/* make these in a sufficiently long-lived memory context */
 	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
-	ret_tdesc = CreateTupleDescCopy(tupdesc);;
-	BlessTupleDesc(ret_tdesc);
-	tuple_store = tuplestore_begin_heap(rsi->allowedModes & 
+	state->ret_tdesc = CreateTupleDescCopy(tupdesc);;
+	BlessTupleDesc(state->ret_tdesc);
+	state->tuple_store = tuplestore_begin_heap(rsi->allowedModes & 
 										SFRM_Materialize_Random,
 										false, work_mem);
 	MemoryContextSwitchTo(old_cxt);
 		
+    state->my_extra = my_extra;
+    state->rec = rec;
+    state->use_json_as_text = use_json_as_text;
+    state->fn_mcxt = fcinfo->flinfo->fn_mcxt;
+
+
 	if (jtype == JSONOID)
 	{
 		text	   *json = PG_GETARG_TEXT_P(1);
 		JsonLexContext *lex;
 		JsonSemAction *sem;
-		PopulateRecordsetState *state;
 
-		state->ret_tdesc = ret_tdesc; 
-		state->tuple_store = tuple_store;
-
-		state = palloc0(sizeof(PopulateRecordsetState));
 		sem = palloc0(sizeof(JsonSemAction));
 
 		lex = makeJsonLexContext(json, true);
@@ -2442,11 +2557,6 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 		sem->object_end = populate_recordset_object_end;
 
 		state->lex = lex;
-
-		state->my_extra = my_extra;
-		state->rec = rec;
-		state->use_json_as_text = use_json_as_text;
-		state->fn_mcxt = fcinfo->flinfo->fn_mcxt;
 
 		pg_parse_json(lex, sem);
 
@@ -2474,22 +2584,16 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 			if (r == WJB_ELEM)
 			{
 				Jsonb *element = JsonbValueToJsonb(&v);
-				HeapTuple row;
 				
 				if (!JB_ROOT_IS_OBJECT(element))
 					elog(ERROR,"jsonb_populate_recordset  array element must be an object");
-				row = make_row_from_rec_and_jsonb(rec, element, my_extra, 
-												  use_json_as_text, 
-												  fcinfo->flinfo->fn_mcxt);
-
-				if (row != (HeapTuple) NULL)
-					tuplestore_puttuple(tuple_store, row);
+				make_row_from_rec_and_jsonb(element, state);
 			}
 		}
 	}
 	
-	rsi->setResult = tuple_store;
-	rsi->setDesc = ret_tdesc;
+	rsi->setResult = state->tuple_store;
+	rsi->setDesc = state->ret_tdesc;
 
 	PG_RETURN_NULL();
 
