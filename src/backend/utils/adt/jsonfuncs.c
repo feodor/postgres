@@ -1913,9 +1913,9 @@ json_populate_record(PG_FUNCTION_ARGS)
 	Oid			argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	Oid         jtype = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	text	   *json;
-	Jsonb      *jb;
+	Jsonb      *jb = NULL;
 	bool		use_json_as_text;
-	HTAB	   *json_hash;
+	HTAB	   *json_hash = NULL;
 	HeapTupleHeader rec;
 	Oid			tupType;
 	int32		tupTypmod;
@@ -2053,7 +2053,7 @@ json_populate_record(PG_FUNCTION_ARGS)
 		Oid			column_type = tupdesc->attrs[i]->atttypid;
 		JsonbValue *v = NULL;
 		char		fname[NAMEDATALEN];
-		JsonHashEntry *hashentry;
+		JsonHashEntry *hashentry = NULL;
 
 		/* Ignore dropped columns in datatype */
 		if (tupdesc->attrs[i]->attisdropped)
@@ -2073,7 +2073,7 @@ json_populate_record(PG_FUNCTION_ARGS)
 		{
 			if (!JB_ISEMPTY(jb))
 			{
-				char key  = NameStr(tupdesc->attrs[i]->attname);
+				char *key  = NameStr(tupdesc->attrs[i]->attname);
 
 				v = findUncompressedJsonbValue(VARDATA(jb), JB_FLAG_OBJECT, NULL, key, strlen(key));
 			}
@@ -2314,13 +2314,21 @@ jsonb_populate_recordset(PG_FUNCTION_ARGS)
 	return json_populate_recordset(fcinfo);
 }
 
+static HeapTuple
+make_row_from_rec_and_jsonb(HeapTupleHeader rec, 
+							Jsonb * element, 
+							RecordIOData *my_extra, 
+							bool use_json_as_text, 
+							MemoryContext fn_mcxt)
+{
+	return (HeapTuple) NULL;
+}
 
 Datum
 json_populate_recordset(PG_FUNCTION_ARGS)
 {
 	Oid			argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	Oid         jtype = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	text	   *json;
 	bool		use_json_as_text;
 	ReturnSetInfo *rsi;
 	MemoryContext old_cxt;
@@ -2330,9 +2338,8 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 	TupleDesc	tupdesc;
 	RecordIOData *my_extra;
 	int			ncolumns;
-	JsonLexContext *lex;
-	JsonSemAction *sem;
-	PopulateRecordsetState *state;
+	Tuplestorestate *tuple_store;
+	TupleDesc	ret_tdesc;
 
 	use_json_as_text = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 
@@ -2360,36 +2367,9 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 	 */
 	(void) get_call_result_type(fcinfo, NULL, &tupdesc);
 
-	state = palloc0(sizeof(PopulateRecordsetState));
-	sem = palloc0(sizeof(JsonSemAction));
-
-
-	/* make these in a sufficiently long-lived memory context */
-	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
-
-	state->ret_tdesc = CreateTupleDescCopy(tupdesc);
-	BlessTupleDesc(state->ret_tdesc);
-	state->tuple_store =
-		tuplestore_begin_heap(rsi->allowedModes & SFRM_Materialize_Random,
-							  false, work_mem);
-
-	MemoryContextSwitchTo(old_cxt);
-
 	/* if the json is null send back an empty set */
 	if (PG_ARGISNULL(1))
 		PG_RETURN_NULL();
-
-	if (jtype == JSONOID)
-	{
-		/* just get the text */
-		json = PG_GETARG_TEXT_P(1);
-	}
-	else
-	{
-		Jsonb      *jb = PG_GETARG_JSONB(1);
-		
-		json = cstring_to_text(JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb)));
-	}
 
 	if (PG_ARGISNULL(0))
 		rec = NULL;
@@ -2399,8 +2379,6 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 	tupType = tupdesc->tdtypeid;
 	tupTypmod = tupdesc->tdtypmod;
 	ncolumns = tupdesc->natts;
-
-	lex = makeJsonLexContext(json, true);
 
 	/*
 	 * We arrange to look up the needed I/O info just once per series of
@@ -2430,26 +2408,88 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 		my_extra->ncolumns = ncolumns;
 	}
 
-	sem->semstate = (void *) state;
-	sem->array_start = populate_recordset_array_start;
-	sem->array_element_start = populate_recordset_array_element_start;
-	sem->scalar = populate_recordset_scalar;
-	sem->object_field_start = populate_recordset_object_field_start;
-	sem->object_field_end = populate_recordset_object_field_end;
-	sem->object_start = populate_recordset_object_start;
-	sem->object_end = populate_recordset_object_end;
+	/* make these in a sufficiently long-lived memory context */
+	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
+	ret_tdesc = CreateTupleDescCopy(tupdesc);;
+	BlessTupleDesc(ret_tdesc);
+	tuple_store = tuplestore_begin_heap(rsi->allowedModes & 
+										SFRM_Materialize_Random,
+										false, work_mem);
+	MemoryContextSwitchTo(old_cxt);
+		
+	if (jtype == JSONOID)
+	{
+		text	   *json = PG_GETARG_TEXT_P(1);
+		JsonLexContext *lex;
+		JsonSemAction *sem;
+		PopulateRecordsetState *state;
 
-	state->lex = lex;
+		state->ret_tdesc = ret_tdesc; 
+		state->tuple_store = tuple_store;
 
-	state->my_extra = my_extra;
-	state->rec = rec;
-	state->use_json_as_text = use_json_as_text;
-	state->fn_mcxt = fcinfo->flinfo->fn_mcxt;
+		state = palloc0(sizeof(PopulateRecordsetState));
+		sem = palloc0(sizeof(JsonSemAction));
 
-	pg_parse_json(lex, sem);
+		lex = makeJsonLexContext(json, true);
 
-	rsi->setResult = state->tuple_store;
-	rsi->setDesc = state->ret_tdesc;
+		sem->semstate = (void *) state;
+		sem->array_start = populate_recordset_array_start;
+		sem->array_element_start = populate_recordset_array_element_start;
+		sem->scalar = populate_recordset_scalar;
+		sem->object_field_start = populate_recordset_object_field_start;
+		sem->object_field_end = populate_recordset_object_field_end;
+		sem->object_start = populate_recordset_object_start;
+		sem->object_end = populate_recordset_object_end;
+
+		state->lex = lex;
+
+		state->my_extra = my_extra;
+		state->rec = rec;
+		state->use_json_as_text = use_json_as_text;
+		state->fn_mcxt = fcinfo->flinfo->fn_mcxt;
+
+		pg_parse_json(lex, sem);
+
+	}
+	else
+	{
+		Jsonb *jb;
+		JsonbIterator *it;
+		JsonbValue v;
+		bool skipNested  = false;
+		int r;
+		
+		Assert (jtype == JSONBOID);
+		jb  = PG_GETARG_JSONB(1);
+
+		if (JB_ROOT_IS_SCALAR(jb) || ! JB_ROOT_IS_ARRAY(jb))
+			elog(ERROR,"cannot call jsonb_populate_recordset on non-array");
+		
+		it = JsonbIteratorInit(VARDATA_ANY(jb));
+
+		while((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+		{
+			skipNested = true;
+			
+			if (r == WJB_ELEM)
+			{
+				Jsonb *element = JsonbValueToJsonb(&v);
+				HeapTuple row;
+				
+				if (!JB_ROOT_IS_OBJECT(element))
+					elog(ERROR,"jsonb_populate_recordset  array element must be an object");
+				row = make_row_from_rec_and_jsonb(rec, element, my_extra, 
+												  use_json_as_text, 
+												  fcinfo->flinfo->fn_mcxt);
+
+				if (row != (HeapTuple) NULL)
+					tuplestore_puttuple(tuple_store, row);
+			}
+		}
+	}
+	
+	rsi->setResult = tuple_store;
+	rsi->setDesc = ret_tdesc;
 
 	PG_RETURN_NULL();
 
