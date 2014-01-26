@@ -4,9 +4,7 @@
 #ifndef __HSTORE_H__
 #define __HSTORE_H__
 
-#include "fmgr.h"
-#include "utils/array.h"
-
+#include "utils/jsonb.h"
 
 /*
  * HEntry: there is one of these for each key _and_ value in an hstore
@@ -15,127 +13,64 @@
  * by subtraction from the previous entry.	the ISFIRST flag lets us tell
  * whether there is a previous entry.
  */
-typedef struct
-{
-	uint32		entry;
-} HEntry;
 
-#define HENTRY_ISFIRST 0x80000000
-#define HENTRY_ISNULL  0x40000000
-#define HENTRY_POSMASK 0x3FFFFFFF
+typedef JEntry HEntry;
 
-/* note possible multiple evaluations, also access to prior array element */
-#define HSE_ISFIRST(he_) (((he_).entry & HENTRY_ISFIRST) != 0)
-#define HSE_ISNULL(he_) (((he_).entry & HENTRY_ISNULL) != 0)
-#define HSE_ENDPOS(he_) ((he_).entry & HENTRY_POSMASK)
-#define HSE_OFF(he_) (HSE_ISFIRST(he_) ? 0 : HSE_ENDPOS((&(he_))[-1]))
-#define HSE_LEN(he_) (HSE_ISFIRST(he_)	\
-					  ? HSE_ENDPOS(he_) \
-					  : HSE_ENDPOS(he_) - HSE_ENDPOS((&(he_))[-1]))
+#define HENTRY_ISFIRST		JENTRY_ISFIRST
+#define HENTRY_ISSTRING 	JENTRY_ISSTRING
+#define HENTRY_ISNUMERIC	JENTRY_ISNUMERIC
+#define HENTRY_ISNEST		JENTRY_ISNEST
+#define HENTRY_ISNULL		JENTRY_ISNULL
+#define HENTRY_ISBOOL		JENTRY_ISBOOL
+#define HENTRY_ISFALSE		JENTRY_ISFALSE
+#define HENTRY_ISTRUE		JENTRY_ISTRUE
+
+/* HENTRY_ISHASH, HENTRY_ISARRAY and HENTRY_ISCALAR is only used in send/recv */
+#define HENTRY_ISHASH		JENTRY_ISOBJECT
+#define HENTRY_ISARRAY		JENTRY_ISARRAY
+#define HENTRY_ISCALAR		JENTRY_ISCALAR
+
+#define HENTRY_POSMASK 	JENTRY_POSMASK
+#define HENTRY_TYPEMASK	JENTRY_TYPEMASK
+
+#define HSE_ISFIRST(he_) 		JBE_ISFIRST(he_)
+#define HSE_ISSTRING(he_)		JBE_ISSTRING(he_)
+#define HSE_ISNUMERIC(he_) 		JBE_ISNUMERIC(he_)
+#define HSE_ISNEST(he_) 		JBE_ISNEST(he_)
+#define HSE_ISNULL(he_) 		JBE_ISNULL(he_)
+#define HSE_ISBOOL(he_) 		JBE_ISBOOL(he_)
+#define HSE_ISBOOL_TRUE(he_) 	JBE_ISBOOL_TRUE(he_)
+#define HSE_ISBOOL_FALSE(he_) 	JBE_ISBOOL_FALSE(he_)
+
+#define HSE_ENDPOS(he_) 		JBE_ENDPOS(he_)
+#define HSE_OFF(he_) 			JBE_OFF(he_)
+#define HSE_LEN(he_) 			JBE_LEN(he_)
 
 /*
- * determined by the size of "endpos" (ie HENTRY_POSMASK), though this is a
- * bit academic since currently varlenas (and hence both the input and the
- * whole hstore) have the same limit
+ * determined by the size of "endpos" (ie HENTRY_POSMASK)
  */
-#define HSTORE_MAX_KEY_LEN 0x3FFFFFFF
-#define HSTORE_MAX_VALUE_LEN 0x3FFFFFFF
+#define HSTORE_MAX_KEY_LEN 		HENTRY_POSMASK
+#define HSTORE_MAX_VALUE_LEN 	HENTRY_POSMASK
 
-typedef struct
-{
-	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	uint32		size_;			/* flags and number of items in hstore */
-	/* array of HEntry follows */
-} HStore;
+typedef Jsonb HStore;
 
 /*
  * it's not possible to get more than 2^28 items into an hstore,
  * so we reserve the top few bits of the size field. See hstore_compat.c
  * for one reason why.	Some bits are left for future use here.
  */
-#define HS_FLAG_NEWVERSION 0x80000000
+#define HS_FLAG_NEWVERSION 		0x80000000
+#define HS_FLAG_ARRAY			JB_FLAG_ARRAY
+#define HS_FLAG_HASH			JB_FLAG_OBJECT
+#define HS_FLAG_SCALAR			JB_FLAG_SCALAR
 
-#define HS_COUNT(hsp_) ((hsp_)->size_ & 0x0FFFFFFF)
-#define HS_SETCOUNT(hsp_,c_) ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION)
+#define HS_COUNT_MASK			0x0FFFFFFF
 
-
-#define HSHRDSIZE	(sizeof(HStore))
-#define CALCDATASIZE(x, lenstr) ( (x) * 2 * sizeof(HEntry) + HSHRDSIZE + (lenstr) )
-
-/* note multiple evaluations of x */
-#define ARRPTR(x)		( (HEntry*) ( (HStore*)(x) + 1 ) )
-#define STRPTR(x)		( (char*)(ARRPTR(x) + HS_COUNT((HStore*)(x)) * 2) )
-
-/* note multiple/non evaluations */
-#define HS_KEY(arr_,str_,i_) ((str_) + HSE_OFF((arr_)[2*(i_)]))
-#define HS_VAL(arr_,str_,i_) ((str_) + HSE_OFF((arr_)[2*(i_)+1]))
-#define HS_KEYLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)]))
-#define HS_VALLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)+1]))
-#define HS_VALISNULL(arr_,i_) (HSE_ISNULL((arr_)[2*(i_)+1]))
-
-/*
- * currently, these following macros are the _only_ places that rely
- * on internal knowledge of HEntry. Everything else should be using
- * the above macros. Exception: the in-place upgrade in hstore_compat.c
- * messes with entries directly.
- */
-
-/*
- * copy one key/value pair (which must be contiguous starting at
- * sptr_) into an under-construction hstore; dent_ is an HEntry*,
- * dbuf_ is the destination's string buffer, dptr_ is the current
- * position in the destination. lots of modification and multiple
- * evaluation here.
- */
-#define HS_COPYITEM(dent_,dbuf_,dptr_,sptr_,klen_,vlen_,vnull_)			\
-	do {																\
-		memcpy((dptr_), (sptr_), (klen_)+(vlen_));						\
-		(dptr_) += (klen_)+(vlen_);										\
-		(dent_)++->entry = ((dptr_) - (dbuf_) - (vlen_)) & HENTRY_POSMASK; \
-		(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)		\
-							 | ((vnull_) ? HENTRY_ISNULL : 0));			\
-	} while(0)
-
-/*
- * add one key/item pair, from a Pairs structure, into an
- * under-construction hstore
- */
-#define HS_ADDITEM(dent_,dbuf_,dptr_,pair_)								\
-	do {																\
-		memcpy((dptr_), (pair_).key, (pair_).keylen);					\
-		(dptr_) += (pair_).keylen;										\
-		(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;		\
-		if ((pair_).isnull)												\
-			(dent_)++->entry = ((((dptr_) - (dbuf_)) & HENTRY_POSMASK)	\
-								 | HENTRY_ISNULL);						\
-		else															\
-		{																\
-			memcpy((dptr_), (pair_).val, (pair_).vallen);				\
-			(dptr_) += (pair_).vallen;									\
-			(dent_)++->entry = ((dptr_) - (dbuf_)) & HENTRY_POSMASK;	\
-		}																\
-	} while (0)
-
-/* finalize a newly-constructed hstore */
-#define HS_FINALIZE(hsp_,count_,buf_,ptr_)							\
-	do {															\
-		int buflen = (ptr_) - (buf_);								\
-		if ((count_))												\
-			ARRPTR(hsp_)[0].entry |= HENTRY_ISFIRST;				\
-		if ((count_) != HS_COUNT((hsp_)))							\
-		{															\
-			HS_SETCOUNT((hsp_),(count_));							\
-			memmove(STRPTR(hsp_), (buf_), buflen);					\
-		}															\
-		SET_VARSIZE((hsp_), CALCDATASIZE((count_), buflen));		\
-	} while (0)
-
-/* ensure the varlena size of an existing hstore is correct */
-#define HS_FIXSIZE(hsp_,count_)											\
-	do {																\
-		int bl = (count_) ? HSE_ENDPOS(ARRPTR(hsp_)[2*(count_)-1]) : 0; \
-		SET_VARSIZE((hsp_), CALCDATASIZE((count_),bl));					\
-	} while (0)
+#define HS_ISEMPTY(hsp_)		JB_ISEMPTY(hsp_)
+#define HS_ROOT_COUNT(hsp_) 	JB_ROOT_COUNT(hsp_)
+#define HS_ROOT_IS_HASH(hsp_) 	JB_ROOT_IS_OBJECT(hsp_)
+#define HS_ROOT_IS_ARRAY(hsp_) 	JB_ROOT_IS_ARRAY(hsp_)
+#define HS_ROOT_IS_SCALAR(hsp_) JB_ROOT_IS_SCALAR(hsp_)
 
 /* DatumGetHStoreP includes support for reading old-format hstore values */
 extern HStore *hstoreUpgrade(Datum orig);
@@ -144,29 +79,62 @@ extern HStore *hstoreUpgrade(Datum orig);
 
 #define PG_GETARG_HS(x) DatumGetHStoreP(PG_GETARG_DATUM(x))
 
+typedef JsonbPair HStorePair;
+typedef JsonbValue HStoreValue;
+
+/* JsonbValue.type renaming */
+#define hsvNull		jbvNull
+#define hsvString	jbvString
+#define hsvNumeric	jbvNumeric
+#define hsvBool		jbvBool
+#define hsvArray	jbvArray
+#define hsvHash		jbvHash
+#define hsvBinary	jbvBinary
 
 /*
- * Pairs is a "decompressed" representation of one key/value pair.
- * The two strings are not necessarily null-terminated.
+ * hstore support functions, they are mostly the same as jsonb
  */
-typedef struct
-{
-	char	   *key;
-	char	   *val;
-	size_t		keylen;
-	size_t		vallen;
-	bool		isnull;			/* value is null? */
-	bool		needfree;		/* need to pfree the value? */
-} Pairs;
 
-extern int	hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen);
-extern HStore *hstorePairs(Pairs *pairs, int32 pcount, int32 buflen);
+#define WHS_KEY         	WJB_KEY
+#define WHS_VALUE       	WJB_VALUE
+#define WHS_ELEM       		WJB_ELEM
+#define WHS_BEGIN_ARRAY 	WJB_BEGIN_ARRAY
+#define WHS_END_ARRAY   	WJB_END_ARRAY
+#define WHS_BEGIN_HASH	    WJB_BEGIN_OBJECT
+#define WHS_END_HASH        WJB_END_OBJECT
 
-extern size_t hstoreCheckKeyLen(size_t len);
-extern size_t hstoreCheckValLen(size_t len);
+#define walkUncompressedHStore(v, cb, cb_arg)		walkUncompressedJsonb((v), (cb), (cb_arg))
+#define compareHStoreStringValue(a, b, arg)			compareJsonbStringValue((a), (b), (arg))
+#define compareHStorePair(a, b, arg)				compareJsonbPair((a), (b), (arg))
 
-extern int	hstoreFindKey(HStore *hs, int *lowbound, char *key, int keylen);
-extern Pairs *hstoreArrayToPairs(ArrayType *a, int *npairs);
+#define compareHStoreBinaryValue(a, b)				compareJsonbBinaryValue((a), (b))
+#define compareHStoreValue(a, b)					compareJsonbValue((a), (b))
+
+#define findUncompressedHStoreValueByValue(buffer, flags, lowbound, key)	\
+	findUncompressedJsonbValueByValue((buffer), (flags), (lowbound), (key))
+#define findUncompressedHStoreValue(buffer, flags, lowbound, key, keylen)	\
+	findUncompressedJsonbValue((buffer), (flags), (lowbound), (key), (keylen))
+
+#define getHStoreValue(buffer, flags, i)			getJsonbValue((buffer), (flags), (i))
+
+typedef ToJsonbState ToHStoreState;
+#define pushHStoreValue(state, r /* WHS_* */, v)	pushJsonbValue((state), (r), (v))
+
+extern bool stringIsNumber(char *string, int len, bool jsonNumber);
+
+extern uint32 compressHStore(HStoreValue *v, char *buffer);
+
+typedef JsonbIterator HStoreIterator;
+
+#define	HStoreIteratorInit(buffer)					JsonbIteratorInit(buffer)
+
+#define HStoreIteratorGet(it, v, skipNested)	JsonbIteratorGet((it), (v), (skipNested))
+
+text* HStoreValueToText(HStoreValue *v);
+
+extern HStoreValue* parseHStore(const char *str, int len, bool json);
+
+#define uniqueHStoreValue(v) uniqueJsonbValue(v)
 
 #define HStoreContainsStrategyNumber	7
 #define HStoreExistsStrategyNumber		9
@@ -193,5 +161,19 @@ extern Pairs *hstoreArrayToPairs(ArrayType *a, int *npairs);
 #define HSTORE_POLLUTE(newname_,oldname_) \
 	extern int no_such_variable
 #endif
+
+/*
+ * When using a GIN/GiST index for hstore, we choose to index both keys and values.
+ * The storage format is "text" values, with K, V, or N prepended to the string
+ * to indicate key, value, or null values.  (As of 9.1 it might be better to
+ * store null values as nulls, but we'll keep it this way for on-disk
+ * compatibility.)
+ */
+#define ELEMFLAG    'E'
+#define KEYFLAG     'K'
+#define VALFLAG     'V'
+#define NULLFLAG    'N'
+
+
 
 #endif   /* __HSTORE_H__ */

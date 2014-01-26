@@ -203,6 +203,7 @@ distprep:
 	$(MAKE) -C catalog	schemapg.h postgres.bki postgres.description postgres.shdescription
 	$(MAKE) -C replication	repl_gram.c repl_scanner.c
 	$(MAKE) -C utils	fmgrtab.c fmgroids.h errcodes.h
+	$(MAKE) -C utils/adt	jsonb_gram.c jsonb_scan.c
 	$(MAKE) -C utils/misc	guc-file.c
 	$(MAKE) -C utils/sort	qsort_tuple.c
 
@@ -320,6 +321,9 @@ maintainer-clean: distclean
 	      utils/fmgroids.h \
 	      utils/fmgrtab.c \
 	      utils/errcodes.h \
+	      utils/adt/jsonb_gram.c \
+	      utils/adt/jsonb_gram.h \
+	      utils/adt/jsonb_scan.c \
 	      utils/misc/guc-file.c \
 	      utils/sort/qsort_tuple.c
 

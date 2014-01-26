@@ -1,0 +1,762 @@
+SELECT '"foo"=>true'::hstore;
+  hstore  
+----------
+ "foo"=>t
+(1 row)
+
+SELECT 'foo=>true'::hstore;
+  hstore  
+----------
+ "foo"=>t
+(1 row)
+
+SELECT '"true"=>true'::hstore;
+  hstore   
+-----------
+ "true"=>t
+(1 row)
+
+SELECT 'true=>true'::hstore;
+  hstore   
+-----------
+ "true"=>t
+(1 row)
+
+SELECT '"t"=>true'::hstore;
+ hstore 
+--------
+ "t"=>t
+(1 row)
+
+SELECT 't=>true'::hstore;
+ hstore 
+--------
+ "t"=>t
+(1 row)
+
+SELECT '"false"=>true'::hstore;
+   hstore   
+------------
+ "false"=>t
+(1 row)
+
+SELECT 'false=>true'::hstore;
+   hstore   
+------------
+ "false"=>t
+(1 row)
+
+SELECT '"f"=>true'::hstore;
+ hstore 
+--------
+ "f"=>t
+(1 row)
+
+SELECT 'f=>true'::hstore;
+ hstore 
+--------
+ "f"=>t
+(1 row)
+
+SELECT '"foo"=>false'::hstore;
+  hstore  
+----------
+ "foo"=>f
+(1 row)
+
+SELECT 'foo=>false'::hstore;
+  hstore  
+----------
+ "foo"=>f
+(1 row)
+
+SELECT '"false"=>false'::hstore;
+   hstore   
+------------
+ "false"=>f
+(1 row)
+
+SELECT 'false=>false'::hstore;
+   hstore   
+------------
+ "false"=>f
+(1 row)
+
+SELECT '"t"=>false'::hstore;
+ hstore 
+--------
+ "t"=>f
+(1 row)
+
+SELECT 't=>false'::hstore;
+ hstore 
+--------
+ "t"=>f
+(1 row)
+
+SELECT '"false"=>false'::hstore;
+   hstore   
+------------
+ "false"=>f
+(1 row)
+
+SELECT 'false=>false'::hstore;
+   hstore   
+------------
+ "false"=>f
+(1 row)
+
+SELECT '"f"=>false'::hstore;
+ hstore 
+--------
+ "f"=>f
+(1 row)
+
+SELECT 'f=>false'::hstore;
+ hstore 
+--------
+ "f"=>f
+(1 row)
+
+SELECT '"1"=>x'::hstore;
+  hstore  
+----------
+ "1"=>"x"
+(1 row)
+
+SELECT '1=>x'::hstore;
+  hstore  
+----------
+ "1"=>"x"
+(1 row)
+
+SELECT 'foo=>1'::hstore;
+  hstore  
+----------
+ "foo"=>1
+(1 row)
+
+SELECT 'foo=>1.'::hstore;
+  hstore  
+----------
+ "foo"=>1
+(1 row)
+
+SELECT 'foo=>1.0'::hstore;
+   hstore   
+------------
+ "foo"=>1.0
+(1 row)
+
+SELECT 'foo=>1.01'::hstore;
+   hstore    
+-------------
+ "foo"=>1.01
+(1 row)
+
+SELECT 'foo=>1.01e'::hstore;
+     hstore     
+----------------
+ "foo"=>"1.01e"
+(1 row)
+
+SELECT 'foo=>1.01e1'::hstore;
+   hstore    
+-------------
+ "foo"=>10.1
+(1 row)
+
+SELECT 'foo=>1.01e+1'::hstore;
+   hstore    
+-------------
+ "foo"=>10.1
+(1 row)
+
+SELECT 'foo=>1.01e-1'::hstore;
+    hstore    
+--------------
+ "foo"=>0.101
+(1 row)
+
+SELECT 'foo=>.1'::hstore;
+   hstore   
+------------
+ "foo"=>0.1
+(1 row)
+
+SELECT 'foo=>.1e'::hstore;
+    hstore    
+--------------
+ "foo"=>".1e"
+(1 row)
+
+SELECT 'foo=>.1e1'::hstore;
+  hstore  
+----------
+ "foo"=>1
+(1 row)
+
+SELECT 'foo=>.1e+1'::hstore;
+  hstore  
+----------
+ "foo"=>1
+(1 row)
+
+SELECT 'foo=>.1e-1'::hstore;
+   hstore    
+-------------
+ "foo"=>0.01
+(1 row)
+
+SELECT 'foo=>0.1e-1'::hstore;
+   hstore    
+-------------
+ "foo"=>0.01
+(1 row)
+
+SELECT 'foo=>00.1e-1'::hstore;
+   hstore    
+-------------
+ "foo"=>0.01
+(1 row)
+
+SELECT 'foo=>+1'::hstore;
+  hstore  
+----------
+ "foo"=>1
+(1 row)
+
+SELECT 'foo=>+1.'::hstore;
+  hstore  
+----------
+ "foo"=>1
+(1 row)
+
+SELECT 'foo=>+1.0'::hstore;
+   hstore   
+------------
+ "foo"=>1.0
+(1 row)
+
+SELECT 'foo=>+1.01'::hstore;
+   hstore    
+-------------
+ "foo"=>1.01
+(1 row)
+
+SELECT 'foo=>+1.01e'::hstore;
+     hstore      
+-----------------
+ "foo"=>"+1.01e"
+(1 row)
+
+SELECT 'foo=>+1.01e1'::hstore;
+   hstore    
+-------------
+ "foo"=>10.1
+(1 row)
+
+SELECT 'foo=>+1.01e+1'::hstore;
+   hstore    
+-------------
+ "foo"=>10.1
+(1 row)
+
+SELECT 'foo=>+1.01e-1'::hstore;
+    hstore    
+--------------
+ "foo"=>0.101
+(1 row)
+
+SELECT 'foo=>+.1'::hstore;
+   hstore   
+------------
+ "foo"=>0.1
+(1 row)
+
+SELECT 'foo=>+.1e'::hstore;
+    hstore     
+---------------
+ "foo"=>"+.1e"
+(1 row)
+
+SELECT 'foo=>+.1e1'::hstore;
+  hstore  
+----------
+ "foo"=>1
+(1 row)
+
+SELECT 'foo=>+.1e+1'::hstore;
+  hstore  
+----------
+ "foo"=>1
+(1 row)
+
+SELECT 'foo=>+.1e-1'::hstore;
+   hstore    
+-------------
+ "foo"=>0.01
+(1 row)
+
+SELECT 'foo=>-1'::hstore;
+  hstore   
+-----------
+ "foo"=>-1
+(1 row)
+
+SELECT 'foo=>-1.'::hstore;
+  hstore   
+-----------
+ "foo"=>-1
+(1 row)
+
+SELECT 'foo=>-1.0'::hstore;
+   hstore    
+-------------
+ "foo"=>-1.0
+(1 row)
+
+SELECT 'foo=>-1.01'::hstore;
+    hstore    
+--------------
+ "foo"=>-1.01
+(1 row)
+
+SELECT 'foo=>-1.01e'::hstore;
+     hstore      
+-----------------
+ "foo"=>"-1.01e"
+(1 row)
+
+SELECT 'foo=>-1.01e1'::hstore;
+    hstore    
+--------------
+ "foo"=>-10.1
+(1 row)
+
+SELECT 'foo=>-1.01e+1'::hstore;
+    hstore    
+--------------
+ "foo"=>-10.1
+(1 row)
+
+SELECT 'foo=>-1.01e-1'::hstore;
+    hstore     
+---------------
+ "foo"=>-0.101
+(1 row)
+
+SELECT 'foo=>-.1'::hstore;
+   hstore    
+-------------
+ "foo"=>-0.1
+(1 row)
+
+SELECT 'foo=>-.1e'::hstore;
+    hstore     
+---------------
+ "foo"=>"-.1e"
+(1 row)
+
+SELECT 'foo=>-.1e1'::hstore;
+  hstore   
+-----------
+ "foo"=>-1
+(1 row)
+
+SELECT 'foo=>-.1e+1'::hstore;
+  hstore   
+-----------
+ "foo"=>-1
+(1 row)
+
+SELECT 'foo=>-.1e-1'::hstore;
+    hstore    
+--------------
+ "foo"=>-0.01
+(1 row)
+
+SELECT 'foo=>1e2000'::hstore;
+     hstore      
+-----------------
+ "foo"=>"1e2000"
+(1 row)
+
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 'foo';
+   ?column?    
+---------------
+ 1000000000000
+(1 row)
+
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 'bar';
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 0;
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT 'foo=>1e12, bar=>x'::hstore ^> 1;
+   ?column?    
+---------------
+ 1000000000000
+(1 row)
+
+SELECT '[foo, 1e12, bar, x]'::hstore ^> 'foo';
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT '[foo, 1e12, bar, x]'::hstore ^> 'bar';
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT '[foo, 1e12, bar, x]'::hstore ^> 0;
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT '[foo, 1e12, bar, x]'::hstore ^> 1;
+   ?column?    
+---------------
+ 1000000000000
+(1 row)
+
+SELECT 'foo=>{x, 1e-12}'::hstore #^> '{foo, 0}';
+ ?column? 
+----------
+         
+(1 row)
+
+SELECT 'foo=>{x, 1e-12}'::hstore #^> '{foo, 1}';
+    ?column?    
+----------------
+ 0.000000000001
+(1 row)
+
+SELECT 'foo=>t, bar=>x'::hstore ?> 'foo';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'foo=>t, bar=>x'::hstore ?> 'bar';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'foo=>t, bar=>x'::hstore ?> 0;
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'foo=>t, bar=>x'::hstore ?> 1;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '[foo, t, bar, x]'::hstore ?> 'foo';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '[foo, t, bar, x]'::hstore ?> 'bar';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '[foo, t, bar, x]'::hstore ?> 0;
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '[foo, t, bar, x]'::hstore ?> 1;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'foo=>{x, t}'::hstore #?> '{foo, 0}';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'foo=>{x, t}'::hstore #?> '{foo, 1}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'foo=>f, bar=>x'::hstore ?> 'foo';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT 'foo=>f, bar=>x'::hstore ?> 'bar';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'foo=>f, bar=>x'::hstore ?> 0;
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'foo=>f, bar=>x'::hstore ?> 1;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '[foo, f, bar, x]'::hstore ?> 'foo';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '[foo, f, bar, x]'::hstore ?> 'bar';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '[foo, f, bar, x]'::hstore ?> 0;
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '[foo, f, bar, x]'::hstore ?> 1;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT 'foo=>{x, f}'::hstore #?> '{foo, 0}';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT 'foo=>{x, f}'::hstore #?> '{foo, 1}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT hstore_typeof('a=>b') AS hash;
+ hash 
+------
+ hash
+(1 row)
+
+SELECT hstore_typeof('{a=>b}') AS hash;
+ hash 
+------
+ hash
+(1 row)
+
+SELECT hstore_typeof('{a, b}') AS array;
+ array 
+-------
+ array
+(1 row)
+
+SELECT hstore_typeof('{{a=>b}}') AS array;
+ array 
+-------
+ array
+(1 row)
+
+SELECT hstore_typeof('[a, b]') AS array;
+ array 
+-------
+ array
+(1 row)
+
+SELECT hstore_typeof('') AS "NULL";
+ NULL 
+------
+ 
+(1 row)
+
+SELECT hstore_typeof('NULL') AS "null";
+ null 
+------
+ null
+(1 row)
+
+SELECT hstore_typeof('1.0') AS numeric;
+ numeric 
+---------
+ numeric
+(1 row)
+
+SELECT hstore_typeof('t') AS bool;
+ bool 
+------
+ bool
+(1 row)
+
+SELECT hstore_typeof('f') AS bool;
+ bool 
+------
+ bool
+(1 row)
+
+SELECT hstore('xxx', 't'::bool);
+  hstore  
+----------
+ "xxx"=>t
+(1 row)
+
+SELECT hstore('xxx', 'f'::bool);
+  hstore  
+----------
+ "xxx"=>f
+(1 row)
+
+SELECT hstore('xxx', 3.14);
+   hstore    
+-------------
+ "xxx"=>3.14
+(1 row)
+
+SELECT hstore('xxx', 3.14::numeric);
+   hstore    
+-------------
+ "xxx"=>3.14
+(1 row)
+
+SELECT hstore('xxx', '3.14'::numeric);
+   hstore    
+-------------
+ "xxx"=>3.14
+(1 row)
+
+SELECT hstore(NULL);
+ hstore 
+--------
+ 
+(1 row)
+
+SELECT hstore('NULL');
+ hstore 
+--------
+ NULL
+(1 row)
+
+SELECT hstore('t'::bool) AS "true", hstore('f'::bool) AS "false";
+ true | false 
+------+-------
+ t    | f
+(1 row)
+
+SELECT hstore(3.14), hstore(3.14::numeric), hstore('3.14'::numeric);
+ hstore | hstore | hstore 
+--------+--------+--------
+ 3.14   | 3.14   | 3.14
+(1 row)
+
+SELECT hstore('xxx', 'foo=>t, bar=>3.14, zzz=>xxx'::hstore);
+                    hstore                    
+----------------------------------------------
+ "xxx"=>{"bar"=>3.14, "foo"=>t, "zzz"=>"xxx"}
+(1 row)
+
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::int2[]);
+     array_to_hstore     
+-------------------------
+ [[1, 1, 4], [23, 3, 5]]
+(1 row)
+
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::int4[]);
+     array_to_hstore     
+-------------------------
+ [[1, 1, 4], [23, 3, 5]]
+(1 row)
+
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::int8[]);
+     array_to_hstore     
+-------------------------
+ [[1, 1, 4], [23, 3, 5]]
+(1 row)
+
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::float4[]);
+     array_to_hstore     
+-------------------------
+ [[1, 1, 4], [23, 3, 5]]
+(1 row)
+
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::float8[]);
+     array_to_hstore     
+-------------------------
+ [[1, 1, 4], [23, 3, 5]]
+(1 row)
+
+SELECT array_to_hstore('{{1,1,f},{f,t,NULL}}'::bool[]);
+      array_to_hstore      
+---------------------------
+ [[t, t, f], [f, t, NULL]]
+(1 row)
+
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::text[]);
+           array_to_hstore           
+-------------------------------------
+ [["1", "1", "4"], ["23", "3", "5"]]
+(1 row)
+
+SELECT array_to_hstore('{{1,1,4},{23,3,5}}'::varchar[]);
+           array_to_hstore           
+-------------------------------------
+ [["1", "1", "4"], ["23", "3", "5"]]
+(1 row)
+
+SELECT array_to_hstore('{{{1,11},{1,1},{4,41}},{{23,231},{3,31},{5,51}}}'::int4[]);
+                       array_to_hstore                       
+-------------------------------------------------------------
+ [[[1, 11], [1, 1], [4, 41], [23, 231]], [[3, 31], [5, 51]]]
+(1 row)
+
+SELECT hstore('array', array_to_hstore('{{{1,11},{1,1},{4,41}},{{23,231},{3,31},{5,51}}}'::int4[]));
+                                hstore                                
+----------------------------------------------------------------------
+ "array"=>[[[1, 11], [1, 1], [4, 41], [23, 231]], [[3, 31], [5, 51]]]
+(1 row)
+
+SELECT 'a=>"00012333", b=>"12233", c=>00012333, d=>12233'::hstore;
+                        hstore                         
+-------------------------------------------------------
+ "a"=>"00012333", "b"=>"12233", "c"=>12333, "d"=>12233
+(1 row)
+
+SELECT hstore_to_json('a=>"00012333", b=>"12233", c=>00012333, d=>12233'::hstore);
+                     hstore_to_json                      
+---------------------------------------------------------
+ {"a": "00012333", "b": "12233", "c": 12333, "d": 12233}
+(1 row)
+
+SELECT hstore_to_json_loose('a=>"00012333", b=>"12233", c=>00012333, d=>12233'::hstore);
+                 hstore_to_json_loose                  
+-------------------------------------------------------
+ {"a": "00012333", "b": 12233, "c": 12333, "d": 12233}
+(1 row)
+

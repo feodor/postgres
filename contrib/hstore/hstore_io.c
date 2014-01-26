@@ -7,12 +7,16 @@
 
 #include "access/htup_details.h"
 #include "catalog/pg_type.h"
+#include "catalog/pg_cast.h"
 #include "funcapi.h"
-#include "lib/stringinfo.h"
 #include "libpq/pqformat.h"
+#include "parser/parse_coerce.h"
 #include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/json.h"
+#include "utils/guc.h"
 #include "utils/lsyscache.h"
+#include "utils/syscache.h"
 #include "utils/typcache.h"
 
 #include "hstore.h"
@@ -22,332 +26,27 @@ PG_MODULE_MAGIC;
 /* old names for C functions */
 HSTORE_POLLUTE(hstore_from_text, tconvert);
 
+/* GUC variables */
+static bool	pretty_print_var = false;
+#define SET_PRETTY_PRINT_VAR(x)		((pretty_print_var) ? \
+									 ((x) | PrettyPrint) : (x))
 
-typedef struct
-{
-	char	   *begin;
-	char	   *ptr;
-	char	   *cur;
-	char	   *word;
-	int			wordlen;
+static void recvHStore(StringInfo buf, HStoreValue *v, uint32 level,
+					   uint32 header);
+static Oid searchCast(Oid src, Oid dst, CoercionMethod *method);
 
-	Pairs	   *pairs;
-	int			pcur;
-	int			plen;
-} HSParser;
+typedef enum HStoreOutputKind {
+	JsonOutput = 0x01,
+	LooseOutput = 0x02,
+	ArrayCurlyBraces = 0x04,
+	RootHashDecorated = 0x08,
+	PrettyPrint = 0x10
+} HStoreOutputKind;
 
-#define RESIZEPRSBUF \
-do { \
-		if ( state->cur - state->word + 1 >= state->wordlen ) \
-		{ \
-				int32 clen = state->cur - state->word; \
-				state->wordlen *= 2; \
-				state->word = (char*)repalloc( (void*)state->word, state->wordlen ); \
-				state->cur = state->word + clen; \
-		} \
-} while (0)
+static char* HStoreToCString(StringInfo out, char *in,
+							 int len /* just estimation */, HStoreOutputKind kind);
 
-
-#define GV_WAITVAL 0
-#define GV_INVAL 1
-#define GV_INESCVAL 2
-#define GV_WAITESCIN 3
-#define GV_WAITESCESCIN 4
-
-static bool
-get_val(HSParser *state, bool ignoreeq, bool *escaped)
-{
-	int			st = GV_WAITVAL;
-
-	state->wordlen = 32;
-	state->cur = state->word = palloc(state->wordlen);
-	*escaped = false;
-
-	while (1)
-	{
-		if (st == GV_WAITVAL)
-		{
-			if (*(state->ptr) == '"')
-			{
-				*escaped = true;
-				st = GV_INESCVAL;
-			}
-			else if (*(state->ptr) == '\0')
-			{
-				return false;
-			}
-			else if (*(state->ptr) == '=' && !ignoreeq)
-			{
-				elog(ERROR, "Syntax error near '%c' at position %d", *(state->ptr), (int32) (state->ptr - state->begin));
-			}
-			else if (*(state->ptr) == '\\')
-			{
-				st = GV_WAITESCIN;
-			}
-			else if (!isspace((unsigned char) *(state->ptr)))
-			{
-				*(state->cur) = *(state->ptr);
-				state->cur++;
-				st = GV_INVAL;
-			}
-		}
-		else if (st == GV_INVAL)
-		{
-			if (*(state->ptr) == '\\')
-			{
-				st = GV_WAITESCIN;
-			}
-			else if (*(state->ptr) == '=' && !ignoreeq)
-			{
-				state->ptr--;
-				return true;
-			}
-			else if (*(state->ptr) == ',' && ignoreeq)
-			{
-				state->ptr--;
-				return true;
-			}
-			else if (isspace((unsigned char) *(state->ptr)))
-			{
-				return true;
-			}
-			else if (*(state->ptr) == '\0')
-			{
-				state->ptr--;
-				return true;
-			}
-			else
-			{
-				RESIZEPRSBUF;
-				*(state->cur) = *(state->ptr);
-				state->cur++;
-			}
-		}
-		else if (st == GV_INESCVAL)
-		{
-			if (*(state->ptr) == '\\')
-			{
-				st = GV_WAITESCESCIN;
-			}
-			else if (*(state->ptr) == '"')
-			{
-				return true;
-			}
-			else if (*(state->ptr) == '\0')
-			{
-				elog(ERROR, "Unexpected end of string");
-			}
-			else
-			{
-				RESIZEPRSBUF;
-				*(state->cur) = *(state->ptr);
-				state->cur++;
-			}
-		}
-		else if (st == GV_WAITESCIN)
-		{
-			if (*(state->ptr) == '\0')
-				elog(ERROR, "Unexpected end of string");
-			RESIZEPRSBUF;
-			*(state->cur) = *(state->ptr);
-			state->cur++;
-			st = GV_INVAL;
-		}
-		else if (st == GV_WAITESCESCIN)
-		{
-			if (*(state->ptr) == '\0')
-				elog(ERROR, "Unexpected end of string");
-			RESIZEPRSBUF;
-			*(state->cur) = *(state->ptr);
-			state->cur++;
-			st = GV_INESCVAL;
-		}
-		else
-			elog(ERROR, "Unknown state %d at position line %d in file '%s'", st, __LINE__, __FILE__);
-
-		state->ptr++;
-	}
-}
-
-#define WKEY	0
-#define WVAL	1
-#define WEQ 2
-#define WGT 3
-#define WDEL	4
-
-
-static void
-parse_hstore(HSParser *state)
-{
-	int			st = WKEY;
-	bool		escaped = false;
-
-	state->plen = 16;
-	state->pairs = (Pairs *) palloc(sizeof(Pairs) * state->plen);
-	state->pcur = 0;
-	state->ptr = state->begin;
-	state->word = NULL;
-
-	while (1)
-	{
-		if (st == WKEY)
-		{
-			if (!get_val(state, false, &escaped))
-				return;
-			if (state->pcur >= state->plen)
-			{
-				state->plen *= 2;
-				state->pairs = (Pairs *) repalloc(state->pairs, sizeof(Pairs) * state->plen);
-			}
-			state->pairs[state->pcur].key = state->word;
-			state->pairs[state->pcur].keylen = hstoreCheckKeyLen(state->cur - state->word);
-			state->pairs[state->pcur].val = NULL;
-			state->word = NULL;
-			st = WEQ;
-		}
-		else if (st == WEQ)
-		{
-			if (*(state->ptr) == '=')
-			{
-				st = WGT;
-			}
-			else if (*(state->ptr) == '\0')
-			{
-				elog(ERROR, "Unexpected end of string");
-			}
-			else if (!isspace((unsigned char) *(state->ptr)))
-			{
-				elog(ERROR, "Syntax error near '%c' at position %d", *(state->ptr), (int32) (state->ptr - state->begin));
-			}
-		}
-		else if (st == WGT)
-		{
-			if (*(state->ptr) == '>')
-			{
-				st = WVAL;
-			}
-			else if (*(state->ptr) == '\0')
-			{
-				elog(ERROR, "Unexpected end of string");
-			}
-			else
-			{
-				elog(ERROR, "Syntax error near '%c' at position %d", *(state->ptr), (int32) (state->ptr - state->begin));
-			}
-		}
-		else if (st == WVAL)
-		{
-			if (!get_val(state, true, &escaped))
-				elog(ERROR, "Unexpected end of string");
-			state->pairs[state->pcur].val = state->word;
-			state->pairs[state->pcur].vallen = hstoreCheckValLen(state->cur - state->word);
-			state->pairs[state->pcur].isnull = false;
-			state->pairs[state->pcur].needfree = true;
-			if (state->cur - state->word == 4 && !escaped)
-			{
-				state->word[4] = '\0';
-				if (0 == pg_strcasecmp(state->word, "null"))
-					state->pairs[state->pcur].isnull = true;
-			}
-			state->word = NULL;
-			state->pcur++;
-			st = WDEL;
-		}
-		else if (st == WDEL)
-		{
-			if (*(state->ptr) == ',')
-			{
-				st = WKEY;
-			}
-			else if (*(state->ptr) == '\0')
-			{
-				return;
-			}
-			else if (!isspace((unsigned char) *(state->ptr)))
-			{
-				elog(ERROR, "Syntax error near '%c' at position %d", *(state->ptr), (int32) (state->ptr - state->begin));
-			}
-		}
-		else
-			elog(ERROR, "Unknown state %d at line %d in file '%s'", st, __LINE__, __FILE__);
-
-		state->ptr++;
-	}
-}
-
-static int
-comparePairs(const void *a, const void *b)
-{
-	const Pairs *pa = a;
-	const Pairs *pb = b;
-
-	if (pa->keylen == pb->keylen)
-	{
-		int			res = memcmp(pa->key, pb->key, pa->keylen);
-
-		if (res)
-			return res;
-
-		/* guarantee that needfree will be later */
-		if (pb->needfree == pa->needfree)
-			return 0;
-		else if (pa->needfree)
-			return 1;
-		else
-			return -1;
-	}
-	return (pa->keylen > pb->keylen) ? 1 : -1;
-}
-
-/*
- * this code still respects pairs.needfree, even though in general
- * it should never be called in a context where anything needs freeing.
- * we keep it because (a) those calls are in a rare code path anyway,
- * and (b) who knows whether they might be needed by some caller.
- */
-int
-hstoreUniquePairs(Pairs *a, int32 l, int32 *buflen)
-{
-	Pairs	   *ptr,
-			   *res;
-
-	*buflen = 0;
-	if (l < 2)
-	{
-		if (l == 1)
-			*buflen = a->keylen + ((a->isnull) ? 0 : a->vallen);
-		return l;
-	}
-
-	qsort((void *) a, l, sizeof(Pairs), comparePairs);
-	ptr = a + 1;
-	res = a;
-	while (ptr - a < l)
-	{
-		if (ptr->keylen == res->keylen &&
-			memcmp(ptr->key, res->key, res->keylen) == 0)
-		{
-			if (ptr->needfree)
-			{
-				pfree(ptr->key);
-				pfree(ptr->val);
-			}
-		}
-		else
-		{
-			*buflen += res->keylen + ((res->isnull) ? 0 : res->vallen);
-			res++;
-			memcpy(res, ptr, sizeof(Pairs));
-		}
-
-		ptr++;
-	}
-
-	*buflen += res->keylen + ((res->isnull) ? 0 : res->vallen);
-	return res + 1 - a;
-}
-
-size_t
+static size_t
 hstoreCheckKeyLen(size_t len)
 {
 	if (len > HSTORE_MAX_KEY_LEN)
@@ -357,7 +56,7 @@ hstoreCheckKeyLen(size_t len)
 	return len;
 }
 
-size_t
+static size_t
 hstoreCheckValLen(size_t len)
 {
 	if (len > HSTORE_MAX_VALUE_LEN)
@@ -368,161 +67,413 @@ hstoreCheckValLen(size_t len)
 }
 
 
-HStore *
-hstorePairs(Pairs *pairs, int32 pcount, int32 buflen)
+static HStore*
+hstoreDump(HStoreValue *p)
 {
-	HStore	   *out;
-	HEntry	   *entry;
-	char	   *ptr;
-	char	   *buf;
-	int32		len;
-	int32		i;
+	uint32			buflen;
+	HStore	 	   *out;
 
-	len = CALCDATASIZE(pcount, buflen);
-	out = palloc(len);
-	SET_VARSIZE(out, len);
-	HS_SETCOUNT(out, pcount);
+	if (p == NULL)
+	{
+		buflen = 0;
+		out = palloc(VARHDRSZ);
+	}
+	else
+	{
+		buflen = VARHDRSZ + p->size;
+		out = palloc(buflen);
+		SET_VARSIZE(out, buflen);
 
-	if (pcount == 0)
-		return out;
-
-	entry = ARRPTR(out);
-	buf = ptr = STRPTR(out);
-
-	for (i = 0; i < pcount; i++)
-		HS_ADDITEM(entry, buf, ptr, pairs[i]);
-
-	HS_FINALIZE(out, pcount, buf, ptr);
+		buflen = compressHStore(p, VARDATA(out));
+	}
+	SET_VARSIZE(out, buflen + VARHDRSZ);
 
 	return out;
 }
-
 
 PG_FUNCTION_INFO_V1(hstore_in);
 Datum		hstore_in(PG_FUNCTION_ARGS);
 Datum
 hstore_in(PG_FUNCTION_ARGS)
 {
-	HSParser	state;
-	int32		buflen;
-	HStore	   *out;
-
-	state.begin = PG_GETARG_CSTRING(0);
-
-	parse_hstore(&state);
-
-	state.pcur = hstoreUniquePairs(state.pairs, state.pcur, &buflen);
-
-	out = hstorePairs(state.pairs, state.pcur, buflen);
-
-	PG_RETURN_POINTER(out);
+	PG_RETURN_POINTER(hstoreDump(parseHStore(PG_GETARG_CSTRING(0), -1, false)));
 }
 
+static void
+recvHStoreValue(StringInfo buf, HStoreValue *v, uint32 level, int c)
+{
+	uint32  hentry = c & HENTRY_TYPEMASK;
+
+	if (c == -1 /* compatibility */ || hentry == HENTRY_ISNULL)
+	{
+		v->type = hsvNull;
+		v->size = sizeof(HEntry);
+	}
+	else if (hentry == HENTRY_ISHASH || hentry == HENTRY_ISARRAY ||
+			 hentry == HENTRY_ISCALAR)
+	{
+		recvHStore(buf, v, level + 1, (uint32)c);
+	}
+	else if (hentry == HENTRY_ISFALSE || hentry == HENTRY_ISTRUE)
+	{
+		v->type = hsvBool;
+		v->size = sizeof(HEntry);
+		v->boolean = (hentry == HENTRY_ISFALSE) ? false : true;
+	}
+	else if (hentry == HENTRY_ISNUMERIC)
+	{
+		v->type = hsvNumeric;
+		v->numeric = DatumGetNumeric(DirectFunctionCall3(numeric_recv,
+														 PointerGetDatum(buf),
+														 Int32GetDatum(0),
+														 Int32GetDatum(-1)));
+		v->size = sizeof(HEntry) * 2 + VARSIZE_ANY(v->numeric);
+	}
+	else if (hentry == HENTRY_ISSTRING)
+	{
+		v->type = hsvString;
+		v->string.val = pq_getmsgtext(buf, c, &c);
+		v->string.len = hstoreCheckKeyLen(c);
+		v->size = sizeof(HEntry) + v->string.len;
+	}
+	else
+	{
+		elog(ERROR, "bogus input");
+	}
+}
+
+static void
+recvHStore(StringInfo buf, HStoreValue *v, uint32 level, uint32 header)
+{
+	uint32	hentry;
+	uint32	i;
+
+	hentry = header & HENTRY_TYPEMASK;
+
+	if (level == 0 && hentry == 0)
+		hentry = HENTRY_ISHASH; /* old version */
+
+	v->size = 3 * sizeof(HEntry);
+	if (hentry == HENTRY_ISHASH)
+	{
+		v->type = hsvHash;
+		v->hash.npairs = header & HS_COUNT_MASK;
+		if (v->hash.npairs > 0)
+		{
+			v->hash.pairs = palloc(sizeof(*v->hash.pairs) * v->hash.npairs);
+
+			for(i=0; i<v->hash.npairs; i++)
+			{
+				recvHStoreValue(buf, &v->hash.pairs[i].key, level,
+								pq_getmsgint(buf, 4));
+				if (v->hash.pairs[i].key.type != hsvString)
+					elog(ERROR, "hstore's key could be only a string");
+
+				recvHStoreValue(buf, &v->hash.pairs[i].value, level,
+								pq_getmsgint(buf, 4));
+
+				v->size += v->hash.pairs[i].key.size +
+							v->hash.pairs[i].value.size;
+			}
+
+			uniqueHStoreValue(v);
+		}
+	}
+	else if (hentry == HENTRY_ISARRAY || hentry == HENTRY_ISCALAR)
+	{
+		v->type = hsvArray;
+		v->array.nelems = header & HS_COUNT_MASK;
+		v->array.scalar = (hentry == HENTRY_ISCALAR) ? true : false;
+
+		if (v->array.scalar && v->array.nelems != 1)
+			elog(ERROR, "bogus input");
+
+		if (v->array.nelems > 0)
+		{
+			v->array.elems = palloc(sizeof(*v->array.elems) * v->array.nelems);
+
+			for(i=0; i<v->array.nelems; i++)
+			{
+				recvHStoreValue(buf, v->array.elems + i, level,
+								pq_getmsgint(buf, 4));
+				v->size += v->array.elems[i].size;
+			}
+		}
+	}
+	else
+	{
+			elog(ERROR, "bogus input");
+	}
+}
 
 PG_FUNCTION_INFO_V1(hstore_recv);
 Datum		hstore_recv(PG_FUNCTION_ARGS);
 Datum
 hstore_recv(PG_FUNCTION_ARGS)
 {
-	int32		buflen;
-	HStore	   *out;
-	Pairs	   *pairs;
-	int32		i;
-	int32		pcount;
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
+	HStoreValue	v;
 
-	pcount = pq_getmsgint(buf, 4);
+	recvHStore(buf, &v, 0, pq_getmsgint(buf, 4));
 
-	if (pcount == 0)
-	{
-		out = hstorePairs(NULL, 0, 0);
-		PG_RETURN_POINTER(out);
-	}
-
-	pairs = palloc(pcount * sizeof(Pairs));
-
-	for (i = 0; i < pcount; ++i)
-	{
-		int			rawlen = pq_getmsgint(buf, 4);
-		int			len;
-
-		if (rawlen < 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-					 errmsg("null value not allowed for hstore key")));
-
-		pairs[i].key = pq_getmsgtext(buf, rawlen, &len);
-		pairs[i].keylen = hstoreCheckKeyLen(len);
-		pairs[i].needfree = true;
-
-		rawlen = pq_getmsgint(buf, 4);
-		if (rawlen < 0)
-		{
-			pairs[i].val = NULL;
-			pairs[i].vallen = 0;
-			pairs[i].isnull = true;
-		}
-		else
-		{
-			pairs[i].val = pq_getmsgtext(buf, rawlen, &len);
-			pairs[i].vallen = hstoreCheckValLen(len);
-			pairs[i].isnull = false;
-		}
-	}
-
-	pcount = hstoreUniquePairs(pairs, pcount, &buflen);
-
-	out = hstorePairs(pairs, pcount, buflen);
-
-	PG_RETURN_POINTER(out);
+	PG_RETURN_POINTER(hstoreDump(&v));
 }
-
 
 PG_FUNCTION_INFO_V1(hstore_from_text);
 Datum		hstore_from_text(PG_FUNCTION_ARGS);
 Datum
 hstore_from_text(PG_FUNCTION_ARGS)
 {
-	text	   *key;
-	text	   *val = NULL;
-	Pairs		p;
-	HStore	   *out;
+	text	   	*key;
+	HStoreValue	v;
+	HStorePair	pair;
 
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
 
-	p.needfree = false;
 	key = PG_GETARG_TEXT_PP(0);
-	p.key = VARDATA_ANY(key);
-	p.keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.type = hsvString;
+	pair.key.string.val = VARDATA_ANY(key);
+	pair.key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.size = pair.key.string.len + sizeof(HEntry);
 
 	if (PG_ARGISNULL(1))
 	{
-		p.vallen = 0;
-		p.isnull = true;
+		pair.value.type = hsvNull;
+		pair.value.size = sizeof(HEntry);
 	}
 	else
 	{
+		text	   	*val = NULL;
+
 		val = PG_GETARG_TEXT_PP(1);
-		p.val = VARDATA_ANY(val);
-		p.vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(val));
-		p.isnull = false;
+		pair.value.type = hsvString;
+		pair.value.string.val = VARDATA_ANY(val);
+		pair.value.string.len = hstoreCheckValLen(VARSIZE_ANY_EXHDR(val));
+		pair.value.size = pair.value.string.len + sizeof(HEntry);
 	}
 
-	out = hstorePairs(&p, 1, p.keylen + p.vallen);
+	v.type = hsvHash;
+	v.size = sizeof(HEntry) + pair.key.size + pair.value.size;
+	v.hash.npairs = 1;
+	v.hash.pairs = &pair;
 
-	PG_RETURN_POINTER(out);
+	PG_RETURN_POINTER(hstoreDump(&v));
 }
 
+PG_FUNCTION_INFO_V1(hstore_from_bool);
+Datum		hstore_from_bool(PG_FUNCTION_ARGS);
+Datum
+hstore_from_bool(PG_FUNCTION_ARGS)
+{
+	text	   	*key;
+	HStoreValue	v;
+	HStorePair	pair;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	key = PG_GETARG_TEXT_PP(0);
+	pair.key.type = hsvString;
+	pair.key.string.val = VARDATA_ANY(key);
+	pair.key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.size = pair.key.string.len + sizeof(HEntry);
+
+	if (PG_ARGISNULL(1))
+	{
+		pair.value.type = hsvNull;
+		pair.value.size = sizeof(HEntry);
+	}
+	else
+	{
+		pair.value.type = hsvBool;
+		pair.value.boolean = PG_GETARG_BOOL(1);
+		pair.value.size = sizeof(HEntry);
+	}
+
+	v.type = hsvHash;
+	v.size = sizeof(HEntry) + pair.key.size + pair.value.size;
+	v.hash.npairs = 1;
+	v.hash.pairs = &pair;
+
+	PG_RETURN_POINTER(hstoreDump(&v));
+}
+
+PG_FUNCTION_INFO_V1(hstore_from_numeric);
+Datum		hstore_from_numeric(PG_FUNCTION_ARGS);
+Datum
+hstore_from_numeric(PG_FUNCTION_ARGS)
+{
+	text	   	*key;
+	HStoreValue	v;
+	HStorePair	pair;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	key = PG_GETARG_TEXT_PP(0);
+	pair.key.type = hsvString;
+	pair.key.string.val = VARDATA_ANY(key);
+	pair.key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.size = pair.key.string.len + sizeof(HEntry);
+
+	if (PG_ARGISNULL(1))
+	{
+		pair.value.type = hsvNull;
+		pair.value.size = sizeof(HEntry);
+	}
+	else
+	{
+		pair.value.type = hsvNumeric;
+		pair.value.numeric = PG_GETARG_NUMERIC(1);
+		pair.value.size = sizeof(HEntry) + sizeof(HEntry) +
+							VARSIZE_ANY(pair.value.numeric);
+	}
+
+	v.type = hsvHash;
+	v.size = sizeof(HEntry) + pair.key.size + pair.value.size;
+	v.hash.npairs = 1;
+	v.hash.pairs = &pair;
+
+	PG_RETURN_POINTER(hstoreDump(&v));
+}
+
+PG_FUNCTION_INFO_V1(hstore_from_th);
+Datum		hstore_from_th(PG_FUNCTION_ARGS);
+Datum
+hstore_from_th(PG_FUNCTION_ARGS)
+{
+	text	   	*key;
+	HStoreValue	v;
+	HStorePair	pair;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	key = PG_GETARG_TEXT_PP(0);
+	pair.key.type = hsvString;
+	pair.key.string.val = VARDATA_ANY(key);
+	pair.key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key));
+	pair.key.size = pair.key.string.len + sizeof(HEntry);
+
+	if (PG_ARGISNULL(1))
+	{
+		pair.value.type = hsvNull;
+		pair.value.size = sizeof(HEntry);
+	}
+	else
+	{
+		HStore	   	*val = NULL;
+
+		val = PG_GETARG_HS(1);
+		pair.value.type = hsvBinary;
+		pair.value.binary.data = VARDATA_ANY(val);
+		pair.value.binary.len = VARSIZE_ANY_EXHDR(val);
+		pair.value.size = pair.value.binary.len + sizeof(HEntry) * 2;
+	}
+
+	v.type = hsvHash;
+	v.size = sizeof(HEntry) + pair.key.size + pair.value.size;
+	v.hash.npairs = 1;
+	v.hash.pairs = &pair;
+
+	PG_RETURN_POINTER(hstoreDump(&v));
+}
 
 PG_FUNCTION_INFO_V1(hstore_from_arrays);
+PG_FUNCTION_INFO_V1(hstore_scalar_from_text);
+Datum		hstore_scalar_from_text(PG_FUNCTION_ARGS);
+Datum
+hstore_scalar_from_text(PG_FUNCTION_ARGS)
+{
+	HStoreValue	a, v;
+
+	if (PG_ARGISNULL(0))
+	{
+		v.type = hsvNull;
+		v.size = sizeof(HEntry);
+	}
+	else
+	{
+		text	*scalar;
+
+		scalar = PG_GETARG_TEXT_PP(0);
+		v.type = hsvString;
+		v.string.val = VARDATA_ANY(scalar);
+		v.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(scalar));
+		v.size = v.string.len + sizeof(HEntry);
+	}
+
+	a.type = hsvArray;
+	a.size = sizeof(HEntry) + v.size;
+	a.array.nelems = 1;
+	a.array.elems = &v;
+	a.array.scalar = true;
+
+	PG_RETURN_POINTER(hstoreDump(&a));
+}
+
+PG_FUNCTION_INFO_V1(hstore_scalar_from_bool);
+Datum		hstore_scalar_from_bool(PG_FUNCTION_ARGS);
+Datum
+hstore_scalar_from_bool(PG_FUNCTION_ARGS)
+{
+	HStoreValue	a, v;
+
+	if (PG_ARGISNULL(0))
+	{
+		v.type = hsvNull;
+		v.size = sizeof(HEntry);
+	}
+	else
+	{
+		v.type = hsvBool;
+		v.boolean = PG_GETARG_BOOL(0);
+		v.size = sizeof(HEntry);
+	}
+
+	a.type = hsvArray;
+	a.size = sizeof(HEntry) + v.size;
+	a.array.nelems = 1;
+	a.array.elems = &v;
+	a.array.scalar = true;
+
+	PG_RETURN_POINTER(hstoreDump(&a));
+}
+
+PG_FUNCTION_INFO_V1(hstore_scalar_from_numeric);
+Datum		hstore_scalar_from_numeric(PG_FUNCTION_ARGS);
+Datum
+hstore_scalar_from_numeric(PG_FUNCTION_ARGS)
+{
+	HStoreValue	a, v;
+
+	if (PG_ARGISNULL(0))
+	{
+		v.type = hsvNull;
+		v.size = sizeof(HEntry);
+	}
+	else
+	{
+		v.type = hsvNumeric;
+		v.numeric = PG_GETARG_NUMERIC(0);
+		v.size = VARSIZE_ANY(v.numeric) + 2*sizeof(HEntry);
+	}
+
+	a.type = hsvArray;
+	a.size = sizeof(HEntry) + v.size;
+	a.array.nelems = 1;
+	a.array.elems = &v;
+	a.array.scalar = true;
+
+	PG_RETURN_POINTER(hstoreDump(&a));
+}
+
 Datum		hstore_from_arrays(PG_FUNCTION_ARGS);
 Datum
 hstore_from_arrays(PG_FUNCTION_ARGS)
 {
-	int32		buflen;
-	HStore	   *out;
-	Pairs	   *pairs;
+	HStoreValue v;
 	Datum	   *key_datums;
 	bool	   *key_nulls;
 	int			key_count;
@@ -589,7 +540,10 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 		Assert(key_count == value_count);
 	}
 
-	pairs = palloc(key_count * sizeof(Pairs));
+	v.type = hsvHash;
+	v.size = 2 * sizeof(HEntry);
+	v.hash.pairs = palloc(key_count * sizeof(*v.hash.pairs));
+	v.hash.npairs = key_count;
 
 	for (i = 0; i < key_count; ++i)
 	{
@@ -598,31 +552,34 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 					 errmsg("null value not allowed for hstore key")));
 
+		v.hash.pairs[i].key.type = hsvString;
+		v.hash.pairs[i].key.string.val = VARDATA_ANY(key_datums[i]);
+		v.hash.pairs[i].key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key_datums[i]));
+		v.hash.pairs[i].key.size = sizeof(HEntry) +
+									v.hash.pairs[i].key.string.len;
+
 		if (!value_nulls || value_nulls[i])
 		{
-			pairs[i].key = VARDATA_ANY(key_datums[i]);
-			pairs[i].val = NULL;
-			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key_datums[i]));
-			pairs[i].vallen = 4;
-			pairs[i].isnull = true;
-			pairs[i].needfree = false;
+			v.hash.pairs[i].value.type = hsvNull;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
 		{
-			pairs[i].key = VARDATA_ANY(key_datums[i]);
-			pairs[i].val = VARDATA_ANY(value_datums[i]);
-			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(key_datums[i]));
-			pairs[i].vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(value_datums[i]));
-			pairs[i].isnull = false;
-			pairs[i].needfree = false;
+			v.hash.pairs[i].value.type = hsvString;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
+			v.hash.pairs[i].value.string.val = VARDATA_ANY(value_datums[i]);
+			v.hash.pairs[i].value.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(value_datums[i]));
+			v.hash.pairs[i].value.size = sizeof(HEntry) +
+											v.hash.pairs[i].value.string.len;
 		}
+
+		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	key_count = hstoreUniquePairs(pairs, key_count, &buflen);
+	uniqueHStoreValue(&v);
 
-	out = hstorePairs(pairs, key_count, buflen);
 
-	PG_RETURN_POINTER(out);
+	PG_RETURN_POINTER(hstoreDump(&v));
 }
 
 
@@ -634,9 +591,7 @@ hstore_from_array(PG_FUNCTION_ARGS)
 	ArrayType  *in_array = PG_GETARG_ARRAYTYPE_P(0);
 	int			ndims = ARR_NDIM(in_array);
 	int			count;
-	int32		buflen;
-	HStore	   *out;
-	Pairs	   *pairs;
+	HStoreValue	v;
 	Datum	   *in_datums;
 	bool	   *in_nulls;
 	int			in_count;
@@ -647,8 +602,7 @@ hstore_from_array(PG_FUNCTION_ARGS)
 	switch (ndims)
 	{
 		case 0:
-			out = hstorePairs(NULL, 0, 0);
-			PG_RETURN_POINTER(out);
+			PG_RETURN_POINTER(hstoreDump(NULL));
 
 		case 1:
 			if ((ARR_DIMS(in_array)[0]) % 2)
@@ -676,7 +630,10 @@ hstore_from_array(PG_FUNCTION_ARGS)
 
 	count = in_count / 2;
 
-	pairs = palloc(count * sizeof(Pairs));
+	v.type = hsvHash;
+	v.size = 2*sizeof(HEntry);
+	v.hash.npairs = count;
+	v.hash.pairs = palloc(count * sizeof(HStorePair));
 
 	for (i = 0; i < count; ++i)
 	{
@@ -685,31 +642,33 @@ hstore_from_array(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 					 errmsg("null value not allowed for hstore key")));
 
+		v.hash.pairs[i].key.type = hsvString;
+		v.hash.pairs[i].key.string.val = VARDATA_ANY(in_datums[i * 2]);
+		v.hash.pairs[i].key.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
+		v.hash.pairs[i].key.size = sizeof(HEntry) +
+									v.hash.pairs[i].key.string.len;
+
 		if (in_nulls[i * 2 + 1])
 		{
-			pairs[i].key = VARDATA_ANY(in_datums[i * 2]);
-			pairs[i].val = NULL;
-			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
-			pairs[i].vallen = 4;
-			pairs[i].isnull = true;
-			pairs[i].needfree = false;
+			v.hash.pairs[i].value.type = hsvNull;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
 		else
 		{
-			pairs[i].key = VARDATA_ANY(in_datums[i * 2]);
-			pairs[i].val = VARDATA_ANY(in_datums[i * 2 + 1]);
-			pairs[i].keylen = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2]));
-			pairs[i].vallen = hstoreCheckValLen(VARSIZE_ANY_EXHDR(in_datums[i * 2 + 1]));
-			pairs[i].isnull = false;
-			pairs[i].needfree = false;
+			v.hash.pairs[i].value.type = hsvString;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
+			v.hash.pairs[i].value.string.val = VARDATA_ANY(in_datums[i * 2 + 1]);
+			v.hash.pairs[i].value.string.len = hstoreCheckKeyLen(VARSIZE_ANY_EXHDR(in_datums[i * 2 + 1]));
+			v.hash.pairs[i].value.size = sizeof(HEntry) +
+											v.hash.pairs[i].value.string.len;
 		}
+
+		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	count = hstoreUniquePairs(pairs, count, &buflen);
+	uniqueHStoreValue(&v);
 
-	out = hstorePairs(pairs, count, buflen);
-
-	PG_RETURN_POINTER(out);
+	PG_RETURN_POINTER(hstoreDump(&v));
 }
 
 /* most of hstore_from_record is shamelessly swiped from record_out */
@@ -739,19 +698,17 @@ Datum
 hstore_from_record(PG_FUNCTION_ARGS)
 {
 	HeapTupleHeader rec;
-	int32		buflen;
-	HStore	   *out;
-	Pairs	   *pairs;
-	Oid			tupType;
-	int32		tupTypmod;
-	TupleDesc	tupdesc;
-	HeapTupleData tuple;
-	RecordIOData *my_extra;
-	int			ncolumns;
-	int			i,
-				j;
-	Datum	   *values;
-	bool	   *nulls;
+	HStore		   *out;
+	HStoreValue	   v;
+	Oid				tupType;
+	int32			tupTypmod;
+	TupleDesc		tupdesc;
+	HeapTupleData 	tuple;
+	RecordIOData   *my_extra;
+	int				ncolumns;
+	int				i;
+	Datum	   	   *values;
+	bool	   	   *nulls;
 
 	if (PG_ARGISNULL(0))
 	{
@@ -807,7 +764,10 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		my_extra->ncolumns = ncolumns;
 	}
 
-	pairs = palloc(ncolumns * sizeof(Pairs));
+	v.type = hsvHash;
+	v.size = 2*sizeof(HEntry);
+	v.hash.npairs = ncolumns;
+	v.hash.pairs = palloc(ncolumns * sizeof(HStorePair));
 
 	if (rec)
 	{
@@ -829,7 +789,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		nulls = NULL;
 	}
 
-	for (i = 0, j = 0; i < ncolumns; ++i)
+	for (i = 0; i < ncolumns; ++i)
 	{
 		ColumnIOData *column_info = &my_extra->columns[i];
 		Oid			column_type = tupdesc->attrs[i]->atttypid;
@@ -839,46 +799,82 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		if (tupdesc->attrs[i]->attisdropped)
 			continue;
 
-		pairs[j].key = NameStr(tupdesc->attrs[i]->attname);
-		pairs[j].keylen = hstoreCheckKeyLen(strlen(NameStr(tupdesc->attrs[i]->attname)));
+		v.hash.pairs[i].key.type = hsvString;
+		v.hash.pairs[i].key.string.val = NameStr(tupdesc->attrs[i]->attname);
+		v.hash.pairs[i].key.string.len = hstoreCheckKeyLen(strlen(v.hash.pairs[i].key.string.val));
+		v.hash.pairs[i].key.size = sizeof(HEntry) +
+									v.hash.pairs[i].key.string.len;
 
 		if (!nulls || nulls[i])
 		{
-			pairs[j].val = NULL;
-			pairs[j].vallen = 4;
-			pairs[j].isnull = true;
-			pairs[j].needfree = false;
-			++j;
-			continue;
+			v.hash.pairs[i].value.type = hsvNull;
+			v.hash.pairs[i].value.size = sizeof(HEntry);
 		}
-
-		/*
-		 * Convert the column value to text
-		 */
-		if (column_info->column_type != column_type)
+		else
 		{
-			bool		typIsVarlena;
+			/*
+			 * Convert the column value to hstore's values
+			 */
+			if (column_type == BOOLOID)
+			{
+				v.hash.pairs[i].value.type = hsvBool;
+				v.hash.pairs[i].value.boolean = DatumGetBool(values[i]);
+				v.hash.pairs[i].value.size = sizeof(HEntry);
+			}
+			else if (TypeCategory(column_type) == TYPCATEGORY_NUMERIC)
+			{
+				Oid				castOid = InvalidOid;
+				CoercionMethod  method;
 
-			getTypeOutputInfo(column_type,
-							  &column_info->typiofunc,
-							  &typIsVarlena);
-			fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
-						  fcinfo->flinfo->fn_mcxt);
-			column_info->column_type = column_type;
+				v.hash.pairs[i].value.type = hsvNumeric;
+
+				castOid = searchCast(column_type, NUMERICOID, &method);
+				if (castOid == InvalidOid)
+				{
+					if (method != COERCION_METHOD_BINARY)
+						elog(ERROR, "Could not cast numeric category type to numeric '%c'", (char)method);
+
+					v.hash.pairs[i].value.numeric = DatumGetNumeric(values[i]);
+				}
+				else
+				{
+					v.hash.pairs[i].value.numeric = 
+						DatumGetNumeric(OidFunctionCall1(castOid, values[i]));
+
+				}
+				v.hash.pairs[i].value.size = 2*sizeof(HEntry) +
+								VARSIZE_ANY(v.hash.pairs[i].value.numeric);
+			}
+			else
+			{
+				if (column_info->column_type != column_type)
+				{
+					bool		typIsVarlena;
+
+					getTypeOutputInfo(column_type,
+									  &column_info->typiofunc,
+									  &typIsVarlena);
+					fmgr_info_cxt(column_info->typiofunc, &column_info->proc,
+								  fcinfo->flinfo->fn_mcxt);
+					column_info->column_type = column_type;
+				}
+
+				value = OutputFunctionCall(&column_info->proc, values[i]);
+
+				v.hash.pairs[i].value.type = hsvString;
+				v.hash.pairs[i].value.string.val = value;
+				v.hash.pairs[i].value.string.len = hstoreCheckValLen(strlen(value));
+				v.hash.pairs[i].value.size = sizeof(HEntry) +
+										v.hash.pairs[i].value.string.len;
+			}
 		}
 
-		value = OutputFunctionCall(&column_info->proc, values[i]);
-
-		pairs[j].val = value;
-		pairs[j].vallen = hstoreCheckValLen(strlen(value));
-		pairs[j].isnull = false;
-		pairs[j].needfree = false;
-		++j;
+		v.size += v.hash.pairs[i].key.size + v.hash.pairs[i].value.size;
 	}
 
-	ncolumns = hstoreUniquePairs(pairs, j, &buflen);
+	uniqueHStoreValue(&v);
 
-	out = hstorePairs(pairs, ncolumns, buflen);
+	out = hstoreDump(&v);
 
 	ReleaseTupleDesc(tupdesc);
 
@@ -893,8 +889,6 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 {
 	Oid			argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	HStore	   *hs;
-	HEntry	   *entries;
-	char	   *ptr;
 	HeapTupleHeader rec;
 	Oid			tupType;
 	int32		tupTypmod;
@@ -940,8 +934,6 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	}
 
 	hs = PG_GETARG_HS(1);
-	entries = ARRPTR(hs);
-	ptr = STRPTR(hs);
 
 	/*
 	 * if the input hstore is empty, we can only skip the rest if we were
@@ -949,7 +941,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	 * domain nulls.
 	 */
 
-	if (HS_COUNT(hs) == 0 && rec)
+	if (HS_ISEMPTY(hs) && rec)
 		PG_RETURN_POINTER(rec);
 
 	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
@@ -1013,9 +1005,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	{
 		ColumnIOData *column_info = &my_extra->columns[i];
 		Oid			column_type = tupdesc->attrs[i]->atttypid;
-		char	   *value;
-		int			idx;
-		int			vallen;
+		HStoreValue	*v = NULL;
 
 		/* Ignore dropped columns in datatype */
 		if (tupdesc->attrs[i]->attisdropped)
@@ -1024,9 +1014,12 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			continue;
 		}
 
-		idx = hstoreFindKey(hs, 0,
-							NameStr(tupdesc->attrs[i]->attname),
-							strlen(NameStr(tupdesc->attrs[i]->attname)));
+		if (!HS_ISEMPTY(hs))
+		{
+			char *key = NameStr(tupdesc->attrs[i]->attname);
+
+			v = findUncompressedHStoreValue(VARDATA(hs), HS_FLAG_HASH, NULL, key, strlen(key));
+		}
 
 		/*
 		 * we can't just skip here if the key wasn't found since we might have
@@ -1036,7 +1029,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 		 * then every field which we don't populate needs to be run through
 		 * the input function just in case it's a domain type.
 		 */
-		if (idx < 0 && rec)
+		if (v == NULL && rec)
 			continue;
 
 		/*
@@ -1052,7 +1045,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			column_info->column_type = column_type;
 		}
 
-		if (idx < 0 || HS_VALISNULL(entries, idx))
+		if (v == NULL || v->type == hsvNull)
 		{
 			/*
 			 * need InputFunctionCall to happen even for nulls, so that domain
@@ -1065,12 +1058,29 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 		}
 		else
 		{
-			vallen = HS_VALLEN(entries, idx);
-			value = palloc(1 + vallen);
-			memcpy(value, HS_VAL(entries, ptr, idx), vallen);
-			value[vallen] = 0;
+			char *s = NULL;
 
-			values[i] = InputFunctionCall(&column_info->proc, value,
+			if (v->type == hsvString)
+				s = pnstrdup(v->string.val, v->string.len);
+			else if (v->type == hsvBool)
+				s = pnstrdup((v->boolean) ? "t" : "f", 1);
+			else if (v->type == hsvNumeric)
+				s = DatumGetCString(DirectFunctionCall1(numeric_out, 
+														PointerGetDatum(v->numeric)));
+			else if (v->type == hsvBinary && 
+					 (column_type == JSONOID || column_type == JSONBOID))
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
+									SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
+			else if (v->type == hsvBinary && type_is_array(column_type))
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
+									SET_PRETTY_PRINT_VAR(ArrayCurlyBraces));
+			else if (v->type == hsvBinary)
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
+									SET_PRETTY_PRINT_VAR(0));
+			else
+				elog(PANIC, "Wrong hstore");
+
+			values[i] = InputFunctionCall(&column_info->proc, s,
 										  column_info->typioparam,
 										  tupdesc->attrs[i]->atttypmod);
 			nulls[i] = false;
@@ -1084,19 +1094,371 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(rettuple));
 }
 
+bool
+stringIsNumber(char *string, int len, bool jsonNumber) {
+	enum {
+		SIN_FIRSTINT,
+		SIN_ZEROINT,
+		SIN_INT,
+		SIN_SCALE,
+		SIN_MSIGN,
+		SIN_MANTISSA
+	} sinState;
+	char	*c;
+	bool	r;
 
-static char *
-cpw(char *dst, char *src, int len)
+	if (*string == '-' || *string == '+')
+	{
+		string++;
+		len--;
+	}
+
+	c = string;
+	r = true;
+	sinState = SIN_FIRSTINT;
+
+	while(r && c - string < len)
+	{
+		switch(sinState)
+		{
+			case SIN_FIRSTINT:
+				if (*c == '0' && jsonNumber)
+					sinState = SIN_ZEROINT;
+				else if (*c == '.')
+					sinState = SIN_SCALE;
+				else if (isdigit(*c))
+					sinState = SIN_INT;
+				else
+					r = false;
+				break;
+			case SIN_ZEROINT:
+				if (*c == '.')
+					sinState = SIN_SCALE;
+				else
+					r = false;
+				break;
+			case SIN_INT:
+				if (*c == '.')
+					sinState = SIN_SCALE;
+				else if (*c == 'e' || *c == 'E')
+					sinState = SIN_MSIGN;
+				else if (!isdigit(*c))
+					r = false;
+				break;
+			case SIN_SCALE:
+				if (*c == 'e' || *c == 'E')
+					sinState = SIN_MSIGN;
+				else if (!isdigit(*c))
+					r = false;
+				break;
+			case SIN_MSIGN:
+				if (*c == '-' || *c == '+' || isdigit(*c))
+					sinState = SIN_MANTISSA;
+				else
+					r = false;
+				break;
+			case SIN_MANTISSA:
+				if (!isdigit(*c))
+					r = false;
+				break;
+			default:
+				abort();
+		}
+
+		c++;
+	}
+
+	if (sinState == SIN_MSIGN)
+		r = false;
+
+	return r;
+}
+
+static void
+printIndent(StringInfo out, bool isRootHash, HStoreOutputKind kind, int level)
 {
-	char	   *ptr = src;
+	if (kind & PrettyPrint)
+	{
+		int i;
 
-	while (ptr - src < len)
+		if (isRootHash && (kind & RootHashDecorated) == 0)
+			level--;
+		for(i=0; i<4*level; i++)
+			appendStringInfoCharMacro(out, ' ');
+	}
+}
+
+static void
+printCR(StringInfo out, HStoreOutputKind kind)
+{
+	if (kind & PrettyPrint)
+		appendStringInfoCharMacro(out, '\n');
+}
+
+static void
+escape_hstore(StringInfo out, char *string, uint32 len)
+{
+	char       *ptr = string;
+
+	appendStringInfoCharMacro(out, '"');
+	while (ptr - string < len)
 	{
 		if (*ptr == '"' || *ptr == '\\')
-			*dst++ = '\\';
-		*dst++ = *ptr++;
+			appendStringInfoCharMacro(out, '\\');
+		appendStringInfoCharMacro(out, *ptr);
+		ptr++;
 	}
-	return dst;
+	appendStringInfoCharMacro(out, '"');
+}
+
+static void
+putEscapedString(StringInfo out, HStoreOutputKind kind,
+				 char *string, uint32 len)
+{
+	if (kind & LooseOutput)
+	{
+		if (len == 1 && *string == 't')
+			appendStringInfoString(out, (kind & JsonOutput) ? "true" : "t" );
+		else if (len == 1 && *string == 'f')
+			appendStringInfoString(out, (kind & JsonOutput) ? "false" : "f");
+		else if (len > 0 && stringIsNumber(string, len, true))
+			appendBinaryStringInfo(out, string, len);
+		else if (kind & JsonOutput)
+			escape_json(out, pnstrdup(string, len));
+		else
+			escape_hstore(out, string, len);
+	}
+	else
+	{
+		if (kind & JsonOutput)
+			escape_json(out, pnstrdup(string, len));
+		else
+			escape_hstore(out, string, len);
+	}
+}
+
+static void
+putEscapedValue(StringInfo out, HStoreOutputKind kind, HStoreValue *v)
+{
+	switch(v->type)
+	{
+		case hsvNull:
+			appendBinaryStringInfo(out,
+								   (kind & JsonOutput) ? "null" : "NULL", 4);
+			break;
+		case hsvString:
+			putEscapedString(out, kind, v->string.val, v->string.len);
+			break;
+		case hsvBool:
+			if ((kind & JsonOutput) == 0)
+				appendBinaryStringInfo(out, (v->boolean) ? "t" : "f", 1);
+			else if (v->boolean)
+				appendBinaryStringInfo(out, "true", 4);
+			else
+				appendBinaryStringInfo(out, "false", 5);
+			break;
+		case hsvNumeric:
+			appendStringInfoString(out, DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
+			break;
+		default:
+			elog(PANIC, "Unknown type");
+	}
+}
+
+static bool
+needBrackets(int level, bool isArray, HStoreOutputKind kind, bool isScalar)
+{
+	bool res;
+
+	if (isArray && isScalar)
+		res = false;
+	else if (level == 0)
+		res = (isArray || (kind & RootHashDecorated)) ? true : false;
+	else
+		res = true;
+
+	return res;
+}
+
+static bool
+isArrayBrackets(HStoreOutputKind kind)
+{
+	return ((kind & ArrayCurlyBraces) == 0) ? true : false;
+}
+		
+static char*
+HStoreToCString(StringInfo out, char *in, int len /* just estimation */,
+		  		HStoreOutputKind kind)
+{
+	bool			first = true;
+	HStoreIterator	*it;
+	int				type;
+	HStoreValue		v;
+	int				level = 0;
+	bool			isRootHash = false;
+
+	if (out == NULL)
+		out = makeStringInfo();
+
+	if (in == NULL)
+	{
+		appendStringInfoString(out, "");
+		return out->data;
+	}
+
+	enlargeStringInfo(out, (len >= 0) ? len : 64);
+
+	it = HStoreIteratorInit(in);
+
+	while((type = HStoreIteratorGet(&it, &v, false)) != 0)
+	{
+reout:
+		switch(type)
+		{
+			case WHS_BEGIN_ARRAY:
+				if (first == false)
+				{
+					appendBinaryStringInfo(out, ", ", 2);
+					printCR(out, kind);
+				}
+				first = true;
+
+				if (needBrackets(level, true, kind, v.array.scalar))
+				{
+					printIndent(out, isRootHash, kind, level);
+					appendStringInfoChar(out, isArrayBrackets(kind) ? '[' : '{');
+					printCR(out, kind);
+				}
+				level++;
+				break;
+			case WHS_BEGIN_HASH:
+				if (first == false)
+				{
+					appendBinaryStringInfo(out, ", ", 2);
+					printCR(out, kind);
+				}
+				first = true;
+
+				if (level == 0)
+					isRootHash = true;
+
+				if (needBrackets(level, false, kind, false))
+				{
+					printIndent(out, isRootHash, kind, level);
+					appendStringInfoCharMacro(out, '{');
+					printCR(out, kind);
+				}
+
+				level++;
+				break;
+			case WHS_KEY:
+				if (first == false)
+				{
+					appendBinaryStringInfo(out, ", ", 2);
+					printCR(out, kind);
+				}
+				first = true;
+
+				printIndent(out, isRootHash, kind, level);
+				/* key should not be loose */
+				putEscapedValue(out, kind & ~LooseOutput, &v);
+				appendBinaryStringInfo(out,
+									   (kind & JsonOutput) ? ": " : "=>", 2);
+
+				type = HStoreIteratorGet(&it, &v, false);
+				if (type == WHS_VALUE)
+				{
+					first = false;
+					putEscapedValue(out, kind, &v);
+				}
+				else
+				{
+					Assert(type == WHS_BEGIN_HASH || type == WHS_BEGIN_ARRAY);
+					printCR(out, kind);
+					goto reout;
+				}
+				break;
+			case WHS_ELEM:
+				if (first == false)
+				{
+					appendBinaryStringInfo(out, ", ", 2);
+					printCR(out, kind);
+				}
+				else
+				{
+					first = false;
+				}
+
+				printIndent(out, isRootHash, kind, level);
+				putEscapedValue(out, kind, &v);
+				break;
+			case WHS_END_ARRAY:
+				level--;
+				if (needBrackets(level, true, kind, v.array.scalar))
+				{
+					printCR(out, kind);
+					printIndent(out, isRootHash, kind, level);
+					appendStringInfoChar(out, isArrayBrackets(kind) ? ']' : '}');
+				}
+				first = false;
+				break;
+			case WHS_END_HASH:
+				level--;
+				if (needBrackets(level, false, kind, false))
+				{
+					printCR(out, kind);
+					printIndent(out, isRootHash, kind, level);
+					appendStringInfoCharMacro(out, '}');
+				}
+				first = false;
+				break;
+			default:
+				elog(PANIC, "Wrong flags");
+		}
+	}
+
+	Assert(level == 0);
+
+	return out->data;
+}
+
+text*
+HStoreValueToText(HStoreValue *v)
+{
+	text		*out;
+
+	if (v == NULL || v->type == hsvNull)
+	{
+		out = NULL;
+	}
+	else if (v->type == hsvString)
+	{
+		out = cstring_to_text_with_len(v->string.val, v->string.len);
+	}
+	else if (v->type == hsvBool)
+	{
+		out = cstring_to_text_with_len((v->boolean) ? "t" : "f", 1);
+	}
+	else if (v->type == hsvNumeric)
+	{
+		out = cstring_to_text(DatumGetCString(
+				DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))
+		));
+	}
+	else
+	{
+		StringInfo	str;
+
+		str = makeStringInfo();
+		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+
+		HStoreToCString(str, v->binary.data, v->binary.len, SET_PRETTY_PRINT_VAR(0));
+
+		out = (text*)str->data;
+		SET_VARSIZE(out, str->len);
+	}
+
+	return out;
 }
 
 PG_FUNCTION_INFO_V1(hstore_out);
@@ -1104,105 +1466,85 @@ Datum		hstore_out(PG_FUNCTION_ARGS);
 Datum
 hstore_out(PG_FUNCTION_ARGS)
 {
-	HStore	   *in = PG_GETARG_HS(0);
-	int			buflen,
-				i;
-	int			count = HS_COUNT(in);
-	char	   *out,
-			   *ptr;
-	char	   *base = STRPTR(in);
-	HEntry	   *entries = ARRPTR(in);
+	HStore	*hs = PG_GETARG_HS(0);
+	char 	*out;
 
-	if (count == 0)
-		PG_RETURN_CSTRING(pstrdup(""));
-
-	buflen = 0;
-
-	/*
-	 * this loop overestimates due to pessimistic assumptions about escaping,
-	 * so very large hstore values can't be output. this could be fixed, but
-	 * many other data types probably have the same issue. This replaced code
-	 * that used the original varlena size for calculations, which was wrong
-	 * in some subtle ways.
-	 */
-
-	for (i = 0; i < count; i++)
-	{
-		/* include "" and => and comma-space */
-		buflen += 6 + 2 * HS_KEYLEN(entries, i);
-		/* include "" only if nonnull */
-		buflen += 2 + (HS_VALISNULL(entries, i)
-					   ? 2
-					   : 2 * HS_VALLEN(entries, i));
-	}
-
-	out = ptr = palloc(buflen);
-
-	for (i = 0; i < count; i++)
-	{
-		*ptr++ = '"';
-		ptr = cpw(ptr, HS_KEY(entries, base, i), HS_KEYLEN(entries, i));
-		*ptr++ = '"';
-		*ptr++ = '=';
-		*ptr++ = '>';
-		if (HS_VALISNULL(entries, i))
-		{
-			*ptr++ = 'N';
-			*ptr++ = 'U';
-			*ptr++ = 'L';
-			*ptr++ = 'L';
-		}
-		else
-		{
-			*ptr++ = '"';
-			ptr = cpw(ptr, HS_VAL(entries, base, i), HS_VALLEN(entries, i));
-			*ptr++ = '"';
-		}
-
-		if (i + 1 != count)
-		{
-			*ptr++ = ',';
-			*ptr++ = ' ';
-		}
-	}
-	*ptr = '\0';
+	out = HStoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), 
+						  VARSIZE(hs), SET_PRETTY_PRINT_VAR(0));
 
 	PG_RETURN_CSTRING(out);
 }
-
 
 PG_FUNCTION_INFO_V1(hstore_send);
 Datum		hstore_send(PG_FUNCTION_ARGS);
 Datum
 hstore_send(PG_FUNCTION_ARGS)
 {
-	HStore	   *in = PG_GETARG_HS(0);
-	int			i;
-	int			count = HS_COUNT(in);
-	char	   *base = STRPTR(in);
-	HEntry	   *entries = ARRPTR(in);
-	StringInfoData buf;
+	HStore	   		*in = PG_GETARG_HS(0);
+	StringInfoData	buf;
 
 	pq_begintypsend(&buf);
 
-	pq_sendint(&buf, count, 4);
-
-	for (i = 0; i < count; i++)
+	if (HS_ISEMPTY(in))
 	{
-		int32		keylen = HS_KEYLEN(entries, i);
+		pq_sendint(&buf, 0, 4);
+	}
+	else
+	{
+		HStoreIterator	*it;
+		int				type;
+		HStoreValue		v;
+		uint32			flag;
+		bytea			*nbuf;
 
-		pq_sendint(&buf, keylen, 4);
-		pq_sendtext(&buf, HS_KEY(entries, base, i), keylen);
-		if (HS_VALISNULL(entries, i))
-		{
-			pq_sendint(&buf, -1, 4);
-		}
-		else
-		{
-			int32		vallen = HS_VALLEN(entries, i);
+		enlargeStringInfo(&buf, VARSIZE_ANY(in) /* just estimation */);
 
-			pq_sendint(&buf, vallen, 4);
-			pq_sendtext(&buf, HS_VAL(entries, base, i), vallen);
+		it = HStoreIteratorInit(VARDATA_ANY(in));
+
+		while((type = HStoreIteratorGet(&it, &v, false)) != 0)
+		{
+			switch(type)
+			{
+				case WHS_BEGIN_ARRAY:
+					flag = (v.array.scalar) ? HENTRY_ISCALAR : HENTRY_ISARRAY;
+					pq_sendint(&buf, v.array.nelems | flag, 4);
+					break;
+				case WHS_BEGIN_HASH:
+					pq_sendint(&buf, v.hash.npairs | HENTRY_ISHASH, 4);
+					break;
+				case WHS_KEY:
+					pq_sendint(&buf, v.string.len | HENTRY_ISSTRING, 4);
+					pq_sendtext(&buf, v.string.val, v.string.len);
+					break;
+				case WHS_ELEM:
+				case WHS_VALUE:
+					switch(v.type)
+					{
+						case hsvNull:
+							pq_sendint(&buf, HENTRY_ISNULL, 4);
+							break;
+						case hsvString:
+							pq_sendint(&buf, v.string.len | HENTRY_ISSTRING, 4);
+							pq_sendtext(&buf, v.string.val, v.string.len);
+							break;
+						case hsvBool:
+							pq_sendint(&buf, (v.boolean) ? HENTRY_ISTRUE : HENTRY_ISFALSE, 4);
+							break;
+						case hsvNumeric:
+							nbuf = DatumGetByteaP(DirectFunctionCall1(numeric_send, NumericGetDatum(v.numeric)));
+							pq_sendint(&buf, VARSIZE_ANY(nbuf) | HENTRY_ISNUMERIC, 4);
+							pq_sendbytes(&buf, (char*)nbuf, VARSIZE_ANY(nbuf));
+							break;
+						default:
+							elog(PANIC, "Wrong type: %u", v.type);
+					}
+					break;
+				case WHS_END_ARRAY:
+				case WHS_END_HASH:
+					break;
+				default:
+					elog(PANIC, "Wrong flags");
+			}
 		}
 	}
 
@@ -1224,124 +1566,28 @@ Datum
 hstore_to_json_loose(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	int			buflen,
-				i;
-	int			count = HS_COUNT(in);
-	char	   *out,
-			   *ptr;
-	char	   *base = STRPTR(in);
-	HEntry	   *entries = ARRPTR(in);
-	bool		is_number;
-	StringInfo	src,
-				dst;
+	text	   *out;
 
-	if (count == 0)
-		PG_RETURN_TEXT_P(cstring_to_text_with_len("{}",2));
-
-	buflen = 3;
-
-	/*
-	 * Formula adjusted slightly from the logic in hstore_out. We have to take
-	 * account of out treatment of booleans to be a bit more pessimistic about
-	 * the length of values.
-	 */
-
-	for (i = 0; i < count; i++)
+	if (HS_ISEMPTY(in))
 	{
-		/* include "" and colon-space and comma-space */
-		buflen += 6 + 2 * HS_KEYLEN(entries, i);
-		/* include "" only if nonnull */
-		buflen += 3 + (HS_VALISNULL(entries, i)
-					   ? 1
-					   : 2 * HS_VALLEN(entries, i));
+		out = cstring_to_text_with_len("{}",2);
+	}
+	else
+	{
+		StringInfo	str;
+
+		str = makeStringInfo();
+		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+
+		HStoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in), 
+						SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated | LooseOutput));
+
+		out = (text*)str->data;
+
+		SET_VARSIZE(out, str->len);
 	}
 
-	out = ptr = palloc(buflen);
-
-	src = makeStringInfo();
-	dst = makeStringInfo();
-
-	*ptr++ = '{';
-
-	for (i = 0; i < count; i++)
-	{
-		resetStringInfo(src);
-		resetStringInfo(dst);
-		appendBinaryStringInfo(src, HS_KEY(entries, base, i), HS_KEYLEN(entries, i));
-		escape_json(dst, src->data);
-		strncpy(ptr, dst->data, dst->len);
-		ptr += dst->len;
-		*ptr++ = ':';
-		*ptr++ = ' ';
-		resetStringInfo(dst);
-		if (HS_VALISNULL(entries, i))
-			appendStringInfoString(dst, "null");
-		/* guess that values of 't' or 'f' are booleans */
-		else if (HS_VALLEN(entries, i) == 1 && *(HS_VAL(entries, base, i)) == 't')
-			appendStringInfoString(dst, "true");
-		else if (HS_VALLEN(entries, i) == 1 && *(HS_VAL(entries, base, i)) == 'f')
-			appendStringInfoString(dst, "false");
-		else
-		{
-			is_number = false;
-			resetStringInfo(src);
-			appendBinaryStringInfo(src, HS_VAL(entries, base, i), HS_VALLEN(entries, i));
-
-			/*
-			 * don't treat something with a leading zero followed by another
-			 * digit as numeric - could be a zip code or similar
-			 */
-			if (src->len > 0 &&
-				!(src->data[0] == '0' &&
-				  isdigit((unsigned char) src->data[1])) &&
-				strspn(src->data, "+-0123456789Ee.") == src->len)
-			{
-				/*
-				 * might be a number. See if we can input it as a numeric
-				 * value. Ignore any actual parsed value.
-				 */
-				char	   *endptr = "junk";
-				long		lval;
-
-				lval = strtol(src->data, &endptr, 10);
-				(void) lval;
-				if (*endptr == '\0')
-				{
-					/*
-					 * strol man page says this means the whole string is
-					 * valid
-					 */
-					is_number = true;
-				}
-				else
-				{
-					/* not an int - try a double */
-					double		dval;
-
-					dval = strtod(src->data, &endptr);
-					(void) dval;
-					if (*endptr == '\0')
-						is_number = true;
-				}
-			}
-			if (is_number)
-				appendBinaryStringInfo(dst, src->data, src->len);
-			else
-				escape_json(dst, src->data);
-		}
-		strncpy(ptr, dst->data, dst->len);
-		ptr += dst->len;
-
-		if (i + 1 != count)
-		{
-			*ptr++ = ',';
-			*ptr++ = ' ';
-		}
-	}
-	*ptr++ = '}';
-	*ptr = '\0';
-
-	PG_RETURN_TEXT_P(cstring_to_text(out));
+	PG_RETURN_TEXT_P(out);
 }
 
 PG_FUNCTION_INFO_V1(hstore_to_json);
@@ -1350,74 +1596,330 @@ Datum
 hstore_to_json(PG_FUNCTION_ARGS)
 {
 	HStore	   *in = PG_GETARG_HS(0);
-	int			buflen,
-				i;
-	int			count = HS_COUNT(in);
-	char	   *out,
-			   *ptr;
-	char	   *base = STRPTR(in);
-	HEntry	   *entries = ARRPTR(in);
-	StringInfo	src,
-				dst;
+	text	   *out;
 
-	if (count == 0)
-		PG_RETURN_TEXT_P(cstring_to_text_with_len("{}",2));
-
-	buflen = 3;
-
-	/*
-	 * Formula adjusted slightly from the logic in hstore_out. We have to take
-	 * account of out treatment of booleans to be a bit more pessimistic about
-	 * the length of values.
-	 */
-
-	for (i = 0; i < count; i++)
+	if (HS_ISEMPTY(in))
 	{
-		/* include "" and colon-space and comma-space */
-		buflen += 6 + 2 * HS_KEYLEN(entries, i);
-		/* include "" only if nonnull */
-		buflen += 3 + (HS_VALISNULL(entries, i)
-					   ? 1
-					   : 2 * HS_VALLEN(entries, i));
+		out = cstring_to_text_with_len("{}",2);
+	}
+	else
+	{
+		StringInfo	str;
+
+		str = makeStringInfo();
+		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+
+		HStoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), 
+						VARSIZE_ANY(in), 
+						SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
+
+		out = (text*)str->data;
+
+		SET_VARSIZE(out, str->len);
 	}
 
-	out = ptr = palloc(buflen);
+	PG_RETURN_TEXT_P(out);
+}
 
-	src = makeStringInfo();
-	dst = makeStringInfo();
+PG_FUNCTION_INFO_V1(json_to_hstore);
+Datum		json_to_hstore(PG_FUNCTION_ARGS);
+Datum
+json_to_hstore(PG_FUNCTION_ARGS)
+{
+	text	*json = PG_GETARG_TEXT_PP(0);
 
-	*ptr++ = '{';
+	PG_RETURN_POINTER(hstoreDump(parseHStore(VARDATA_ANY(json),
+											 VARSIZE_ANY_EXHDR(json), true)));
+}
 
-	for (i = 0; i < count; i++)
+static Oid
+searchCast(Oid src, Oid dst, CoercionMethod *method)
+{
+	Oid				funcOid = InvalidOid,
+					baseSrc;
+	HeapTuple   	tuple;
+
+	if (src == dst)
 	{
-		resetStringInfo(src);
-		resetStringInfo(dst);
-		appendBinaryStringInfo(src, HS_KEY(entries, base, i), HS_KEYLEN(entries, i));
-		escape_json(dst, src->data);
-		strncpy(ptr, dst->data, dst->len);
-		ptr += dst->len;
-		*ptr++ = ':';
-		*ptr++ = ' ';
-		resetStringInfo(dst);
-		if (HS_VALISNULL(entries, i))
-			appendStringInfoString(dst, "null");
+		*method = COERCION_METHOD_BINARY;
+		return InvalidOid;
+	}
+
+	tuple = SearchSysCache2(CASTSOURCETARGET,
+							ObjectIdGetDatum(src),
+							ObjectIdGetDatum(dst));
+
+	*method = 0;
+
+	if (HeapTupleIsValid(tuple))
+	{
+		Form_pg_cast	castForm = (Form_pg_cast) GETSTRUCT(tuple);
+
+		if (castForm->castmethod == COERCION_METHOD_FUNCTION)
+			funcOid = castForm->castfunc;
+
+		*method = castForm->castmethod;
+
+		ReleaseSysCache(tuple);
+	}
+	else if ((baseSrc = getBaseType(src)) != src && OidIsValid(baseSrc))
+	{	
+		/* domain type */
+		funcOid = searchCast(baseSrc, dst, method);
+	}
+
+	return funcOid;
+}
+
+PG_FUNCTION_INFO_V1(array_to_hstore);
+Datum		array_to_hstore(PG_FUNCTION_ARGS);
+Datum
+array_to_hstore(PG_FUNCTION_ARGS)
+{
+	ArrayType		*array = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayIterator	iterator;
+	int				i = 0;
+	Datum			datum;
+	bool			isnull;
+	int				ncounters = ARR_NDIM(array),
+					*counters = palloc0(sizeof(*counters) * ncounters),
+					*dims = ARR_DIMS(array);
+	ToHStoreState	*state = NULL;
+	HStoreValue		value, *result;
+	Oid				castOid = InvalidOid;
+	int				valueType = hsvString;
+	FmgrInfo		castInfo;
+	CoercionMethod	method;
+
+	if (ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)) == 0)
+		PG_RETURN_POINTER(hstoreDump(NULL));
+
+	switch(ARR_ELEMTYPE(array))
+	{
+		case BOOLOID:
+			valueType = hsvBool;
+			break;
+		case NUMERICOID:
+			valueType = hsvNumeric;
+			break;
+		case TEXTOID:
+			valueType = hsvString;
+			break;
+		default:
+			if (TypeCategory(ARR_ELEMTYPE(array)) == TYPCATEGORY_NUMERIC)
+			{
+				castOid = searchCast(ARR_ELEMTYPE(array), NUMERICOID, &method);
+
+				if (castOid == InvalidOid && method != COERCION_METHOD_BINARY)
+					elog(ERROR, "Could not cast array's element type to numeric");
+
+				valueType = hsvNumeric;
+				break;
+			}
+			else
+			{
+				castOid = searchCast(ARR_ELEMTYPE(array), TEXTOID, &method);
+
+				if (castOid == InvalidOid && method != COERCION_METHOD_BINARY)
+					elog(ERROR, "Could not cast array's element type to text");
+
+				valueType = hsvString;
+				break;
+			}
+	}
+
+	if (castOid != InvalidOid)
+		fmgr_info(castOid, &castInfo);
+
+	iterator = array_create_iterator(array, 0);
+
+	value.type = hsvArray;
+	value.array.scalar = false;
+	for(i=0; i<ncounters; i++)
+	{
+		value.array.nelems = dims[i];
+		result = pushHStoreValue(&state, WHS_BEGIN_ARRAY, &value);
+	}
+
+	while(array_iterate(iterator, &datum, &isnull))
+	{
+		i = ncounters - 1;
+
+		if (counters[i] >= dims[i])
+		{
+			while(i>=0 && counters[i] >= dims[i])
+			{
+				counters[i] = 0;
+				result = pushHStoreValue(&state, WHS_END_ARRAY, NULL);
+				i--;
+			}
+
+			Assert(i>=0);
+
+			counters[i]++;
+
+			value.type = hsvArray;
+			value.array.scalar = false;
+			for(i = i + 1; i<ncounters; i++)
+			{
+				counters[i] = 1;
+				value.array.nelems = dims[i];
+				result = pushHStoreValue(&state, WHS_BEGIN_ARRAY, &value);
+			}
+		}
 		else
 		{
-			resetStringInfo(src);
-			appendBinaryStringInfo(src, HS_VAL(entries, base, i), HS_VALLEN(entries, i));
-			escape_json(dst, src->data);
+			counters[i]++;
 		}
-		strncpy(ptr, dst->data, dst->len);
-		ptr += dst->len;
 
-		if (i + 1 != count)
+		if (isnull)
 		{
-			*ptr++ = ',';
-			*ptr++ = ' ';
+			value.type = hsvNull;
+			value.size = sizeof(HEntry);
 		}
-	}
-	*ptr++ = '}';
-	*ptr = '\0';
+		else
+		{
+			value.type = valueType;
+			switch(valueType)
+			{
+				case hsvBool:
+					value.boolean = DatumGetBool(datum);
+					value.size = sizeof(HEntry);
+					break;
+				case hsvString:
+					if (castOid != InvalidOid)
+						datum = FunctionCall1(&castInfo, datum);
+					value.string.val = VARDATA_ANY(datum);
+					value.string.len = VARSIZE_ANY_EXHDR(datum);
+					value.size = sizeof(HEntry) + value.string.len;
+					break;
+				case hsvNumeric:
+					if (castOid != InvalidOid)
+						datum = FunctionCall1(&castInfo, datum);
+					value.numeric = DatumGetNumeric(datum);
+					value.size = sizeof(HEntry)*2 + VARSIZE_ANY(value.numeric);
+					break;
+				default:
+					elog(ERROR, "Impossible state: %d", valueType);
+			}
+		}
 
-	PG_RETURN_TEXT_P(cstring_to_text(out));
+		result = pushHStoreValue(&state, WHS_ELEM, &value);
+	}
+
+	for(i=0; i<ncounters; i++)
+		result = pushHStoreValue(&state, WHS_END_ARRAY, NULL);
+
+	PG_RETURN_POINTER(hstoreDump(result));
 }
+
+PG_FUNCTION_INFO_V1(hstore_print);
+Datum		hstore_print(PG_FUNCTION_ARGS);
+Datum
+hstore_print(PG_FUNCTION_ARGS)
+{
+	HStore		*hs = PG_GETARG_HS(0);
+	int 		flags = 0;
+	text 		*out;
+	StringInfo	str;
+
+	if (PG_GETARG_BOOL(1))
+		flags |= PrettyPrint;
+	if (PG_GETARG_BOOL(2))
+		flags |= ArrayCurlyBraces;
+	if (PG_GETARG_BOOL(3))
+		flags |= RootHashDecorated;
+	if (PG_GETARG_BOOL(4))
+		flags |= JsonOutput;
+	if (PG_GETARG_BOOL(5))
+		flags |= LooseOutput;
+
+	str = makeStringInfo();
+	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
+
+	HStoreToCString(str, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), 
+					VARSIZE(hs), flags);
+
+	out = (text*)str->data;
+	SET_VARSIZE(out, str->len);
+
+	PG_RETURN_TEXT_P(out);
+}
+
+PG_FUNCTION_INFO_V1(hstore2jsonb);
+Datum		hstore2jsonb(PG_FUNCTION_ARGS);
+Datum
+hstore2jsonb(PG_FUNCTION_ARGS)
+{
+	HStore	*hs = PG_GETARG_HS(0);
+	Jsonb	*jb = palloc(VARSIZE_ANY(hs));
+
+	memcpy(jb, hs, VARSIZE_ANY(hs));
+
+	if (VARSIZE_ANY_EXHDR(jb) >= sizeof(uint32))
+	{
+		uint32 *header = (uint32*)VARDATA_ANY(jb);
+
+		*header &= ~JB_FLAG_UNUSED;
+	}
+
+	PG_RETURN_JSONB(jb);
+}
+
+PG_FUNCTION_INFO_V1(jsonb2hstore);
+Datum		jsonb2hstore(PG_FUNCTION_ARGS);
+Datum
+jsonb2hstore(PG_FUNCTION_ARGS)
+{
+	Jsonb	*jb = PG_GETARG_JSONB(0);
+	HStore	*hs = palloc(VARSIZE_ANY(jb));
+
+	memcpy(hs, jb, VARSIZE_ANY(jb));
+
+	if (VARSIZE_ANY_EXHDR(hs) >= sizeof(uint32))
+	{
+		uint32	*header = (uint32*)VARDATA_ANY(hs);
+
+		*header |= HS_FLAG_NEWVERSION;
+	}
+
+	PG_RETURN_POINTER(hs);
+}
+
+void _PG_init(void);
+void
+_PG_init(void)
+{
+	DefineCustomBoolVariable(
+		"hstore.pretty_print",
+		"Enable pretty print",
+		"Enable pretty print of hstore type",
+		&pretty_print_var,
+		pretty_print_var,
+		PGC_USERSET,
+		GUC_NOT_IN_SAMPLE,
+		NULL,
+		NULL,
+		NULL
+	);
+
+	EmitWarningsOnPlaceholders("hstore");
+}
+
+uint32
+compressHStore(HStoreValue *v, char *buffer)
+{
+	uint32	l = compressJsonb(v, buffer);
+
+	if (l > sizeof(uint32))
+	{
+		uint32	*header = (uint32*)buffer;
+
+		*header |= HS_FLAG_NEWVERSION;
+	}
+
+	return l;
+}
+
+
+

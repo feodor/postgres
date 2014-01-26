@@ -796,3 +796,11 @@ CREATE OR REPLACE FUNCTION
 CREATE OR REPLACE FUNCTION
   json_populate_recordset(base anyelement, from_json json, use_json_as_text boolean DEFAULT false)
   RETURNS SETOF anyelement LANGUAGE internal STABLE ROWS 100  AS 'json_populate_recordset';
+
+CREATE OR REPLACE FUNCTION
+  jsonb_populate_record(base anyelement, from_json jsonb, use_json_as_text boolean DEFAULT false)
+  RETURNS anyelement LANGUAGE internal STABLE AS 'jsonb_populate_record';
+
+CREATE OR REPLACE FUNCTION
+  jsonb_populate_recordset(base anyelement, from_json jsonb, use_json_as_text boolean DEFAULT false)
+  RETURNS SETOF anyelement LANGUAGE internal STABLE ROWS 100  AS 'jsonb_populate_recordset';
