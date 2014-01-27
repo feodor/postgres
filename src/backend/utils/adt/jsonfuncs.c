@@ -313,7 +313,7 @@ json_object_keys(PG_FUNCTION_ARGS)
 
 	if (SRF_IS_FIRSTCALL())
 	{
-		text	   *json PG_GETARG_TEXT_P(0);
+		text	   *json = PG_GETARG_TEXT_P(0);
 		JsonLexContext *lex = makeJsonLexContext(json, true);
 		JsonSemAction *sem;
 
