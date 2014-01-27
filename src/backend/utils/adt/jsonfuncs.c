@@ -247,9 +247,13 @@ jsonb_object_keys(PG_FUNCTION_ARGS)
 		int			r = 0;
 
 		if (JB_ROOT_IS_SCALAR(jb))
-			elog(ERROR, "Cannot call jsonb_object_keys on a scalar");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("cannot call jsonb_object_keys on a scalar")));
 		else if (JB_ROOT_IS_ARRAY(jb))
-			elog(ERROR, "Cannot call jsonb_object_keys on an array");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("cannot call jsonb_object_keys on an array")));
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
@@ -449,9 +453,13 @@ jsonb_object_field(PG_FUNCTION_ARGS)
 	bool		skipNested = false;
 
 	if (JB_ROOT_IS_SCALAR(jb))
-		elog(ERROR, "Cannot call jsonb_object_field on a scalar");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call jsonb_object_field on a scalar")));
 	else if (JB_ROOT_IS_ARRAY(jb))
-		elog(ERROR, "Cannot call jsonb_object_field on an array");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call jsonb_object_field on an array")));
 
 	Assert(JB_ROOT_IS_OBJECT(jb));
 
@@ -506,9 +514,13 @@ jsonb_object_field_text(PG_FUNCTION_ARGS)
 	bool		skipNested = false;
 
 	if (JB_ROOT_IS_SCALAR(jb))
-		elog(ERROR, "Cannot call jsonb_object_field on a scalar");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call jsonb_object_field_text on a scalar")));
 	else if (JB_ROOT_IS_ARRAY(jb))
-		elog(ERROR, "Cannot call jsonb_object_field on an array");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call jsonb_object_field_text on an array")));
 
 	Assert(JB_ROOT_IS_OBJECT(jb));
 
@@ -585,9 +597,13 @@ jsonb_array_element(PG_FUNCTION_ARGS)
 	int			element_number = 0;
 
 	if (JB_ROOT_IS_SCALAR(jb))
-		elog(ERROR, "Cannot call jsonb_array_element on a scalar");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call jsonb_array_element on a scalar")));
 	else if (JB_ROOT_IS_OBJECT(jb))
-		elog(ERROR, "Cannot call jsonb_array_element on an object");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call jsonb_array_element on an object")));
 
 	Assert(JB_ROOT_IS_ARRAY(jb));
 
@@ -635,9 +651,13 @@ jsonb_array_element_text(PG_FUNCTION_ARGS)
 
 
 	if (JB_ROOT_IS_SCALAR(jb))
-		elog(ERROR, "Cannot call jsonb_array_element_text on a scalar");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call jsonb_array_element_text on a scalar")));
 	else if (JB_ROOT_IS_OBJECT(jb))
-		elog(ERROR, "Cannot call jsonb_array_element_text on an object");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			   errmsg("cannot call jsonb_array_element_text on an object")));
 
 	Assert(JB_ROOT_IS_ARRAY(jb));
 
@@ -1174,7 +1194,9 @@ get_jsonb_path_all(PG_FUNCTION_ARGS, bool as_text)
 		else
 		{
 			if (i == 0)
-				elog(ERROR, "cannot call extract path on a scalar");
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("cannot call extract path from a scalar")));
 			PG_RETURN_NULL();
 		}
 		if (jbvp == NULL)
@@ -1358,8 +1380,10 @@ each_worker_jsonb(PG_FUNCTION_ARGS, bool as_text)
 	int			r = 0;
 
 	if (!JB_ROOT_IS_OBJECT(jb))
-		elog(ERROR, "cannot call %s on a non-object",
-			 as_text ? "jsonb_each_text" : "jsonb_each");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot call jsonb_each%s on a non-object",
+						as_text ? "_text" : "")));
 
 	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
 
@@ -2121,11 +2145,14 @@ json_populate_record(PG_FUNCTION_ARGS)
 					s = DatumGetCString(DirectFunctionCall1(numeric_out,
 											   PointerGetDatum(v->numeric)));
 				else if (!use_json_as_text)
-					elog(ERROR, "can't populate withe nested object");
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("cannot populate with a nested object unless use_json_as_text is true")));
 				else if (v->type == jbvBinary)
 					s = JsonbToCString(NULL, v->binary.data, v->binary.len);
 				else
-					elog(PANIC, "Wrong jsonb");
+					/* not expected to happen */
+					elog(ERROR, "Wrong jsonb");
 			}
 
 			values[i] = InputFunctionCall(&column_info->proc, s,
@@ -2402,11 +2429,14 @@ make_row_from_rec_and_jsonb(Jsonb *element, PopulateRecordsetState *state)
 				s = DatumGetCString(DirectFunctionCall1(numeric_out,
 											   PointerGetDatum(v->numeric)));
 			else if (!state->use_json_as_text)
-				elog(ERROR, "can't populate with nested object");
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("cannot populate with a nested object unless use_json_as_text is true")));
 			else if (v->type == jbvBinary)
 				s = JsonbToCString(NULL, v->binary.data, v->binary.len);
 			else
-				elog(PANIC, "Wrong jsonb");
+				/* not expected to happen */
+				elog(ERROR, "Wrong jsonb");
 
 			values[i] = InputFunctionCall(&column_info->proc, s,
 										  column_info->typioparam,
@@ -2556,7 +2586,9 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 		jb = PG_GETARG_JSONB(1);
 
 		if (JB_ROOT_IS_SCALAR(jb) || !JB_ROOT_IS_ARRAY(jb))
-			elog(ERROR, "cannot call jsonb_populate_recordset on non-array");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			   errmsg("cannot call jsonb_populate_recordset on non-array")));
 
 		it = JsonbIteratorInit(VARDATA_ANY(jb));
 
@@ -2569,7 +2601,9 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 				Jsonb	   *element = JsonbValueToJsonb(&v);
 
 				if (!JB_ROOT_IS_OBJECT(element))
-					elog(ERROR, "jsonb_populate_recordset  array element must be an object");
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("jsonb_populate_recordset argument must be an array of objects")));
 				make_row_from_rec_and_jsonb(element, state);
 			}
 		}

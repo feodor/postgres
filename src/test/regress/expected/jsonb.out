@@ -313,11 +313,11 @@ INSERT INTO test_jsonb VALUES
 SELECT test_json -> 'x'
 FROM test_jsonb
 WHERE json_type = 'scalar';
-ERROR:  Cannot call jsonb_object_field on a scalar
+ERROR:  cannot call jsonb_object_field on a scalar
 SELECT test_json -> 'x'
 FROM test_jsonb
 WHERE json_type = 'array';
-ERROR:  Cannot call jsonb_object_field on an array
+ERROR:  cannot call jsonb_object_field on an array
 SELECT test_json -> 'x'
 FROM test_jsonb
 WHERE json_type = 'object';
@@ -345,7 +345,7 @@ WHERE json_type = 'object';
 SELECT test_json -> 2
 FROM test_jsonb
 WHERE json_type = 'scalar';
-ERROR:  Cannot call jsonb_array_element on a scalar
+ERROR:  cannot call jsonb_array_element on a scalar
 SELECT test_json -> 2
 FROM test_jsonb
 WHERE json_type = 'array';
@@ -357,7 +357,7 @@ WHERE json_type = 'array';
 SELECT test_json -> 2
 FROM test_jsonb
 WHERE json_type = 'object';
-ERROR:  Cannot call jsonb_array_element on an object
+ERROR:  cannot call jsonb_array_element on an object
 SELECT test_json->>2
 FROM test_jsonb
 WHERE json_type = 'array';
@@ -369,11 +369,11 @@ WHERE json_type = 'array';
 SELECT jsonb_object_keys(test_json)
 FROM test_jsonb
 WHERE json_type = 'scalar';
-ERROR:  Cannot call jsonb_object_keys on a scalar
+ERROR:  cannot call jsonb_object_keys on a scalar
 SELECT jsonb_object_keys(test_json)
 FROM test_jsonb
 WHERE json_type = 'array';
-ERROR:  Cannot call jsonb_object_keys on an array
+ERROR:  cannot call jsonb_object_keys on an array
 SELECT jsonb_object_keys(test_json)
 FROM test_jsonb
 WHERE json_type = 'object';
@@ -761,9 +761,9 @@ select * from jsonb_populate_recordset(row('def',99,null)::jbpop,'[{"a":"blurfl"
 (2 rows)
 
 select * from jsonb_populate_recordset(row('def',99,null)::jbpop,'[{"a":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]') q;
-ERROR:  can't populate with nested object
+ERROR:  cannot populate with a nested object unless use_json_as_text is true
 select * from jsonb_populate_recordset(row('def',99,null)::jbpop,'[{"c":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]') q;
-ERROR:  can't populate with nested object
+ERROR:  cannot populate with a nested object unless use_json_as_text is true
 -- handling of unicode surrogate pairs
 select octet_length((jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a')::text)  as correct_in_utf8;
  correct_in_utf8 
