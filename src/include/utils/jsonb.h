@@ -139,13 +139,13 @@ struct JsonbValue {
 		} binary;
 	};
 
-}; 
+};
 
 struct JsonbPair {
 	JsonbValue	key;
 	JsonbValue	value;
-	uint32		order; /* to keep order of pairs with equal key */ 
-}; 
+	uint32		order; /* to keep order of pairs with equal key */
+};
 
 /*
  * jsonb support functios
@@ -159,7 +159,7 @@ struct JsonbPair {
 #define WJB_BEGIN_OBJECT    (0x020)
 #define WJB_END_OBJECT      (0x040)
 
-typedef void (*walk_jsonb_cb)(void* /*arg*/, JsonbValue* /* value */, 
+typedef void (*walk_jsonb_cb)(void* /*arg*/, JsonbValue* /* value */,
 											uint32 /* flags */, uint32 /* level */);
 extern void walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg);
 
@@ -169,9 +169,9 @@ extern int compareJsonbPair(const void *a, const void *b, void *arg);
 extern int compareJsonbBinaryValue(char *a, char *b);
 extern int compareJsonbValue(JsonbValue *a, JsonbValue *b);
 
-extern JsonbValue* findUncompressedJsonbValueByValue(char *buffer, uint32 flags, 
+extern JsonbValue* findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 												uint32 *lowbound, JsonbValue* key);
-extern JsonbValue* findUncompressedJsonbValue(char *buffer, uint32 flags, 
+extern JsonbValue* findUncompressedJsonbValue(char *buffer, uint32 flags,
 												uint32 *lowbound, char *key, uint32 keylen);
 
 extern JsonbValue* getJsonbValue(char *buffer, uint32 flags, int32 i);
@@ -201,7 +201,7 @@ typedef struct JsonbIterator
 	int						i;
 
 	/*
-	 * enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_JSONB 
+	 * enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_JSONB
 	 * with possiblity of decoding. See optimization in JsonbIteratorGet()
 	 */
 	enum {

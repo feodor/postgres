@@ -1485,7 +1485,7 @@ composite_to_json(Datum composite, StringInfo result, bool use_line_feeds)
 			tcategory = TYPCATEGORY_ARRAY;
 		else if (tupdesc->attrs[i]->atttypid == RECORDOID)
 			tcategory = TYPCATEGORY_COMPOSITE;
-		else if (tupdesc->attrs[i]->atttypid == JSONOID || 
+		else if (tupdesc->attrs[i]->atttypid == JSONOID ||
 				 tupdesc->attrs[i]->atttypid == JSONBOID)
 			tcategory = TYPCATEGORY_JSON;
 		else
@@ -1847,4 +1847,3 @@ json_typeof(PG_FUNCTION_ARGS)
 
 	PG_RETURN_TEXT_P(cstring_to_text(type));
 }
-

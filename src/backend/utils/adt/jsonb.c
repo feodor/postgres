@@ -1,7 +1,7 @@
 /*-------------------------------------------------------------------------
  *
  * jsonb.c
- *		I/O for jsonb type 
+ *		I/O for jsonb type
  *
  * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
@@ -37,10 +37,10 @@ typedef struct JsonbInState
 
 
 /*
- * for jsonb we always want the de-escaped value - that's what's in token 
+ * for jsonb we always want the de-escaped value - that's what's in token
  */
 
-static void 
+static void
 jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 {
 	JsonbInState 	*_state = (JsonbInState *) state;
@@ -50,7 +50,7 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 
 	switch (tokentype)
 	{
-			
+
 	case JSON_TOKEN_STRING:
 		v.type = jbvString;
 		v.string.len = token ? checkStringLen(strlen(token)) : 0;
@@ -512,8 +512,8 @@ jsonb_typeof(PG_FUNCTION_ARGS)
 		 Assert(JB_ROOT_IS_SCALAR(in));
 
 		 it = JsonbIteratorInit(VARDATA_ANY(in));
-		 /* 
-		  * a root scalar is stored as an array of one element, 
+		 /*
+		  * a root scalar is stored as an array of one element,
 		  * so we get the array and then its first (and only) member.
 		  */
 		 (void) JsonbIteratorGet(&it, &v, true);
@@ -536,6 +536,6 @@ jsonb_typeof(PG_FUNCTION_ARGS)
 			 elog(ERROR, "Wrong jsonb scalar type: %u", v.type);
 		 }
 	 }
-	 
-	PG_RETURN_TEXT_P(cstring_to_text(result));		 
+
+	PG_RETURN_TEXT_P(cstring_to_text(result));
 }
