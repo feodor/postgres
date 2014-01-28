@@ -10040,13 +10040,22 @@ table2-mapping
      </tgroup>
    </table>
 
+  <note>
+   <para>
+    The operators above can take either <type>json</type> or <type>jsonb</type>
+    values as their left hand operands. In general they work much faster with
+    <type>jsonb</type>.
+   </para>
+  </note>
+
   <para>
-   <xref linkend="functions-json-table"> shows the functions that are available
-   for creating and manipulating JSON (see <xref linkend="datatype-json">) data.
+   <xref linkend="functions-json-creation-table"> shows the functions that are
+   available for creating <type>json</type> values.
+   (see <xref linkend="datatype-json">)
   </para>
 
-  <table id="functions-json-table">
-    <title>JSON Support Functions</title>
+  <table id="functions-json-creation-table">
+    <title>JSON Creation Functions</title>
     <tgroup cols="5">
      <thead>
       <row>
@@ -10107,13 +10116,38 @@ table2-mapping
        <entry><literal>to_json('Fred said "Hi."'::text)</literal></entry>
        <entry><literal>"Fred said \"Hi.\""</literal></entry>
       </row>
+     </tbody>
+    </tgroup>
+   </table>
+
+
+  <para>
+   <xref linkend="functions-json-processing-table"> shows the functions that
+   are available for processing <type>json</type> and <type>jsonb</type> values.
+   (see <xref linkend="datatype-json">)
+  </para>
+
+  <table id="functions-json-processing-table">
+    <title>JSON Processing Functions</title>
+    <tgroup cols="5">
+     <thead>
       <row>
-       <entry>
-         <indexterm>
+       <entry>Function</entry>
+       <entry>Return Type</entry>
+       <entry>Description</entry>
+       <entry>Example</entry>
+       <entry>Example Result</entry>
+      </row>
+     </thead>
+     <tbody>
+      <row>
+       <entry><indexterm>
           <primary>json_array_length</primary>
-         </indexterm>
-         <literal>json_array_length(json)</literal>
-       </entry>
+         </indexterm><indexterm>
+          <primary>jsonb_array_length</primary>
+         </indexterm><para><literal>json_array_length(json)</literal>
+         </para><para><literal>jsonb_array_length(jsonb)</literal>
+       </para></entry>
        <entry><type>int</type></entry>
        <entry>
          Returns the number of elements in the outermost JSON array.
@@ -10122,13 +10156,16 @@ table2-mapping
        <entry><literal>5</literal></entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_each</primary>
-         </indexterm>
-         <literal>json_each(json)</literal>
-       </entry>
-       <entry><type>SETOF key text, value json</type></entry>
+         </indexterm><indexterm>
+          <primary>jsonb_each</primary>
+         </indexterm><para><literal>json_each(json)</literal>
+         </para><para><literal>jsonb_each(jsonb)</literal>
+       </para></entry>
+       <entry><para><literal>SETOF key text, value json</literal>
+         </para><para><literal>SETOF key text, value jsonb</literal>
+       </para></entry>
        <entry>
          Expands the outermost JSON object into a set of key/value pairs.
        </entry>
@@ -10143,12 +10180,13 @@ table2-mapping
        </entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_each_text</primary>
-         </indexterm>
-         <literal>json_each_text(from_json json)</literal>
-       </entry>
+         </indexterm><indexterm>
+          <primary>jsonb_each_text</primary>
+         </indexterm><para><literal>json_each_text(from_json json)</literal>
+         </para><para><literal>jsonb_each_text(from_json jsonb)</literal>
+       </para></entry>
        <entry><type>SETOF key text, value text</type></entry>
        <entry>
          Expands the outermost JSON object into a set of key/value pairs. The
@@ -10165,13 +10203,14 @@ table2-mapping
        </entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_extract_path</primary>
-         </indexterm>
-         <literal>json_extract_path(from_json json, VARIADIC path_elems text[])</literal>
-       </entry>
-       <entry><type>json</type></entry>
+         </indexterm><indexterm>
+          <primary>jsonb_extract_path</primary>
+         </indexterm><para><literal>json_extract_path(from_json json, VARIADIC path_elems text[])</literal></para><para><literal>jsonb_extract_path(from_jsonb jsonb, VARIADIC path_elems text[])</literal>
+       </para></entry>
+       <entry><para><type>json</type></para><para><type>jsonb</type>
+       </para></entry>
        <entry>
          Returns JSON value pointed to by <parameter>path_elems</parameter>.
        </entry>
@@ -10179,12 +10218,12 @@ table2-mapping
        <entry><literal>{"f5":99,"f6":"foo"}</literal></entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_extract_path_text</primary>
-         </indexterm>
-         <literal>json_extract_path_text(from_json json, VARIADIC path_elems text[])</literal>
-       </entry>
+         </indexterm><indexterm>
+          <primary>jsonb_extract_path_text</primary>
+         </indexterm><para><literal>json_extract_path_text(from_json json, VARIADIC path_elems text[])</literal></para><para><literal>json_extract_path_text(from_json json, VARIADIC path_elems text[])</literal>
+       </para></entry>
        <entry><type>text</type></entry>
        <entry>
          Returns JSON value pointed to by <parameter>path_elems</parameter>.
@@ -10193,12 +10232,13 @@ table2-mapping
        <entry><literal>foo</literal></entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_object_keys</primary>
-         </indexterm>
-         <literal>json_object_keys(json)</literal>
-       </entry>
+         </indexterm><indexterm>
+          <primary>jsonb_object_keys</primary>
+         </indexterm><para><literal>json_object_keys(json)</literal>
+         </para><para><literal>jsonb_object_keys(jsonb)</literal>
+       </para></entry>
        <entry><type>SETOF text</type></entry>
        <entry>
           Returns set of keys in the JSON object.  Only the <quote>outer</quote> object will be displayed.
@@ -10214,18 +10254,20 @@ table2-mapping
        </entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_populate_record</primary>
-         </indexterm>
-         <literal>json_populate_record(base anyelement, from_json json, [, use_json_as_text bool=false]</literal>
-       </entry>
+         </indexterm><indexterm>
+          <primary>jsonb_populate_record</primary>
+         </indexterm><para><literal>json_populate_record(base anyelement, from_json json, [, use_json_as_text bool=false]</literal>
+         </para><para><literal>jsonb_populate_record(base anyelement, from_json jsonb, [, use_json_as_text bool=false]</literal>
+       </para></entry>
        <entry><type>anyelement</type></entry>
        <entry>
          Expands the object in <replaceable>from_json</replaceable> to a row whose columns match
          the record type defined by base. Conversion will be best
          effort; columns in base with no corresponding key in <replaceable>from_json</replaceable>
-         will be left null. If a column is specified more than once, the last value is used.
+         will be left null. When processing <type>json</type>, if a column is 
+         specified more than once, the last value is used.
        </entry>
        <entry><literal>select * from json_populate_record(null::x, '{"a":1,"b":2}')</literal></entry>
        <entry>
@@ -10237,19 +10279,21 @@ table2-mapping
        </entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_populate_recordset</primary>
-         </indexterm>
-         <literal>json_populate_recordset(base anyelement, from_json json, [, use_json_as_text bool=false]</literal>
-       </entry>
+         </indexterm><indexterm>
+          <primary>jsonb_populate_recordset</primary>
+         </indexterm><para><literal>json_populate_recordset(base anyelement, from_json json, [, use_json_as_text bool=false]</literal>
+         </para><para><literal>jsonb_populate_recordset(base anyelement, from_json jsonb, [, use_json_as_text bool=false]</literal>
+       </para></entry>
        <entry><type>SETOF anyelement</type></entry>
        <entry>
          Expands the outermost set of objects in <replaceable>from_json</replaceable> to a set
          whose columns match the record type defined by base.
          Conversion will be best effort; columns in base with no
          corresponding key in <replaceable>from_json</replaceable> will be left null.
-         If a column is specified more than once, the last value is used.
+         When processing <type>json</type>, if a column is specified more 
+         than once, the last value is used.
        </entry>
        <entry><literal>select * from json_populate_recordset(null::x, '[{"a":1,"b":2},{"a":3,"b":4}]')</literal></entry>
        <entry>
@@ -10262,13 +10306,16 @@ table2-mapping
        </entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_array_elements</primary>
-         </indexterm>
-         <literal>json_array_elements(json)</literal>
-       </entry>
-       <entry><type>SETOF json</type></entry>
+         </indexterm><indexterm>
+          <primary>jsonb_array_elements</primary>
+         </indexterm><para><literal>json_array_elements(json)</literal>
+         </para><para><literal>jsonb_array_elements(jsonb)</literal>
+       </para></entry>
+       <entry><para><type>SETOF json</type>
+         </para><para><type>SETOF jsonb</type>
+       </para></entry>
        <entry>
          Expands a JSON array to a set of JSON values.
        </entry>
@@ -10284,12 +10331,13 @@ table2-mapping
        </entry>
       </row>
       <row>
-       <entry>
-         <indexterm>
+       <entry><indexterm>
           <primary>json_typeof</primary>
-         </indexterm>
-         <literal>json_typeof(json)</literal>
-       </entry>
+         </indexterm><indexterm>
+          <primary>jsonb_typeof</primary>
+         </indexterm><para><literal>json_typeof(json)</literal>
+         </para><para><literal>jsonb_typeof(jsonb)</literal>
+       </para></entry>
        <entry><type>text</type></entry>
        <entry>
          Returns the type of the outermost JSON value as a text string.  The types are
