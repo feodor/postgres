@@ -10048,7 +10048,12 @@ table2-mapping
    </para>
   </note>
 
-  <para>
+  <!-- 
+     The release notes contain a reference to "functions-json-table". Since
+     that table is now split in two, the id has been parked here so we don't
+     have to change the release notes.
+  -->
+  <para id="functions-json-table">
    <xref linkend="functions-json-creation-table"> shows the functions that are
    available for creating <type>json</type> values.
    (see <xref linkend="datatype-json">)
@@ -10258,8 +10263,8 @@ table2-mapping
           <primary>json_populate_record</primary>
          </indexterm><indexterm>
           <primary>jsonb_populate_record</primary>
-         </indexterm><para><literal>json_populate_record(base anyelement, from_json json, [, use_json_as_text bool=false]</literal>
-         </para><para><literal>jsonb_populate_record(base anyelement, from_json jsonb, [, use_json_as_text bool=false]</literal>
+         </indexterm><para><literal>json_populate_record(base anyelement, from_json json, [, use_json_as_text bool=false])</literal>
+         </para><para><literal>jsonb_populate_record(base anyelement, from_json jsonb, [, use_json_as_text bool=false])</literal>
        </para></entry>
        <entry><type>anyelement</type></entry>
        <entry>
@@ -10283,8 +10288,8 @@ table2-mapping
           <primary>json_populate_recordset</primary>
          </indexterm><indexterm>
           <primary>jsonb_populate_recordset</primary>
-         </indexterm><para><literal>json_populate_recordset(base anyelement, from_json json, [, use_json_as_text bool=false]</literal>
-         </para><para><literal>jsonb_populate_recordset(base anyelement, from_json jsonb, [, use_json_as_text bool=false]</literal>
+         </indexterm><para><literal>json_populate_recordset(base anyelement, from_json json, [, use_json_as_text bool=false])</literal>
+         </para><para><literal>jsonb_populate_recordset(base anyelement, from_json jsonb, [, use_json_as_text bool=false])</literal>
        </para></entry>
        <entry><type>SETOF anyelement</type></entry>
        <entry>
