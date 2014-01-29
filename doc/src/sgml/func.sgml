@@ -10121,6 +10121,90 @@ table2-mapping
        <entry><literal>to_json('Fred said "Hi."'::text)</literal></entry>
        <entry><literal>"Fred said \"Hi.\""</literal></entry>
       </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_build_array</primary>
+         </indexterm>
+         <literal>json_build_array(VARIADIC "any")</literal>
+       </entry>
+       <entry><type>json</type></entry>
+       <entry>
+         Builds a heterogeneously-typed json array out of a variadic argument list.
+       </entry>
+       <entry><literal>SELECT json_build_array(1,2,'3',4,5);</literal></entry>
+       <entry>
+<programlisting>
+ json_build_array
+-------------------
+ [1, 2, "3", 4, 5]
+ </programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_build_object</primary>
+         </indexterm>
+         <literal>json_build_object(VARIADIC "any")</literal>
+       </entry>
+       <entry><type>json</type></entry>
+       <entry>
+         Builds a JSON array out of a variadic argument list.
+         By convention, the object is 
+         constructed out of alternating name/value arguments.
+       </entry>
+       <entry><literal>SELECT json_build_object('foo',1,'bar',2);</literal></entry>
+       <entry>
+<programlisting>
+   json_build_object
+------------------------
+ {"foo" : 1, "bar" : 2}
+ </programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <indexterm>
+          <primary>json_object</primary>
+         </indexterm>
+         <literal>json_object(text[])</literal>
+       </entry>
+       <entry><type>json</type></entry>
+       <entry>
+         Builds a JSON object out of a text array.  The array must have either
+         exactly one dimension with an even number of members, in which case
+         they are taken as alternating name/value pairs, or two dimensions
+         such that each inner array has exactly two elements, which
+         are taken as a name/value pair.
+       </entry>
+       <entry><literal>select * from json_object('{a, 1, b, "def", c, 3.5}')  or <literal>select json_object('{{a, 1},{b, "def"},{c, 3.5}}')</literal></literal></entry>
+       <entry>
+<programlisting>
+              json_object
+---------------------------------------
+ {"a" : "1", "b" : "def", "c" : "3.5"}
+ </programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <literal>json_object(keys text[], values text[])</literal>
+       </entry>
+       <entry><type>json</type></entry>
+       <entry>
+         The two-argument form of JSON object takes keys and values pairwise from two separate
+         arrays. In all other respects it is identical to the one-argument form.
+       </entry>
+       <entry><literal>select json_object('{a, b}', '{1,2}');</literal></entry>
+       <entry>
+<programlisting>
+      json_object
+------------------------
+ {"a" : "1", "b" : "2"}
+ </programlisting>
+       </entry>
+      </row>
      </tbody>
     </tgroup>
    </table>
@@ -10352,90 +10436,6 @@ table2-mapping
        </entry>
        <entry><literal>json_typeof('-123.4')</literal></entry>
        <entry><literal>number</literal></entry>
-      </row>
-      <row>
-       <entry>
-         <indexterm>
-          <primary>json_build_array</primary>
-         </indexterm>
-         <literal>json_build_array(VARIADIC "any")</literal>
-       </entry>
-       <entry><type>json</type></entry>
-       <entry>
-         Builds a heterogeneously-typed json array out of a variadic argument list.
-       </entry>
-       <entry><literal>SELECT json_build_array(1,2,'3',4,5);</literal></entry>
-       <entry>
-<programlisting>
- json_build_array
--------------------
- [1, 2, "3", 4, 5]
- </programlisting>
-       </entry>
-      </row>
-      <row>
-       <entry>
-         <indexterm>
-          <primary>json_build_object</primary>
-         </indexterm>
-         <literal>json_build_object(VARIADIC "any")</literal>
-       </entry>
-       <entry><type>json</type></entry>
-       <entry>
-         Builds a JSON array out of a variadic argument list.
-         By convention, the object is 
-         constructed out of alternating name/value arguments.
-       </entry>
-       <entry><literal>SELECT json_build_object('foo',1,'bar',2);</literal></entry>
-       <entry>
-<programlisting>
-   json_build_object
-------------------------
- {"foo" : 1, "bar" : 2}
- </programlisting>
-       </entry>
-      </row>
-      <row>
-       <entry>
-         <indexterm>
-          <primary>json_object</primary>
-         </indexterm>
-         <literal>json_object(text[])</literal>
-       </entry>
-       <entry><type>json</type></entry>
-       <entry>
-         Builds a JSON object out of a text array.  The array must have either
-         exactly one dimension with an even number of members, in which case
-         they are taken as alternating name/value pairs, or two dimensions
-         such that each inner array has exactly two elements, which
-         are taken as a name/value pair.
-       </entry>
-       <entry><literal>select * from json_object('{a, 1, b, "def", c, 3.5}')  or <literal>select * from json_object('{{a, 1},{b, "def"},{c, 3.5}}')</literal></literal></entry>
-       <entry>
-<programlisting>
-              json_object
----------------------------------------
- {"a" : "1", "b" : "def", "c" : "3.5"}
- </programlisting>
-       </entry>
-      </row>
-      <row>
-       <entry>
-         <literal>json_object(keys text[], values text[])</literal>
-       </entry>
-       <entry><type>json</type></entry>
-       <entry>
-         The two-argument form of JSON object takes keys and values pairwise from two separate
-         arrays. In all other respects it is identical to the one-argument form.
-       </entry>
-       <entry><literal>select * from json_object('{a, b}', '{1,2}');</literal></entry>
-       <entry>
-<programlisting>
-      json_object
-------------------------
- {"a" : "1", "b" : "2"}
- </programlisting>
-       </entry>
       </row>
       <row>
        <entry>
