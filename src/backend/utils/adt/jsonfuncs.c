@@ -1800,10 +1800,6 @@ elements_worker(PG_FUNCTION_ARGS, bool as_text)
 	TupleDesc	tupdesc;
 	ElementsState *state;
 
-	json = PG_GETARG_TEXT_P(0);
-
-	/* elements doesn't need any escaped strings, so use false here */
-	lex = makeJsonLexContext(json, false);
 	state = palloc0(sizeof(ElementsState));
 	sem = palloc0(sizeof(JsonSemAction));
 
