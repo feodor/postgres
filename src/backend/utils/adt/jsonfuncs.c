@@ -78,6 +78,10 @@ static void elements_scalar(void *state, char *token, JsonTokenType tokentype);
 /* turn a json object into a hash table */
 static HTAB *get_json_object_as_hash(text *json, char *funcname, bool use_json_as_text);
 
+/* common worker for populate_record and to_record */
+static inline Datum populate_record_worker(PG_FUNCTION_ARGS,
+					   bool have_record_arg);
+
 /* semantic action functions for get_json_object_as_hash */
 static void hash_object_field_start(void *state, char *fname, bool isnull);
 static void hash_object_field_end(void *state, char *fname, bool isnull);
@@ -92,6 +96,10 @@ static void populate_recordset_object_start(void *state);
 static void populate_recordset_object_end(void *state);
 static void populate_recordset_array_start(void *state);
 static void populate_recordset_array_element_start(void *state, bool isnull);
+
+/* worker function for populate_recordset and to_recordset */
+static inline Datum populate_recordset_worker(PG_FUNCTION_ARGS,
+						  bool have_record_arg);
 
 /* search type classification for json_get* functions */
 typedef enum
@@ -1913,21 +1921,33 @@ elements_scalar(void *state, char *token, JsonTokenType tokentype)
 Datum
 jsonb_populate_record(PG_FUNCTION_ARGS)
 {
-	return json_populate_record(fcinfo);
+	return populate_record_worker(fcinfo, true);
 }
 
 Datum
 json_populate_record(PG_FUNCTION_ARGS)
 {
-	Oid			argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
-	Oid			jtype = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	return populate_record_worker(fcinfo, true);
+}
+
+Datum
+json_to_record(PG_FUNCTION_ARGS)
+{
+	return populate_record_worker(fcinfo, false);
+}
+
+static inline Datum
+populate_record_worker(PG_FUNCTION_ARGS, bool have_record_arg)
+{
+	Oid			argtype;
+	Oid			jtype = get_fn_expr_argtype(fcinfo->flinfo, have_record_arg ? 1 : 0);
 	text	   *json;
 	Jsonb	   *jb = NULL;
 	bool		use_json_as_text;
 	HTAB	   *json_hash = NULL;
-	HeapTupleHeader rec;
-	Oid			tupType;
-	int32		tupTypmod;
+	HeapTupleHeader rec = NULL;
+	Oid			tupType = InvalidOid;
+	int32		tupTypmod = -1;
 	TupleDesc	tupdesc;
 	HeapTupleData tuple;
 	HeapTuple	rettuple;
@@ -1939,44 +1959,60 @@ json_populate_record(PG_FUNCTION_ARGS)
 
 	Assert(jtype == JSONOID || jtype == JSONBOID);
 
-	use_json_as_text = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	use_json_as_text = PG_ARGISNULL(have_record_arg ? 2 : 1) ? false : 
+		PG_GETARG_BOOL(have_record_arg ? 2 : 1);
 
-	if (!type_is_rowtype(argtype))
-		ereport(ERROR,
-				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("first argument of json%s_populate_record must be a row type", jtype == JSONBOID ? "b" : "")));
-
-	if (PG_ARGISNULL(0))
+	if (have_record_arg)
 	{
-		if (PG_ARGISNULL(1))
-			PG_RETURN_NULL();
+		 argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 
-		rec = NULL;
+		 if (!type_is_rowtype(argtype))
+			 ereport(ERROR,
+					 (errcode(ERRCODE_DATATYPE_MISMATCH),
+					  errmsg("first argument of json%s_populate_record must be a row type", jtype == JSONBOID ? "b" : "")));
 
-		/*
-		 * have no tuple to look at, so the only source of type info is the
-		 * argtype. The lookup_rowtype_tupdesc call below will error out if we
-		 * don't have a known composite type oid here.
-		 */
-		tupType = argtype;
-		tupTypmod = -1;
+		 if (PG_ARGISNULL(0))
+		 {
+			 if (PG_ARGISNULL(1))
+				 PG_RETURN_NULL();
+			 
+			 /*
+			  * have no tuple to look at, so the only source of type info is the
+			  * argtype. The lookup_rowtype_tupdesc call below will error out if we
+			  * don't have a known composite type oid here.
+			  */
+			 tupType = argtype;
+			 tupTypmod = -1;
+		 }
+		 else
+		 {
+			 rec = PG_GETARG_HEAPTUPLEHEADER(0);
+
+			 if (PG_ARGISNULL(1))
+				 PG_RETURN_POINTER(rec);
+			 
+			 /* Extract type info from the tuple itself */
+			 tupType = HeapTupleHeaderGetTypeId(rec);
+			 tupTypmod = HeapTupleHeaderGetTypMod(rec);
+		 }
+		 
+		 tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 	}
 	else
-	{
-		rec = PG_GETARG_HEAPTUPLEHEADER(0);
+	{       /* json{b}_to_record case */
+		
+        use_json_as_text = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 
-		if (PG_ARGISNULL(1))
-			PG_RETURN_POINTER(rec);
+        if (PG_ARGISNULL(0))
+            PG_RETURN_NULL();
 
-		/* Extract type info from the tuple itself */
-		tupType = HeapTupleHeaderGetTypeId(rec);
-		tupTypmod = HeapTupleHeaderGetTypMod(rec);
+		get_call_result_type(fcinfo, NULL, &tupdesc);
 	}
 
 	if (jtype == JSONOID)
 	{
 		/* just get the text */
-		json = PG_GETARG_TEXT_P(1);
+		json = PG_GETARG_TEXT_P(have_record_arg ? 1 : 0);
 
 		json_hash = get_json_object_as_hash(json, "json_populate_record", use_json_as_text);
 
@@ -1991,7 +2027,7 @@ json_populate_record(PG_FUNCTION_ARGS)
 	}
 	else
 	{
-		jb = PG_GETARG_JSONB(1);
+		jb = PG_GETARG_JSONB(have_record_arg ? 1 : 0);
 
 		/* same logic as for json */
 		if (JB_ISEMPTY(jb) && rec)
@@ -1999,7 +2035,6 @@ json_populate_record(PG_FUNCTION_ARGS)
 
 	}
 
-	tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 	ncolumns = tupdesc->natts;
 
 	if (rec)
@@ -2028,8 +2063,8 @@ json_populate_record(PG_FUNCTION_ARGS)
 		my_extra->record_typmod = 0;
 	}
 
-	if (my_extra->record_type != tupType ||
-		my_extra->record_typmod != tupTypmod)
+	if (have_record_arg && (my_extra->record_type != tupType ||
+							my_extra->record_typmod != tupTypmod))
 	{
 		MemSet(my_extra, 0,
 			   sizeof(RecordIOData) - sizeof(ColumnIOData)
@@ -2323,7 +2358,7 @@ hash_scalar(void *state, char *token, JsonTokenType tokentype)
 Datum
 jsonb_populate_recordset(PG_FUNCTION_ARGS)
 {
-	return json_populate_recordset(fcinfo);
+	return populate_recordset_worker(fcinfo, true);
 }
 
 static inline void
@@ -2453,8 +2488,23 @@ make_row_from_rec_and_jsonb(Jsonb *element, PopulateRecordsetState *state)
 Datum
 json_populate_recordset(PG_FUNCTION_ARGS)
 {
-	Oid			argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
-	Oid			jtype = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	return populate_recordset_worker(fcinfo, true);
+}
+
+Datum
+json_to_recordset(PG_FUNCTION_ARGS)
+{
+	return populate_recordset_worker(fcinfo, false);
+}
+
+/*
+ * common worker for json_populate_recordset() and json_to_recordset()
+ */
+static inline Datum
+populate_recordset_worker(PG_FUNCTION_ARGS, bool have_record_arg)
+{
+	Oid			argtype;
+	Oid			jtype = get_fn_expr_argtype(fcinfo->flinfo, have_record_arg ? 1 : 0);
 	bool		use_json_as_text;
 	ReturnSetInfo *rsi;
 	MemoryContext old_cxt;
@@ -2466,12 +2516,23 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 	int			ncolumns;
 	PopulateRecordsetState *state;
 
-	use_json_as_text = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+    if (have_record_arg)
+    {
+        argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 
-	if (!type_is_rowtype(argtype))
-		ereport(ERROR,
-				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("first argument of json_populate_recordset must be a row type")));
+        use_json_as_text = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+
+        if (!type_is_rowtype(argtype))
+            ereport(ERROR,
+                    (errcode(ERRCODE_DATATYPE_MISMATCH),
+                     errmsg("first argument of json_populate_recordset must be a row type")));
+    }
+    else
+    {
+        argtype = InvalidOid;
+
+        use_json_as_text = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+    }
 
 	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
 
@@ -2488,18 +2549,29 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 
 	/*
 	 * get the tupdesc from the result set info - it must be a record type
-	 * because we already checked that arg1 is a record type.
+	 * because we already checked that arg1 is a record type, or we're
+	 * in a to_record function which returns a setof record.
 	 */
 	(void) get_call_result_type(fcinfo, NULL, &tupdesc);
 
 	/* if the json is null send back an empty set */
-	if (PG_ARGISNULL(1))
-		PG_RETURN_NULL();
-
-	if (PG_ARGISNULL(0))
-		rec = NULL;
+	if (have_record_arg)
+	{
+		if (PG_ARGISNULL(1))
+			PG_RETURN_NULL();
+		
+		if (PG_ARGISNULL(0))
+			rec = NULL;
+		else
+			rec = PG_GETARG_HEAPTUPLEHEADER(0);
+	}
 	else
-		rec = PG_GETARG_HEAPTUPLEHEADER(0);
+	{
+		if (PG_ARGISNULL(1))
+			PG_RETURN_NULL();
+
+		rec = NULL;
+	}
 
 	tupType = tupdesc->tdtypeid;
 	tupTypmod = tupdesc->tdtypmod;
@@ -2552,7 +2624,7 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 
 	if (jtype == JSONOID)
 	{
-		text	   *json = PG_GETARG_TEXT_P(1);
+		text	   *json = PG_GETARG_TEXT_P(have_record_arg ? 1 : 0);
 		JsonLexContext *lex;
 		JsonSemAction *sem;
 
@@ -2583,7 +2655,7 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 		int			r;
 
 		Assert(jtype == JSONBOID);
-		jb = PG_GETARG_JSONB(1);
+		jb = PG_GETARG_JSONB(have_record_arg ? 1 : 0);
 
 		if (JB_ROOT_IS_SCALAR(jb) || !JB_ROOT_IS_ARRAY(jb))
 			ereport(ERROR,
@@ -2613,7 +2685,6 @@ json_populate_recordset(PG_FUNCTION_ARGS)
 	rsi->setDesc = state->ret_tdesc;
 
 	PG_RETURN_NULL();
-
 }
 
 static void
