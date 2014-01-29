@@ -10272,6 +10272,9 @@ table2-mapping
    <primary>jsonb_array_elements</primary>
   </indexterm>
   <indexterm>
+   <primary>json_array_elements_text</primary>
+  </indexterm>
+  <indexterm>
    <primary>json_typeof</primary>
   </indexterm>
   <indexterm>
@@ -10450,6 +10453,24 @@ table2-mapping
  1
  true
  [2,false]
+</programlisting>
+       </entry>
+      </row>
+      <row>
+       <entry>
+         <literal>json_array_elements_text(json)</literal>
+       </entry>
+       <entry><type>SETOF json</type></entry>
+       <entry>
+         Expands a JSON array to a set of text values.
+       </entry>
+       <entry><literal>json_array_elements_text('["foo", "bar"]')</literal></entry>
+       <entry>
+<programlisting>
+   value
+-----------
+ foo
+ bar
 </programlisting>
        </entry>
       </row>
