@@ -832,7 +832,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 				if (castOid == InvalidOid)
 				{
 					if (method != COERCION_METHOD_BINARY)
-						elog(ERROR, "Could not cast numeric category type to numeric '%c'", (char)method);
+						elog(ERROR, "could not cast numeric category type to numeric '%c'", (char)method);
 
 					v.hash.pairs[i].value.numeric = DatumGetNumeric(values[i]);
 				}
@@ -1078,7 +1078,7 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
 									SET_PRETTY_PRINT_VAR(0));
 			else
-				elog(PANIC, "Wrong hstore");
+				elog(ERROR, "wrong hstore type");
 
 			values[i] = InputFunctionCall(&column_info->proc, s,
 										  column_info->typioparam,
@@ -1261,7 +1261,7 @@ putEscapedValue(StringInfo out, HStoreOutputKind kind, HStoreValue *v)
 			appendStringInfoString(out, DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
 			break;
 		default:
-			elog(PANIC, "Unknown type");
+			elog(ERROR, "wrong hstore scalar type");
 	}
 }
 
@@ -1413,7 +1413,7 @@ reout:
 				first = false;
 				break;
 			default:
-				elog(PANIC, "Wrong flags");
+				elog(ERROR, "unexpected state of hstore iterator");
 		}
 	}
 
@@ -1536,14 +1536,14 @@ hstore_send(PG_FUNCTION_ARGS)
 							pq_sendbytes(&buf, (char*)nbuf, VARSIZE_ANY(nbuf));
 							break;
 						default:
-							elog(PANIC, "Wrong type: %u", v.type);
+							elog(ERROR, "wrong hstore scalar type");
 					}
 					break;
 				case WHS_END_ARRAY:
 				case WHS_END_HASH:
 					break;
 				default:
-					elog(PANIC, "Wrong flags");
+					elog(ERROR, "unexpected state of hstore iterator");
 			}
 		}
 	}
@@ -1711,7 +1711,7 @@ array_to_hstore(PG_FUNCTION_ARGS)
 				castOid = searchCast(ARR_ELEMTYPE(array), NUMERICOID, &method);
 
 				if (castOid == InvalidOid && method != COERCION_METHOD_BINARY)
-					elog(ERROR, "Could not cast array's element type to numeric");
+					elog(ERROR, "could not cast array's element type to numeric");
 
 				valueType = hsvNumeric;
 				break;
@@ -1721,7 +1721,7 @@ array_to_hstore(PG_FUNCTION_ARGS)
 				castOid = searchCast(ARR_ELEMTYPE(array), TEXTOID, &method);
 
 				if (castOid == InvalidOid && method != COERCION_METHOD_BINARY)
-					elog(ERROR, "Could not cast array's element type to text");
+					elog(ERROR, "could not cast array's element type to text");
 
 				valueType = hsvString;
 				break;
@@ -1800,7 +1800,7 @@ array_to_hstore(PG_FUNCTION_ARGS)
 					value.size = sizeof(HEntry)*2 + VARSIZE_ANY(value.numeric);
 					break;
 				default:
-					elog(ERROR, "Impossible state: %d", valueType);
+					elog(ERROR, "wrong hstore scalar type");
 			}
 		}
 

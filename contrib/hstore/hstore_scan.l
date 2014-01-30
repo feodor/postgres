@@ -212,7 +212,7 @@ checkSpecialVal()
 	}
 
 	if (inputJSON && res == STRING_P)
-		elog(ERROR, "Syntax error");
+		elog(ERROR, "syntax error");
 
 	return res;
 }

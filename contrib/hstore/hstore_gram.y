@@ -264,7 +264,7 @@ makeHStorePair(string *key, HStoreValue *value) {
 result: 
 	pair_list						{ 
 										if (inputJSON)
-											elog(ERROR, "Wrong json representation");
+											elog(ERROR, "wrong json representation");
 										 *((HStoreValue**)result) = makeHStoreValuePairs($1);
 									}
 	| hstore						{ 	
@@ -286,12 +286,12 @@ hstore:
 	| '[' value ']'					{ $$ = makeHStoreValueArray(lappend(NIL, $2)); }
 	| '{' value_list '}'			{ 
 										if (inputJSON)
-											elog(ERROR, "Wrong json representation");
+											elog(ERROR, "wrong json representation");
 										$$ = makeHStoreValueArray($2); 
 									}
 	| '{' value '}'					{ 
 										if (inputJSON)
-											elog(ERROR, "Wrong json representation");
+											elog(ERROR, "wrong json representation");
 										$$ = makeHStoreValueArray(lappend(NIL, $2)); 
 									}
 	| '{' '}'						{ $$ = makeHStoreValuePairs(NIL); }

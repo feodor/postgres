@@ -78,14 +78,14 @@ Datum		ghstore_out(PG_FUNCTION_ARGS);
 Datum
 ghstore_in(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "Not implemented");
+	elog(ERROR, "not implemented");
 	PG_RETURN_DATUM(0);
 }
 
 Datum
 ghstore_out(PG_FUNCTION_ARGS)
 {
-	elog(ERROR, "Not implemented");
+	elog(ERROR, "not implemented");
 	PG_RETURN_DATUM(0);
 }
 
@@ -143,7 +143,7 @@ crc32_HStoreValue(HStoreValue *v, uint32 r)
 			COMP_CRC32(crc, VARDATA_ANY(v->numeric), VARSIZE_ANY_EXHDR(v->numeric));
 			break;
 		default:
-			elog(PANIC, "impossible value %d", v->type);
+			elog(ERROR, "wrong hstore scalar type");
 	}
 
 	FIN_CRC32(crc);
@@ -695,7 +695,7 @@ ghstore_consistent(PG_FUNCTION_ARGS)
 		}
 	}
 	else
-		elog(ERROR, "Unsupported strategy number: %d", strategy);
+		elog(ERROR, "unsupported strategy number: %d", strategy);
 
 	PG_RETURN_BOOL(res);
 }

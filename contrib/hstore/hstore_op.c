@@ -378,7 +378,7 @@ hstoreDeepFetch(HStore *in, ArrayType *path)
 		}
 		else
 		{
-			elog(PANIC,"wrong header type: %08x", header);
+			elog(ERROR,"wrong hstore container type");
 		}
 	}
 
@@ -1132,7 +1132,7 @@ deletePathDo(HStoreIterator **it, Datum	*path_elems,
 	}
 	else
 	{
-		elog(PANIC, "impossible state");
+		elog(ERROR, "impossible state");
 	}
 
 	return res;
@@ -1291,7 +1291,7 @@ convertScalarToString(HStoreValue *v)
 		case hsvString:
 			break;
 		default:
-			elog(PANIC,"Could not convert to string");
+			elog(ERROR,"wrong hstore scalar type");
 	}
 }
 
@@ -1756,7 +1756,7 @@ replacePathDo(HStoreIterator **it, Datum *path_elems,
 	}
 	else
 	{
-		elog(PANIC, "impossible state");
+		elog(ERROR, "impossible state");
 	}
 
 	return res;
@@ -1938,7 +1938,7 @@ concatPathDo(HStoreIterator **it, Datum *path_elems,
 	}
 	else
 	{
-		elog(PANIC, "impossible state");
+		elog(ERROR, "impossible state");
 	}
 
 	return res;
@@ -2484,7 +2484,7 @@ getNextValsPath(SetReturningState *st)
 		}
 		else
 		{
-			elog(PANIC, "impossible state");
+			elog(ERROR, "wrong hstore container type");
 		}
 
 		if (v == NULL)
@@ -2844,7 +2844,7 @@ deepContains(HStoreIterator **it1, HStoreIterator **it2)
 	}
 	else
 	{
-		elog(PANIC, "impossible state");
+		elog(ERROR, "wrong hstore container type");
 	}
 
 	return res;

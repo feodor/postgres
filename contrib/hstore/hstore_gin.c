@@ -53,7 +53,7 @@ makeitemFromValue(HStoreValue *v, char flag)
 			item = makeitem(v->string.val, v->string.len, flag);
 			break;
 		default:
-			elog(ERROR, "Wrong hstore type");
+			elog(ERROR, "wrong hstore scalar type");
 	}
 
 	return item;
@@ -318,7 +318,7 @@ hash_value(HStoreValue *v, PathHashStack *stack)
 			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
 			break;
 		default:
-			elog(ERROR, "Shouldn't take hash of array");
+			elog(ERROR, "wrong hstore scalar type");
 			break;
 	}
 }
