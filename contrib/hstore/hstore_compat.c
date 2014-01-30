@@ -6,10 +6,14 @@
  * There are three formats to consider:
  * 1) old contrib/hstore (referred to as hstore-old)
  * 2) prerelease pgfoundry hstore
- * 3) new contrib/hstore
+ * 3) new contrib/hstore (v2)
+ * 4) nested contrib/hstore (v3)
  *
+ * (3) and (4) are upward binary compatible.
  * (2) and (3) are identical except for the HS_FLAG_NEWVERSION
  * bit, which is set in (3) but not (2).
+ * (4) has HS_FLAG_ARRAY, HS_FLAG_HASH, HS_FLAG_SCALAR bits after
+ * HS_FLAG_NEWVERSION  
  *
  * Values that are already in format (3), or which are
  * unambiguously in format (2), are handled by the first
