@@ -1685,7 +1685,7 @@ array_to_hstore(PG_FUNCTION_ARGS)
 					*counters = palloc0(sizeof(*counters) * ncounters),
 					*dims = ARR_DIMS(array);
 	ToHStoreState	*state = NULL;
-	HStoreValue		value, *result;
+	HStoreValue		value, *result = NULL;
 	Oid				castOid = InvalidOid;
 	int				valueType = hsvString;
 	FmgrInfo		castInfo;
