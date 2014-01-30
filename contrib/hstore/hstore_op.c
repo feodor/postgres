@@ -2429,14 +2429,14 @@ getNextValsPath(SetReturningState *st)
 		{
 			if (st->path[st->level].varKind == pathAny)
 			{
-				v = getHStoreValue(st->path[st->level].v.binary.data, 
-								   HS_FLAG_HASH, 
+				v = getHStoreValue(st->path[st->level].v.binary.data,
+								   HS_FLAG_HASH,
 								   st->path[st->level].i++);
 			}
 			else
 			{
-				v = findUncompressedHStoreValue(st->path[st->level].v.binary.data, 
-												HS_FLAG_HASH, NULL, 
+				v = findUncompressedHStoreValue(st->path[st->level].v.binary.data,
+												HS_FLAG_HASH, NULL,
 												VARDATA_ANY(st->path[st->level].varStr),
 												VARSIZE_ANY_EXHDR(st->path[st->level].varStr));
 			}

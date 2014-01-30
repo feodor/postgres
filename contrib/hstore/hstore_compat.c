@@ -13,7 +13,7 @@
  * (2) and (3) are identical except for the HS_FLAG_NEWVERSION
  * bit, which is set in (3) but not (2).
  * (4) has HS_FLAG_ARRAY, HS_FLAG_HASH, HS_FLAG_SCALAR bits after
- * HS_FLAG_NEWVERSION  
+ * HS_FLAG_NEWVERSION
  *
  * Values that are already in format (3), or which are
  * unambiguously in format (2), are handled by the first

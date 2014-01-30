@@ -47,13 +47,13 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 
 <INITIAL>[\,\{\}\[\]]			{ return *yytext; }
 
-<INITIAL>\=\>					{ 
+<INITIAL>\=\>					{
 									if (inputJSON)
 										elog(ERROR, "syntax error");
-									return DELIMITER_P; 
+									return DELIMITER_P;
 								}
 
-<INITIAL>\:						{ 
+<INITIAL>\:						{
 									if (inputJSON)
 									{
 										return DELIMITER_P;
@@ -71,7 +71,7 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 									addchar(true, '=');
 									BEGIN xNONQUOTED;
 								}
-									
+
 <INITIAL>\>						{
 									addchar(true, yytext[0]);
 									BEGIN xNONQUOTED;
@@ -85,7 +85,7 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 									addstring(true, yytext, yyleng);
 									BEGIN xNONQUOTED;
 								}
-									
+
 <INITIAL>\" 					{
 									addchar(true, '\0');
 									BEGIN xQUOTED;
@@ -99,13 +99,13 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 									return STRING_P;
 								}
 
-<xNONQUOTED>({any}|[\>\"\:])+	{ 
-									addstring(false, yytext, yyleng); 
+<xNONQUOTED>({any}|[\>\"\:])+	{
+									addstring(false, yytext, yyleng);
 								}
 
 <xNONQUOTED>\=/[^\>]			{ addchar(false, *yytext); }
 
-<xNONQUOTED>[ \t\n\r\f]+		{ 
+<xNONQUOTED>[ \t\n\r\f]+		{
 									yylval->str = scanstring;
 									BEGIN INITIAL;
 									return checkSpecialVal();
@@ -127,7 +127,7 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 									return checkSpecialVal();
 								}
 
-<xNONQUOTED><<EOF>>				{ 
+<xNONQUOTED><<EOF>>				{
 									yylval->str = scanstring;
 									BEGIN INITIAL;
 									return checkSpecialVal();
@@ -139,7 +139,7 @@ any			[^\,\[\]\{\}\"\=\> \t\n\r\f\\\:]
 									BEGIN INITIAL;
 									return checkSpecialVal();
 								}
-									
+
 
 <xNONQUOTED,xQUOTED>\\.  		{ addchar(false, yytext[1]); }
 
@@ -293,7 +293,7 @@ addchar(bool init, char s) {
 		scanstring.len++;
 }
 
-HStoreValue* 
+HStoreValue*
 parseHStore(const char *str, int len, bool json) {
 	HStoreValue		*parseresult;
 

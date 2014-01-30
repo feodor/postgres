@@ -5,7 +5,7 @@
  *
  * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
- * contrib/hstore/hstore_gram.y 
+ * contrib/hstore/hstore_gram.y
  *
  *-------------------------------------------------------------------------
  */
@@ -165,7 +165,7 @@ makeHStoreValueArray(List *list)
 		{
 			HStoreValue	*s = (HStoreValue*)lfirst(cell);
 
-			v->size += s->size; 
+			v->size += s->size;
 
 			v->array.elems[i++] = *s;
 
@@ -201,7 +201,7 @@ makeHStoreValuePairs(List *list)
 		{
 			HStorePair	*s = (HStorePair*)lfirst(cell);
 
-			v->size += s->key.size + s->value.size; 
+			v->size += s->key.size + s->value.size;
 			v->hash.pairs[i].order = i;
 			v->hash.pairs[i++] = *s;
 
@@ -250,7 +250,7 @@ makeHStorePair(string *key, HStoreValue *value) {
 %token	<str>			DELIMITER_P NULL_P STRING_P TRUE_P FALSE_P
 						NUMERIC_P
 
-%type	<hvalue>		result hstore value scalar_value 
+%type	<hvalue>		result hstore value scalar_value
 %type	<str>			key
 
 %type	<pair>			pair
@@ -261,19 +261,19 @@ makeHStorePair(string *key, HStoreValue *value) {
 /* Grammar follows */
 %%
 
-result: 
-	pair_list						{ 
+result:
+	pair_list						{
 										if (inputJSON)
 											elog(ERROR, "wrong json representation");
 										 *((HStoreValue**)result) = makeHStoreValuePairs($1);
 									}
-	| hstore						{ 	
+	| hstore						{
 										if ($1->type == jbvNull)
 											*((HStoreValue**)result) = NULL;
 										else
 											*((HStoreValue**)result) = $1;
 									}
-	| scalar_value					{ 
+	| scalar_value					{
 										*((HStoreValue**)result) = makeHStoreValueArray(lappend(NIL, $1));
 										(*((HStoreValue**)result))->array.scalar = true;
 									}
@@ -284,15 +284,15 @@ hstore:
 	'{' pair_list '}'				{ $$ = makeHStoreValuePairs($2); }
 	| '[' value_list ']'			{ $$ = makeHStoreValueArray($2); }
 	| '[' value ']'					{ $$ = makeHStoreValueArray(lappend(NIL, $2)); }
-	| '{' value_list '}'			{ 
+	| '{' value_list '}'			{
 										if (inputJSON)
 											elog(ERROR, "wrong json representation");
-										$$ = makeHStoreValueArray($2); 
+										$$ = makeHStoreValueArray($2);
 									}
-	| '{' value '}'					{ 
+	| '{' value '}'					{
 										if (inputJSON)
 											elog(ERROR, "wrong json representation");
-										$$ = makeHStoreValueArray(lappend(NIL, $2)); 
+										$$ = makeHStoreValueArray(lappend(NIL, $2));
 									}
 	| '{' '}'						{ $$ = makeHStoreValuePairs(NIL); }
 	| '[' ']'						{ $$ = makeHStoreValueArray(NIL); }
@@ -308,12 +308,12 @@ scalar_value:
 
 value:
 	scalar_value					{ $$ = $1; }
-	| hstore						{ $$ = $1; } 
+	| hstore						{ $$ = $1; }
 	;
 
 value_list:
-	value ',' value					{ $$ = lappend(lappend(NIL, $1), $3); } 
-	| value_list ',' value			{ $$ = lappend($1, $3); } 
+	value ',' value					{ $$ = lappend(lappend(NIL, $1), $3); }
+	| value_list ',' value			{ $$ = lappend($1, $3); }
 	;
 
 /*

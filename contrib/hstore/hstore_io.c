@@ -838,7 +838,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 				}
 				else
 				{
-					v.hash.pairs[i].value.numeric = 
+					v.hash.pairs[i].value.numeric =
 						DatumGetNumeric(OidFunctionCall1(castOid, values[i]));
 
 				}
@@ -1065,17 +1065,17 @@ hstore_populate_record(PG_FUNCTION_ARGS)
 			else if (v->type == hsvBool)
 				s = pnstrdup((v->boolean) ? "t" : "f", 1);
 			else if (v->type == hsvNumeric)
-				s = DatumGetCString(DirectFunctionCall1(numeric_out, 
+				s = DatumGetCString(DirectFunctionCall1(numeric_out,
 														PointerGetDatum(v->numeric)));
-			else if (v->type == hsvBinary && 
+			else if (v->type == hsvBinary &&
 					 (column_type == JSONOID || column_type == JSONBOID))
-				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len,
 									SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
 			else if (v->type == hsvBinary && type_is_array(column_type))
-				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len,
 									SET_PRETTY_PRINT_VAR(ArrayCurlyBraces));
 			else if (v->type == hsvBinary)
-				s = HStoreToCString(NULL, v->binary.data, v->binary.len, 
+				s = HStoreToCString(NULL, v->binary.data, v->binary.len,
 									SET_PRETTY_PRINT_VAR(0));
 			else
 				elog(ERROR, "wrong hstore type");
@@ -1285,7 +1285,7 @@ isArrayBrackets(HStoreOutputKind kind)
 {
 	return ((kind & ArrayCurlyBraces) == 0) ? true : false;
 }
-		
+
 static char*
 HStoreToCString(StringInfo out, char *in, int len /* just estimation */,
 		  		HStoreOutputKind kind)
@@ -1469,7 +1469,7 @@ hstore_out(PG_FUNCTION_ARGS)
 	HStore	*hs = PG_GETARG_HS(0);
 	char 	*out;
 
-	out = HStoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), 
+	out = HStoreToCString(NULL, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs),
 						  VARSIZE(hs), SET_PRETTY_PRINT_VAR(0));
 
 	PG_RETURN_CSTRING(out);
@@ -1579,7 +1579,7 @@ hstore_to_json_loose(PG_FUNCTION_ARGS)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		HStoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in), 
+		HStoreToCString(str, VARDATA_ANY(in), VARSIZE_ANY(in),
 						SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated | LooseOutput));
 
 		out = (text*)str->data;
@@ -1609,8 +1609,8 @@ hstore_to_json(PG_FUNCTION_ARGS)
 		str = makeStringInfo();
 		appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-		HStoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in), 
-						VARSIZE_ANY(in), 
+		HStoreToCString(str, HS_ISEMPTY(in) ? NULL : VARDATA_ANY(in),
+						VARSIZE_ANY(in),
 						SET_PRETTY_PRINT_VAR(JsonOutput | RootHashDecorated));
 
 		out = (text*)str->data;
@@ -1663,7 +1663,7 @@ searchCast(Oid src, Oid dst, CoercionMethod *method)
 		ReleaseSysCache(tuple);
 	}
 	else if ((baseSrc = getBaseType(src)) != src && OidIsValid(baseSrc))
-	{	
+	{
 		/* domain type */
 		funcOid = searchCast(baseSrc, dst, method);
 	}
@@ -1837,7 +1837,7 @@ hstore_print(PG_FUNCTION_ARGS)
 	str = makeStringInfo();
 	appendBinaryStringInfo(str, "    ", 4); /* VARHDRSZ */
 
-	HStoreToCString(str, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs), 
+	HStoreToCString(str, (HS_ISEMPTY(hs)) ? NULL : VARDATA(hs),
 					VARSIZE(hs), flags);
 
 	out = (text*)str->data;
