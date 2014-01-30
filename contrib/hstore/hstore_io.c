@@ -1288,7 +1288,7 @@ isArrayBrackets(HStoreOutputKind kind)
 
 static char*
 HStoreToCString(StringInfo out, char *in, int len /* just estimation */,
-		  		HStoreOutputKind kind)
+				HStoreOutputKind kind)
 {
 	bool			first = true;
 	HStoreIterator	*it;
@@ -1920,6 +1920,3 @@ compressHStore(HStoreValue *v, char *buffer)
 
 	return l;
 }
-
-
-

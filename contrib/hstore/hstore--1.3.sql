@@ -557,7 +557,7 @@ AS 'MODULE_PATHNAME','hstore_each_hstore'
 LANGUAGE C STRICT IMMUTABLE;
 
 CREATE FUNCTION hstore_typeof(hstore)
-RETURNS text 
+RETURNS text
 AS 'MODULE_PATHNAME','hstore_typeof'
 LANGUAGE C STRICT IMMUTABLE;
 
@@ -840,7 +840,7 @@ AS
 
 -- output
 
-CREATE FUNCTION hstore_print(hstore, 
+CREATE FUNCTION hstore_print(hstore,
 							 pretty_print bool DEFAULT false,
 							 array_curly_braces bool DEFAULT false,
 							 root_hash_decorated bool DEFAULT false,
@@ -849,6 +849,3 @@ CREATE FUNCTION hstore_print(hstore,
 RETURNS text
 AS 'MODULE_PATHNAME', 'hstore_print'
 LANGUAGE C IMMUTABLE STRICT;
-
-
-

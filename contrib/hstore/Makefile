@@ -32,4 +32,3 @@ distprep: hstore_gram.c hstore_scan.c
 
 maintainer-clean:
 	rm -f hstore_gram.c hstore_scan.c hstore_gram.h
-

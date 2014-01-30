@@ -308,4 +308,3 @@ parseHStore(const char *str, int len, bool json) {
 
 	return parseresult;
 }
-

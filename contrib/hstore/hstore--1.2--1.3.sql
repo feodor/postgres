@@ -223,7 +223,7 @@ AS 'MODULE_PATHNAME','hstore_each_hstore'
 LANGUAGE C STRICT IMMUTABLE;
 
 CREATE FUNCTION hstore_typeof(hstore)
-RETURNS text 
+RETURNS text
 AS 'MODULE_PATHNAME','hstore_typeof'
 LANGUAGE C STRICT IMMUTABLE;
 
@@ -335,4 +335,3 @@ LANGUAGE C IMMUTABLE STRICT;
 
 CREATE CAST (jsonb AS hstore)
   WITH FUNCTION jsonb2hstore(jsonb);
-
