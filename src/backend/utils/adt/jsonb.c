@@ -104,7 +104,7 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 				_state->res = pushJsonbValue(&_state->state, WJB_VALUE, &v);
 				break;
 			default:
-				elog(ERROR, "Wrong state");
+				elog(ERROR, "unexpected parent of nested structure");
 		}
 	}
 }
@@ -315,7 +315,7 @@ putEscapedValue(StringInfo out, JsonbValue *v)
 			appendStringInfoString(out, DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
 			break;
 		default:
-			elog(PANIC, "Unknown type");
+			elog(ERROR, "unknown jsonb scalar type");
 	}
 }
 
@@ -403,7 +403,7 @@ reout:
 				first = false;
 				break;
 			default:
-				elog(PANIC, "Wrong flags");
+				elog(ERROR, "unknown flag of jsonb iterator");
 		}
 	}
 
@@ -482,14 +482,14 @@ jsonb_send(PG_FUNCTION_ARGS)
 							pq_sendbytes(&buf, (char *) nbuf, VARSIZE_ANY(nbuf));
 							break;
 						default:
-							elog(PANIC, "Wrong type: %u", v.type);
+							elog(ERROR, "unknown jsonb scalar type");
 					}
 					break;
 				case WJB_END_ARRAY:
 				case WJB_END_OBJECT:
 					break;
 				default:
-					elog(PANIC, "Wrong flags");
+					elog(ERROR, "unknown flag of jsonb iterator");
 			}
 		}
 	}
@@ -536,7 +536,7 @@ jsonb_typeof(PG_FUNCTION_ARGS)
 				result = "number";
 				break;
 			default:
-				elog(ERROR, "Wrong jsonb scalar type: %u", v.type);
+				elog(ERROR, "unknown jsonb scalar type");
 		}
 	}
 

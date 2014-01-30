@@ -231,7 +231,7 @@ compareJsonbValue(JsonbValue *a, JsonbValue *b)
 			case jbvBinary:
 				return compareJsonbBinaryValue(a->binary.data, b->binary.data);
 			default:
-				elog(PANIC, "unknown JsonbValue->type: %d", a->type);
+				elog(ERROR, "unknown jsonb scalar type");
 		}
 	}
 
@@ -628,7 +628,7 @@ walkUncompressedJsonbDo(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg, uint32 le
 			cb(cb_arg, v, WJB_END_OBJECT, level);
 			break;
 		default:
-			elog(PANIC, "impossible JsonbValue->type: %d", v->type);
+			elog(ERROR, "unknown type of jsonb container");
 	}
 }
 
@@ -668,7 +668,7 @@ parseBuffer(JsonbIterator *it, char *buffer)
 			it->data = buffer + it->nelems * sizeof(JEntry) * 2;
 			break;
 		default:
-			elog(PANIC, "impossible type: %08x", it->type);
+			elog(ERROR, "unknown type of jsonb container");
 	}
 }
 
@@ -817,7 +817,7 @@ JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested)
 				res = WJB_VALUE;
 			break;
 		default:
-			elog(PANIC, "unknown state %08x", (*it)->type & (*it)->state);
+			elog(ERROR, "unexpected jsonb iterator's state");
 	}
 
 	return res;
@@ -953,7 +953,7 @@ putJEntryString(CompressState * state, JsonbValue *value, uint32 level, uint32 i
 			}
 			break;
 		default:
-			elog(PANIC, "Unsupported JsonbValue type: %d", value->type);
+			elog(ERROR, "unknown jsonb scalar type");
 	}
 }
 
@@ -1072,7 +1072,7 @@ compressCallback(void *arg, JsonbValue *value, uint32 flags, uint32 level)
 		}
 		else
 		{
-			elog(PANIC, "Wrong parent");
+			elog(ERROR, "unknown type of jsonb container");
 		}
 
 		Assert(state->ptr - curLevelState->begin <= value->size);
@@ -1080,7 +1080,7 @@ compressCallback(void *arg, JsonbValue *value, uint32 flags, uint32 level)
 	}
 	else
 	{
-		elog(PANIC, "Wrong flags");
+		elog(ERROR, "unknown flag in tree walk");
 	}
 }
 
@@ -1249,12 +1249,12 @@ pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue *v)
 						appendValue(*state, h);
 						break;
 					default:
-						elog(PANIC, "wrong parent type: %d", (*state)->v.type);
+						elog(ERROR, "unknown type of jsonb container");
 				}
 			}
 			break;
 		default:
-			elog(PANIC, "wrong type: %08x", r);
+			elog(ERROR, "wrong type of jsonb value");
 	}
 
 	return h;
