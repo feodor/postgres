@@ -1883,7 +1883,7 @@ elements_array_element_end(void *state, bool isnull)
 	text	   *val;
 	HeapTuple	tuple;
 	Datum		values[1];
-	bool nulls[1] = {false};
+	bool		nulls[1] = {false};
 
 	/* skip over nested objects */
 	if (_state->lex->lex_level != 1)
@@ -2000,52 +2000,52 @@ populate_record_worker(PG_FUNCTION_ARGS, bool have_record_arg)
 
 	Assert(jtype == JSONOID || jtype == JSONBOID);
 
-	use_json_as_text = PG_ARGISNULL(have_record_arg ? 2 : 1) ? false : 
+	use_json_as_text = PG_ARGISNULL(have_record_arg ? 2 : 1) ? false :
 		PG_GETARG_BOOL(have_record_arg ? 2 : 1);
 
 	if (have_record_arg)
 	{
-		 argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
+		argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 
-		 if (!type_is_rowtype(argtype))
-			 ereport(ERROR,
-					 (errcode(ERRCODE_DATATYPE_MISMATCH),
-					  errmsg("first argument of json%s_populate_record must be a row type", jtype == JSONBOID ? "b" : "")));
+		if (!type_is_rowtype(argtype))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("first argument of json%s_populate_record must be a row type", jtype == JSONBOID ? "b" : "")));
 
-		 if (PG_ARGISNULL(0))
-		 {
-			 if (PG_ARGISNULL(1))
-				 PG_RETURN_NULL();
-			 
-			 /*
-			  * have no tuple to look at, so the only source of type info is the
-			  * argtype. The lookup_rowtype_tupdesc call below will error out if we
-			  * don't have a known composite type oid here.
-			  */
-			 tupType = argtype;
-			 tupTypmod = -1;
-		 }
-		 else
-		 {
-			 rec = PG_GETARG_HEAPTUPLEHEADER(0);
+		if (PG_ARGISNULL(0))
+		{
+			if (PG_ARGISNULL(1))
+				PG_RETURN_NULL();
 
-			 if (PG_ARGISNULL(1))
-				 PG_RETURN_POINTER(rec);
-			 
-			 /* Extract type info from the tuple itself */
-			 tupType = HeapTupleHeaderGetTypeId(rec);
-			 tupTypmod = HeapTupleHeaderGetTypMod(rec);
-		 }
-		 
-		 tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
+			/*
+			 * have no tuple to look at, so the only source of type info is
+			 * the argtype. The lookup_rowtype_tupdesc call below will error
+			 * out if we don't have a known composite type oid here.
+			 */
+			tupType = argtype;
+			tupTypmod = -1;
+		}
+		else
+		{
+			rec = PG_GETARG_HEAPTUPLEHEADER(0);
+
+			if (PG_ARGISNULL(1))
+				PG_RETURN_POINTER(rec);
+
+			/* Extract type info from the tuple itself */
+			tupType = HeapTupleHeaderGetTypeId(rec);
+			tupTypmod = HeapTupleHeaderGetTypMod(rec);
+		}
+
+		tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
 	}
 	else
-	{       /* json{b}_to_record case */
-		
-        use_json_as_text = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	{							/* json{b}_to_record case */
 
-        if (PG_ARGISNULL(0))
-            PG_RETURN_NULL();
+		use_json_as_text = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+
+		if (PG_ARGISNULL(0))
+			PG_RETURN_NULL();
 
 		get_call_result_type(fcinfo, NULL, &tupdesc);
 	}
@@ -2557,23 +2557,23 @@ populate_recordset_worker(PG_FUNCTION_ARGS, bool have_record_arg)
 	int			ncolumns;
 	PopulateRecordsetState *state;
 
-    if (have_record_arg)
-    {
-        argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	if (have_record_arg)
+	{
+		argtype = get_fn_expr_argtype(fcinfo->flinfo, 0);
 
-        use_json_as_text = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+		use_json_as_text = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 
-        if (!type_is_rowtype(argtype))
-            ereport(ERROR,
-                    (errcode(ERRCODE_DATATYPE_MISMATCH),
-                     errmsg("first argument of json_populate_recordset must be a row type")));
-    }
-    else
-    {
-        argtype = InvalidOid;
+		if (!type_is_rowtype(argtype))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("first argument of json_populate_recordset must be a row type")));
+	}
+	else
+	{
+		argtype = InvalidOid;
 
-        use_json_as_text = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
-    }
+		use_json_as_text = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	}
 
 	rsi = (ReturnSetInfo *) fcinfo->resultinfo;
 
@@ -2590,8 +2590,8 @@ populate_recordset_worker(PG_FUNCTION_ARGS, bool have_record_arg)
 
 	/*
 	 * get the tupdesc from the result set info - it must be a record type
-	 * because we already checked that arg1 is a record type, or we're
-	 * in a to_record function which returns a setof record.
+	 * because we already checked that arg1 is a record type, or we're in a
+	 * to_record function which returns a setof record.
 	 */
 	(void) get_call_result_type(fcinfo, NULL, &tupdesc);
 
@@ -2600,7 +2600,7 @@ populate_recordset_worker(PG_FUNCTION_ARGS, bool have_record_arg)
 	{
 		if (PG_ARGISNULL(1))
 			PG_RETURN_NULL();
-		
+
 		if (PG_ARGISNULL(0))
 			rec = NULL;
 		else
