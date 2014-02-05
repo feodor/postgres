@@ -184,140 +184,32 @@ jsonb_in(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(JsonbValueToJsonb(state.res));
 }
 
-static void recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header);
-
-static void
-recvJsonbValue(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
-{
-	uint32		hentry = header & JENTRY_TYPEMASK;
-
-	check_stack_depth();
-
-	if (hentry == JENTRY_ISNULL)
-	{
-		v->type = jbvNull;
-		v->size = sizeof(JEntry);
-	}
-	else if (hentry == JENTRY_ISOBJECT || hentry == JENTRY_ISARRAY || hentry == JENTRY_ISSCALAR)
-	{
-		recvJsonb(buf, v, level + 1, header);
-	}
-	else if (hentry == JENTRY_ISFALSE || hentry == JENTRY_ISTRUE)
-	{
-		v->type = jbvBool;
-		v->size = sizeof(JEntry);
-		v->boolean = (hentry == JENTRY_ISFALSE) ? false : true;
-	}
-	else if (hentry == JENTRY_ISNUMERIC)
-	{
-		v->type = jbvNumeric;
-		v->numeric = DatumGetNumeric(DirectFunctionCall3(numeric_recv, PointerGetDatum(buf),
-									   Int32GetDatum(0), Int32GetDatum(-1)));
-		v->size = sizeof(JEntry) + VARSIZE_ANY(v->numeric) + 
-					sizeof(JEntry) /* reserved for aligment */;
-	}
-	else if (hentry == JENTRY_ISSTRING)
-	{
-		int c;
-
-		v->type = jbvString;
-		v->string.val = pq_getmsgtext(buf, header & ~JENTRY_TYPEMASK, &c);
-		v->string.len = checkStringLen(c);
-		v->size = sizeof(JEntry) + v->string.len;
-	}
-	else
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
-				 errmsg("unknown jsonb value")));
-	}
-}
-
-static void
-recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
-{
-	uint32		hentry;
-	uint32		i;
-
-	check_stack_depth();
-
-	hentry = header & JENTRY_TYPEMASK;
-
-	v->size = 3 * sizeof(JEntry) /* parent's entry + our header + alignment */;
-	if (hentry == JENTRY_ISOBJECT)
-	{
-		v->type = jbvHash;
-		v->hash.npairs = header & JB_COUNT_MASK;
-	
-		if (v->hash.npairs > (buf->len  - buf->cursor) / (2 * sizeof(uint32)))
-			ereport(ERROR,
-					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-					 errmsg("too much elements in jsonb object")));
-
-		if (v->hash.npairs > 0)
-		{
-			v->hash.pairs = palloc(sizeof(*v->hash.pairs) * v->hash.npairs);
-
-			for (i = 0; i < v->hash.npairs; i++)
-			{
-				recvJsonbValue(buf, &v->hash.pairs[i].key, level, pq_getmsgint(buf, 4));
-				if (v->hash.pairs[i].key.type != jbvString)
-					ereport(ERROR,
-							(errcode(ERRCODE_DATATYPE_MISMATCH),
-							 errmsg("jsonb's key could be only a string")));
-
-				recvJsonbValue(buf, &v->hash.pairs[i].value, level, (uint32)pq_getmsgint(buf, 4));
-
-				v->size += v->hash.pairs[i].key.size + v->hash.pairs[i].value.size;
-			}
-
-			uniqueJsonbValue(v);
-		}
-	}
-	else if (hentry == JENTRY_ISARRAY || hentry == JENTRY_ISSCALAR)
-	{
-		v->type = jbvArray;
-		v->array.nelems = header & JB_COUNT_MASK;
-		v->array.scalar = (hentry == JENTRY_ISSCALAR) ? true : false;
-
-		if (v->hash.npairs > (buf->len  - buf->cursor) / sizeof(uint32))
-			ereport(ERROR,
-					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-					 errmsg("too much elements in jsonb array")));
-
-		if (v->array.scalar && v->array.nelems != 1)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
-					 errmsg("wrong scalar representation")));
-
-		if (v->array.nelems > 0)
-		{
-			v->array.elems = palloc(sizeof(*v->array.elems) * v->array.nelems);
-
-			for (i = 0; i < v->array.nelems; i++)
-			{
-				recvJsonbValue(buf, v->array.elems + i, level, (uint32)pq_getmsgint(buf, 4));
-				v->size += v->array.elems[i].size;
-			}
-		}
-	}
-	else
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
-				 errmsg("unknown jsonb element")));
-	}
-}
-
 Datum
 jsonb_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
-	JsonbValue	v;
+	text	   *result = cstring_to_text_with_len(buf->data, buf->len);
+	JsonLexContext *lex;
+	JsonbInState state;
+	JsonSemAction sem;
 
-	recvJsonb(buf, &v, 0, pq_getmsgint(buf, 4));
+	memset(&state, 0, sizeof(state));
+	memset(&sem, 0, sizeof(sem));
+	lex = makeJsonLexContext(result, true);
 
-	PG_RETURN_POINTER(JsonbValueToJsonb(&v));
+	sem.semstate = (void *) &state;
+
+	sem.object_start = jsonb_in_object_start;
+	sem.array_start = jsonb_in_array_start;
+	sem.object_end = jsonb_in_object_end;
+	sem.array_end = jsonb_in_array_end;
+	sem.scalar = jsonb_in_scalar;
+	sem.object_field_start = jsonb_in_object_field_start;
+
+	pg_parse_json(lex, &sem);
+
+	/* after parsing, the item member has the composed jsonb structure */
+	PG_RETURN_POINTER(JsonbValueToJsonb(state.res));
 }
 
 static void
@@ -462,75 +354,15 @@ jsonb_out(PG_FUNCTION_ARGS)
 Datum
 jsonb_send(PG_FUNCTION_ARGS)
 {
-	Jsonb	   *in = PG_GETARG_JSONB(0);
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	StringInfoData buf;
+	char	   *out;
 
-	pq_begintypsend(&buf);
+	out = JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb));
 
-	if (JB_ISEMPTY(in))
-	{
-		pq_sendint(&buf, 0, 4);
-	}
-	else
-	{
-		JsonbIterator *it;
-		int			type;
-		JsonbValue	v;
-		uint32		flag;
-		bytea	   *nbuf;
-
-		enlargeStringInfo(&buf, VARSIZE_ANY(in) /* just estimation */ );
-
-		it = JsonbIteratorInit(VARDATA_ANY(in));
-
-		while ((type = JsonbIteratorGet(&it, &v, false)) != 0)
-		{
-			switch (type)
-			{
-				case WJB_BEGIN_ARRAY:
-					flag = (v.array.scalar) ? JENTRY_ISSCALAR : JENTRY_ISARRAY;
-					pq_sendint(&buf, v.array.nelems | flag, 4);
-					break;
-				case WJB_BEGIN_OBJECT:
-					pq_sendint(&buf, v.hash.npairs | JENTRY_ISOBJECT, 4);
-					break;
-				case WJB_KEY:
-					pq_sendint(&buf, v.string.len | JENTRY_ISSTRING, 4);
-					pq_sendtext(&buf, v.string.val, v.string.len);
-					break;
-				case WJB_ELEM:
-				case WJB_VALUE:
-					switch (v.type)
-					{
-						case jbvNull:
-							pq_sendint(&buf, JENTRY_ISNULL, 4);
-							break;
-						case jbvString:
-							pq_sendint(&buf, v.string.len | JENTRY_ISSTRING, 4);
-							pq_sendtext(&buf, v.string.val, v.string.len);
-							break;
-						case jbvBool:
-							pq_sendint(&buf, (v.boolean) ? JENTRY_ISTRUE : JENTRY_ISFALSE, 4);
-							break;
-						case jbvNumeric:
-							nbuf = DatumGetByteaP(DirectFunctionCall1(numeric_send, NumericGetDatum(v.numeric)));
-							pq_sendint(&buf, ((int)VARSIZE_ANY_EXHDR(nbuf)) | JENTRY_ISNUMERIC, 4);
-							pq_sendbytes(&buf,  VARDATA(nbuf), (int)VARSIZE_ANY_EXHDR(nbuf));
-							break;
-						default:
-							elog(ERROR, "unknown jsonb scalar type");
-					}
-					break;
-				case WJB_END_ARRAY:
-				case WJB_END_OBJECT:
-					break;
-				default:
-					elog(ERROR, "unknown flag of jsonb iterator");
-			}
-		}
-	}
-
-	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+    pq_begintypsend(&buf);
+    pq_sendtext(&buf, out, strlen(out));
+    PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
 
 Datum
