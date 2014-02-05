@@ -13,6 +13,7 @@
  */
 
 #include "postgres.h"
+#include "miscadmin.h"
 #include "libpq/pqformat.h"
 #include "utils/builtins.h"
 #include "utils/json.h"
@@ -190,12 +191,14 @@ recvJsonbValue(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
 {
 	uint32		hentry = header & JENTRY_TYPEMASK;
 
+	check_stack_depth();
+
 	if (hentry == JENTRY_ISNULL)
 	{
 		v->type = jbvNull;
 		v->size = sizeof(JEntry);
 	}
-	else if (hentry == JENTRY_ISOBJECT || hentry == JENTRY_ISARRAY || hentry == JENTRY_ISCALAR)
+	else if (hentry == JENTRY_ISOBJECT || hentry == JENTRY_ISARRAY || hentry == JENTRY_ISSCALAR)
 	{
 		recvJsonb(buf, v, level + 1, header);
 	}
@@ -210,7 +213,8 @@ recvJsonbValue(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
 		v->type = jbvNumeric;
 		v->numeric = DatumGetNumeric(DirectFunctionCall3(numeric_recv, PointerGetDatum(buf),
 									   Int32GetDatum(0), Int32GetDatum(-1)));
-		v->size = sizeof(JEntry) * 2 + VARSIZE_ANY(v->numeric);
+		v->size = sizeof(JEntry) + VARSIZE_ANY(v->numeric) + 
+					sizeof(JEntry) /* reserved for aligment */;
 	}
 	else if (hentry == JENTRY_ISSTRING)
 	{
@@ -223,7 +227,9 @@ recvJsonbValue(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
 	}
 	else
 	{
-		elog(ERROR, "bogus input");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
+				 errmsg("unknown jsonb value")));
 	}
 }
 
@@ -233,13 +239,21 @@ recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
 	uint32		hentry;
 	uint32		i;
 
+	check_stack_depth();
+
 	hentry = header & JENTRY_TYPEMASK;
 
-	v->size = 3 * sizeof(JEntry);
+	v->size = 3 * sizeof(JEntry) /* parent's entry + our header + alignment */;
 	if (hentry == JENTRY_ISOBJECT)
 	{
 		v->type = jbvHash;
 		v->hash.npairs = header & JB_COUNT_MASK;
+	
+		if (v->hash.npairs > (buf->len  - buf->cursor) / (2 * sizeof(uint32)))
+			ereport(ERROR,
+					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+					 errmsg("too much elements in jsonb object")));
+
 		if (v->hash.npairs > 0)
 		{
 			v->hash.pairs = palloc(sizeof(*v->hash.pairs) * v->hash.npairs);
@@ -248,7 +262,9 @@ recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
 			{
 				recvJsonbValue(buf, &v->hash.pairs[i].key, level, pq_getmsgint(buf, 4));
 				if (v->hash.pairs[i].key.type != jbvString)
-					elog(ERROR, "jsonb's key could be only a string");
+					ereport(ERROR,
+							(errcode(ERRCODE_DATATYPE_MISMATCH),
+							 errmsg("jsonb's key could be only a string")));
 
 				recvJsonbValue(buf, &v->hash.pairs[i].value, level, (uint32)pq_getmsgint(buf, 4));
 
@@ -258,14 +274,21 @@ recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
 			uniqueJsonbValue(v);
 		}
 	}
-	else if (hentry == JENTRY_ISARRAY || hentry == JENTRY_ISCALAR)
+	else if (hentry == JENTRY_ISARRAY || hentry == JENTRY_ISSCALAR)
 	{
 		v->type = jbvArray;
 		v->array.nelems = header & JB_COUNT_MASK;
-		v->array.scalar = (hentry == JENTRY_ISCALAR) ? true : false;
+		v->array.scalar = (hentry == JENTRY_ISSCALAR) ? true : false;
+
+		if (v->hash.npairs > (buf->len  - buf->cursor) / sizeof(uint32))
+			ereport(ERROR,
+					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+					 errmsg("too much elements in jsonb array")));
 
 		if (v->array.scalar && v->array.nelems != 1)
-			elog(ERROR, "bogus input");
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
+					 errmsg("wrong scalar representation")));
 
 		if (v->array.nelems > 0)
 		{
@@ -280,7 +303,9 @@ recvJsonb(StringInfo buf, JsonbValue *v, uint32 level, uint32 header)
 	}
 	else
 	{
-		elog(ERROR, "bogus input");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
+				 errmsg("unknown jsonb element")));
 	}
 }
 
@@ -320,6 +345,11 @@ putEscapedValue(StringInfo out, JsonbValue *v)
 	}
 }
 
+/*
+ * JsonbToCString
+ *     Converts jsonb value in C-string. If out argument is not null
+ * then resulting C-string is placed in it. Return pointer to string
+ */
 char *
 JsonbToCString(StringInfo out, char *in, int estimated_len)
 {
@@ -453,7 +483,7 @@ jsonb_send(PG_FUNCTION_ARGS)
 			switch (type)
 			{
 				case WJB_BEGIN_ARRAY:
-					flag = (v.array.scalar) ? JENTRY_ISCALAR : JENTRY_ISARRAY;
+					flag = (v.array.scalar) ? JENTRY_ISSCALAR : JENTRY_ISARRAY;
 					pq_sendint(&buf, v.array.nelems | flag, 4);
 					break;
 				case WJB_BEGIN_OBJECT:

@@ -110,7 +110,7 @@ recvHStoreValue(StringInfo buf, HStoreValue *v, uint32 level, int c)
 		v->size = sizeof(HEntry);
 	}
 	else if (hentry == HENTRY_ISHASH || hentry == HENTRY_ISARRAY ||
-			 hentry == HENTRY_ISCALAR)
+			 hentry == HENTRY_ISSCALAR)
 	{
 		recvHStore(buf, v, level + 1, (uint32)c);
 	}
@@ -179,11 +179,11 @@ recvHStore(StringInfo buf, HStoreValue *v, uint32 level, uint32 header)
 			uniqueHStoreValue(v);
 		}
 	}
-	else if (hentry == HENTRY_ISARRAY || hentry == HENTRY_ISCALAR)
+	else if (hentry == HENTRY_ISARRAY || hentry == HENTRY_ISSCALAR)
 	{
 		v->type = hsvArray;
 		v->array.nelems = header & HS_COUNT_MASK;
-		v->array.scalar = (hentry == HENTRY_ISCALAR) ? true : false;
+		v->array.scalar = (hentry == HENTRY_ISSCALAR) ? true : false;
 
 		if (v->array.scalar && v->array.nelems != 1)
 			elog(ERROR, "bogus input");
@@ -1506,7 +1506,7 @@ hstore_send(PG_FUNCTION_ARGS)
 			switch(type)
 			{
 				case WHS_BEGIN_ARRAY:
-					flag = (v.array.scalar) ? HENTRY_ISCALAR : HENTRY_ISARRAY;
+					flag = (v.array.scalar) ? HENTRY_ISSCALAR : HENTRY_ISARRAY;
 					pq_sendint(&buf, v.array.nelems | flag, 4);
 					break;
 				case WHS_BEGIN_HASH:
