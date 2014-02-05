@@ -411,6 +411,11 @@ reout:
 				else
 				{
 					Assert(type == WJB_BEGIN_OBJECT || type == WJB_BEGIN_ARRAY);
+					/*
+					 * We need to rerun current switch() due to put 
+					 * in current place object which we just got 
+					 * from iterator.
+					 */
 					goto reout;
 				}
 				break;
