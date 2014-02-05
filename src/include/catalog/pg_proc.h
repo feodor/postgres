@@ -3034,9 +3034,9 @@ DATA(insert OID = 2625 ( pg_ls_dir			PGNSP PGUID 12 1 1000 0 0 f f f f t t v 1 0
 DESCR("list all files in a directory");
 DATA(insert OID = 2626 ( pg_sleep			PGNSP PGUID 12 1 0 0 0 f f f f t f v 1 0 2278 "701" _null_ _null_ _null_ _null_ pg_sleep _null_ _null_ _null_ ));
 DESCR("sleep for the specified time in seconds");
-DATA(insert OID = 3935 ( pg_sleep_for			PGNSP PGUID 14 1 0 0 0 f f f f t f v 1 0 2278 "1186" _null_ _null_ _null_ _null_ "select pg_catalog.pg_sleep(extract(epoch from pg_catalog.now() operator(pg_catalog.+) $1) operator(pg_catalog.-) extract(epoch from pg_catalog.now()))" _null_ _null_ _null_ ));
+DATA(insert OID = 3935 ( pg_sleep_for			PGNSP PGUID 14 1 0 0 0 f f f f t f v 1 0 2278 "1186" _null_ _null_ _null_ _null_ "select pg_catalog.pg_sleep(extract(epoch from pg_catalog.clock_timestamp() operator(pg_catalog.+) $1) operator(pg_catalog.-) extract(epoch from pg_catalog.clock_timestamp()))" _null_ _null_ _null_ ));
 DESCR("sleep for the specified interval");
-DATA(insert OID = 3936 ( pg_sleep_until			PGNSP PGUID 14 1 0 0 0 f f f f t f v 1 0 2278 "1184" _null_ _null_ _null_ _null_ "select pg_catalog.pg_sleep(extract(epoch from $1) operator(pg_catalog.-) extract(epoch from pg_catalog.now()))" _null_ _null_ _null_ ));
+DATA(insert OID = 3936 ( pg_sleep_until			PGNSP PGUID 14 1 0 0 0 f f f f t f v 1 0 2278 "1184" _null_ _null_ _null_ _null_ "select pg_catalog.pg_sleep(extract(epoch from $1) operator(pg_catalog.-) extract(epoch from pg_catalog.clock_timestamp()))" _null_ _null_ _null_ ));
 DESCR("sleep until the specified time");
 
 DATA(insert OID = 2971 (  text				PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 25 "16" _null_ _null_ _null_ _null_ booltext _null_ _null_ _null_ ));
@@ -4819,6 +4819,14 @@ DATA(insert OID = 3472 (  spg_range_quad_inner_consistent	PGNSP PGUID 12 1 0 0 0
 DESCR("SP-GiST support for quad tree over range");
 DATA(insert OID = 3473 (  spg_range_quad_leaf_consistent	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "2281 2281" _null_ _null_ _null_ _null_  spg_range_quad_leaf_consistent _null_ _null_ _null_ ));
 DESCR("SP-GiST support for quad tree over range");
+
+/* replication slots */
+DATA(insert OID = 3779 (  pg_create_physical_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2249 "19" "{19,25,25}" "{i,o,o}" "{slotname,slotname,xlog_position}" _null_ pg_create_physical_replication_slot _null_ _null_ _null_ ));
+DESCR("create a physical replication slot");
+DATA(insert OID = 3780 (  pg_drop_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2278 "19" _null_ _null_ _null_ _null_ pg_drop_replication_slot _null_ _null_ _null_ ));
+DESCR("drop a replication slot");
+DATA(insert OID = 3781 (  pg_get_replication_slots	PGNSP PGUID 12 1 10 0 0 f f f f f t s 0 0 2249 "" "{25,25,26,16,28,25}" "{o,o,o,o,o,o}" "{slot_name,slot_type,datoid,active,xmin,restart_lsn}" _null_ pg_get_replication_slots _null_ _null_ _null_ ));
+DESCR("information about replication slots currently in use");
 
 /* event triggers */
 DATA(insert OID = 3566 (  pg_event_trigger_dropped_objects		PGNSP PGUID 12 10 100 0 0 f f f f t t s 0 0 2249 "" "{26,26,23,25,25,25,25}" "{o,o,o,o,o,o,o}" "{classid, objid, objsubid, object_type, schema_name, object_name, object_identity}" _null_ pg_event_trigger_dropped_objects _null_ _null_ _null_ ));
