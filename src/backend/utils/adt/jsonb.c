@@ -20,6 +20,9 @@
 #include "utils/jsonapi.h"
 #include "utils/jsonb.h"
 
+static inline Datum deserialize_json_text(text *json);
+
+
 static size_t
 checkStringLen(size_t len)
 {
@@ -40,7 +43,6 @@ typedef struct JsonbInState
 /*
  * for jsonb we always want the de-escaped value - that's what's in token
  */
-
 static void
 jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 {
@@ -75,7 +77,9 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 		case JSON_TOKEN_NULL:
 			v.type = jbvNull;
 			break;
-		default:				/* nothing else should be here in fact */
+		default:
+			/* nothing else should be here in fact */
+			Assert(false);
 			break;
 	}
 
@@ -156,46 +160,52 @@ jsonb_in_object_field_start(void *state, char *fname, bool isnull)
 	_state->res = pushJsonbValue(&_state->state, WJB_KEY, &v);
 }
 
+/*
+ * jsonb type input function
+ *
+ */
 Datum
 jsonb_in(PG_FUNCTION_ARGS)
 {
 	char	   *json = PG_GETARG_CSTRING(0);
 	text	   *result = cstring_to_text(json);
-	JsonLexContext *lex;
-	JsonbInState state;
-	JsonSemAction sem;
 
-	memset(&state, 0, sizeof(state));
-	memset(&sem, 0, sizeof(sem));
-	lex = makeJsonLexContext(result, true);
-
-	sem.semstate = (void *) &state;
-
-	sem.object_start = jsonb_in_object_start;
-	sem.array_start = jsonb_in_array_start;
-	sem.object_end = jsonb_in_object_end;
-	sem.array_end = jsonb_in_array_end;
-	sem.scalar = jsonb_in_scalar;
-	sem.object_field_start = jsonb_in_object_field_start;
-
-	pg_parse_json(lex, &sem);
-
-	/* after parsing, the item membar has the composed jsonn structure */
-	PG_RETURN_POINTER(JsonbValueToJsonb(state.res));
+	return deserialize_json_text(result);
 }
 
+/*
+ * jsonb type recv function
+ *
+ * the type is sent as text in binary mode, so this is almost the same
+ * as the input function.
+ */
 Datum
 jsonb_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
 	text	   *result = cstring_to_text_with_len(buf->data, buf->len);
+	
+	return deserialize_json_text(result);
+}
+
+
+/*
+ * deserialize_json_text
+ *
+ * turn json text into a jsonb Datum.
+ *
+ * uses the json parser with hooks to contruct the jsonb.
+ */
+static inline Datum
+deserialize_json_text(text *json)
+{
 	JsonLexContext *lex;
 	JsonbInState state;
 	JsonSemAction sem;
 
 	memset(&state, 0, sizeof(state));
 	memset(&sem, 0, sizeof(sem));
-	lex = makeJsonLexContext(result, true);
+	lex = makeJsonLexContext(json, true);
 
 	sem.semstate = (void *) &state;
 
@@ -240,7 +250,10 @@ putEscapedValue(StringInfo out, JsonbValue *v)
 /*
  * JsonbToCString
  *     Converts jsonb value in C-string. If out argument is not null
- * then resulting C-string is placed in it. Return pointer to string
+ * then resulting C-string is placed in it. Return pointer to string.
+ * A typical case for passing the StringInfo in rather than NULL is where
+ * the caller wants access to the len attribute without having to call
+ * strlen, e.g. if they are converting it to a text* object.
  */
 char *
 JsonbToCString(StringInfo out, char *in, int estimated_len)
@@ -250,6 +263,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 	int			type;
 	JsonbValue	v;
 	int			level = 0;
+	bool        redo_switch = false;
 
 	if (out == NULL)
 		out = makeStringInfo();
@@ -264,9 +278,9 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 
 	it = JsonbIteratorInit(in);
 
-	while ((type = JsonbIteratorGet(&it, &v, false)) != 0)
+	while (redo_switch || ((type = JsonbIteratorGet(&it, &v, false)) != 0))
 	{
-reout:
+		redo_switch = false;
 		switch (type)
 		{
 			case WJB_BEGIN_ARRAY:
@@ -308,7 +322,7 @@ reout:
 					 * in current place object which we just got 
 					 * from iterator.
 					 */
-					goto reout;
+					redo_switch = true;
 				}
 				break;
 			case WJB_ELEM:
@@ -340,6 +354,10 @@ reout:
 	return out->data;
 }
 
+
+/*
+ * jsonb type output function
+ */
 Datum
 jsonb_out(PG_FUNCTION_ARGS)
 {
@@ -351,6 +369,11 @@ jsonb_out(PG_FUNCTION_ARGS)
 	PG_RETURN_CSTRING(out);
 }
 
+/*
+ * jsonb type send function
+ *
+ * Just send jsonb as a string of text
+ */
 Datum
 jsonb_send(PG_FUNCTION_ARGS)
 {
@@ -365,6 +388,13 @@ jsonb_send(PG_FUNCTION_ARGS)
     PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
 
+
+/*
+ * SQL function jsonb_typeof(jsonb) -> text
+ *
+ * this function is here because the analog json function is in json.c since
+ * it uses the json parser internals not exposed elsewhere.
+ */
 Datum
 jsonb_typeof(PG_FUNCTION_ARGS)
 {

@@ -48,20 +48,20 @@ static void get_array_element_end(void *state, bool isnull);
 static void get_scalar(void *state, char *token, JsonTokenType tokentype);
 
 /* common worker function for json getter functions */
-static inline Datum get_path_all(PG_FUNCTION_ARGS, bool as_text);
+static inline Datum get_path_all(FunctionCallInfo fcinfo, bool as_text);
 static inline text *get_worker(text *json, char *field, int elem_index,
 		   char **tpath, int *ipath, int npath,
 		   bool normalize_results);
-static inline Datum get_jsonb_path_all(PG_FUNCTION_ARGS, bool as_text);
+static inline Datum get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text);
 
 /* semantic action functions for json_array_length */
 static void alen_object_start(void *state);
 static void alen_scalar(void *state, char *token, JsonTokenType tokentype);
 static void alen_array_element_start(void *state, bool isnull);
 
-/* common worker for json_each* functions */
-static inline Datum each_worker(PG_FUNCTION_ARGS, bool as_text);
-static inline Datum each_worker_jsonb(PG_FUNCTION_ARGS, bool as_text);
+/* common workers for json{b}_each* functions */
+static inline Datum each_worker(FunctionCallInfo fcinfo, bool as_text);
+static inline Datum each_worker_jsonb(FunctionCallInfo fcinfo, bool as_text);
 
 /* semantic action functions for json_each */
 static void each_object_field_start(void *state, char *fname, bool isnull);
@@ -69,8 +69,9 @@ static void each_object_field_end(void *state, char *fname, bool isnull);
 static void each_array_start(void *state);
 static void each_scalar(void *state, char *token, JsonTokenType tokentype);
 
-/* common worker for json_each* functions */
-static inline Datum elements_worker(PG_FUNCTION_ARGS, bool as_text);
+/* common workers for json{b}_array_elements_* functions */
+static inline Datum elements_worker(FunctionCallInfo fcinfo, bool as_text);
+static inline Datum elements_worker_jsonb(FunctionCallInfo fcinfo, bool as_text);
 
 /* semantic action functions for json_array_elements */
 static void elements_object_start(void *state);
@@ -82,7 +83,7 @@ static void elements_scalar(void *state, char *token, JsonTokenType tokentype);
 static HTAB *get_json_object_as_hash(text *json, char *funcname, bool use_json_as_text);
 
 /* common worker for populate_record and to_record */
-static inline Datum populate_record_worker(PG_FUNCTION_ARGS,
+static inline Datum populate_record_worker(FunctionCallInfo fcinfo,
 					   bool have_record_arg);
 
 /* semantic action functions for get_json_object_as_hash */
@@ -101,7 +102,7 @@ static void populate_recordset_array_start(void *state);
 static void populate_recordset_array_element_start(void *state, bool isnull);
 
 /* worker function for populate_recordset and to_recordset */
-static inline Datum populate_recordset_worker(PG_FUNCTION_ARGS,
+static inline Datum populate_recordset_worker(FunctionCallInfo fcinfo,
 						  bool have_record_arg);
 
 /* search type classification for json_get* functions */
@@ -731,7 +732,7 @@ json_extract_path_text(PG_FUNCTION_ARGS)
  * common routine for extract_path functions
  */
 static inline Datum
-get_path_all(PG_FUNCTION_ARGS, bool as_text)
+get_path_all(FunctionCallInfo fcinfo, bool as_text)
 {
 	Oid			val_type = get_fn_expr_argtype(fcinfo->flinfo, 0);
 	text	   *json;
@@ -1154,7 +1155,7 @@ jsonb_extract_path_text(PG_FUNCTION_ARGS)
 }
 
 static inline Datum
-get_jsonb_path_all(PG_FUNCTION_ARGS, bool as_text)
+get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 {
 	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	ArrayType  *path = PG_GETARG_ARRAYTYPE_P(1);
@@ -1379,7 +1380,7 @@ jsonb_each_text(PG_FUNCTION_ARGS)
 }
 
 static inline Datum
-each_worker_jsonb(PG_FUNCTION_ARGS, bool as_text)
+each_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 {
 	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	ReturnSetInfo *rsi;
@@ -1515,7 +1516,7 @@ each_worker_jsonb(PG_FUNCTION_ARGS, bool as_text)
 
 
 static inline Datum
-each_worker(PG_FUNCTION_ARGS, bool as_text)
+each_worker(FunctionCallInfo fcinfo, bool as_text)
 {
 	text	   *json;
 	JsonLexContext *lex;
@@ -1690,6 +1691,18 @@ each_scalar(void *state, char *token, JsonTokenType tokentype)
 Datum
 jsonb_array_elements(PG_FUNCTION_ARGS)
 {
+	return elements_worker_jsonb(fcinfo, false);
+}
+
+Datum
+jsonb_array_elements_text(PG_FUNCTION_ARGS)
+{
+	return elements_worker_jsonb(fcinfo, true);
+}
+
+static inline Datum
+elements_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
+{
 	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	ReturnSetInfo *rsi;
 	Tuplestorestate *tuple_store;
@@ -1755,13 +1768,45 @@ jsonb_array_elements(PG_FUNCTION_ARGS)
 			HeapTuple	tuple;
 			Datum		values[1];
 			bool		nulls[1] = {false};
-			Jsonb	   *val;
 
 			/* use the tmp context so we can clean up after each tuple is done */
 			old_cxt = MemoryContextSwitchTo(tmp_cxt);
 
-			val = JsonbValueToJsonb(&v);
-			values[0] = PointerGetDatum(val);
+			if (! as_text)
+			{
+				Jsonb *val = JsonbValueToJsonb(&v);
+				values[0] = PointerGetDatum(val);
+			}
+			else
+			{
+				if (v.type == jbvNull)
+				{
+					/* a json null is an sql null in text mode */
+					nulls[0] = true;
+					values[0] = (Datum) NULL;
+				}
+				else
+				{
+					text	   *sv;
+
+					if (v.type == jbvString)
+					{
+						/* in text mode scalar strings should be dequoted */
+						sv = cstring_to_text_with_len(v.string.val, v.string.len);
+					}
+					else
+					{
+						/* turn anything else into a json string */
+						StringInfo	jtext = makeStringInfo();
+						Jsonb	   *jb = JsonbValueToJsonb(&v);
+
+						(void) JsonbToCString(jtext, VARDATA(jb), 2 * v.size);
+						sv = cstring_to_text_with_len(jtext->data, jtext->len);
+					}
+
+					values[0] = PointerGetDatum(sv);
+				}
+			}
 
 			tuple = heap_form_tuple(ret_tdesc, values, nulls);
 
@@ -1794,7 +1839,7 @@ json_array_elements_text(PG_FUNCTION_ARGS)
 }
 
 static inline Datum
-elements_worker(PG_FUNCTION_ARGS, bool as_text)
+elements_worker(FunctionCallInfo fcinfo, bool as_text)
 {
 	text	   *json = PG_GETARG_TEXT_P(0);
 
@@ -1986,7 +2031,7 @@ json_to_record(PG_FUNCTION_ARGS)
 }
 
 static inline Datum
-populate_record_worker(PG_FUNCTION_ARGS, bool have_record_arg)
+populate_record_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 {
 	Oid			argtype;
 	Oid			jtype = get_fn_expr_argtype(fcinfo->flinfo, have_record_arg ? 1 : 0);
@@ -2550,7 +2595,7 @@ json_to_recordset(PG_FUNCTION_ARGS)
  * common worker for json_populate_recordset() and json_to_recordset()
  */
 static inline Datum
-populate_recordset_worker(PG_FUNCTION_ARGS, bool have_record_arg)
+populate_recordset_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 {
 	Oid			argtype;
 	Oid			jtype = get_fn_expr_argtype(fcinfo->flinfo, have_record_arg ? 1 : 0);

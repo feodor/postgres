@@ -667,6 +667,30 @@ select * from jsonb_array_elements('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]}
  false
 (6 rows)
 
+select jsonb_array_elements_text('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false,"stringy"]');
+ jsonb_array_elements_text  
+----------------------------
+ 1
+ true
+ [1, [2, 3]]
+ 
+ {"f1": 1, "f2": [7, 8, 9]}
+ false
+ stringy
+(7 rows)
+
+select * from jsonb_array_elements_text('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false,"stringy"]') q;
+           value            
+----------------------------
+ 1
+ true
+ [1, [2, 3]]
+ 
+ {"f1": 1, "f2": [7, 8, 9]}
+ false
+ stringy
+(7 rows)
+
 -- populate_record
 create type jbpop as (a text, b int, c timestamp);
 select * from jsonb_populate_record(null::jbpop,'{"a":"blurfl","x":43.2}') q;
