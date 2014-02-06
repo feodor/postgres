@@ -40,6 +40,15 @@ typedef struct
 #define JENTRY_ISFALSE		JENTRY_ISBOOL
 #define JENTRY_ISTRUE		(0x10000000 | 0x20000000 | 0x40000000)
 
+/* 
+ * JENTRY_ISOBJECT, JENTRY_ISARRAY and JENTRY_ISSCALAR are only used in 
+ * hstore send/recv. They are defined here because so are all the other
+ * JENTRY_IS* constants.
+ */
+#define JENTRY_ISOBJECT		(0x20000000)
+#define JENTRY_ISARRAY		(0x20000000 | 0x40000000)
+#define JENTRY_ISSCALAR		(0x10000000 | 0x40000000)
+
 #define JENTRY_POSMASK	0x0FFFFFFF
 #define JENTRY_TYPEMASK (~(JENTRY_POSMASK | JENTRY_ISFIRST))
 
