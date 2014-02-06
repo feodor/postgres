@@ -184,7 +184,7 @@ jsonb_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
 	text	   *result = cstring_to_text_with_len(buf->data, buf->len);
-	
+
 	return deserialize_json_text(result);
 }
 
@@ -318,8 +318,8 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				{
 					Assert(type == WJB_BEGIN_OBJECT || type == WJB_BEGIN_ARRAY);
 					/*
-					 * We need to rerun current switch() due to put 
-					 * in current place object which we just got 
+					 * We need to rerun current switch() due to put
+					 * in current place object which we just got
 					 * from iterator.
 					 */
 					redo_switch = true;
@@ -383,11 +383,10 @@ jsonb_send(PG_FUNCTION_ARGS)
 
 	out = JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb));
 
-    pq_begintypsend(&buf);
-    pq_sendtext(&buf, out, strlen(out));
-    PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+	pq_begintypsend(&buf);
+	pq_sendtext(&buf, out, strlen(out));
+	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
-
 
 /*
  * SQL function jsonb_typeof(jsonb) -> text
