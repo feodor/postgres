@@ -1505,6 +1505,8 @@ each_worker_jsonb(PG_FUNCTION_ARGS, bool as_text)
 		}
 	}
 
+	MemoryContextDelete(tmp_cxt);
+
 	rsi->setResult = tuple_store;
 	rsi->setDesc = ret_tdesc;
 
@@ -1770,6 +1772,8 @@ jsonb_array_elements(PG_FUNCTION_ARGS)
 			MemoryContextReset(tmp_cxt);
 		}
 	}
+
+	MemoryContextDelete(tmp_cxt);
 
 	rsi->setResult = tuple_store;
 	rsi->setDesc = ret_tdesc;
