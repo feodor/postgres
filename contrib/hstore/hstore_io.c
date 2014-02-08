@@ -1870,46 +1870,6 @@ hstore_print(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(out);
 }
 
-PG_FUNCTION_INFO_V1(hstore2jsonb);
-Datum		hstore2jsonb(PG_FUNCTION_ARGS);
-Datum
-hstore2jsonb(PG_FUNCTION_ARGS)
-{
-	HStore	*hs = PG_GETARG_HS(0);
-	Jsonb	*jb = palloc(VARSIZE_ANY(hs));
-
-	memcpy(jb, hs, VARSIZE_ANY(hs));
-
-	if (VARSIZE_ANY_EXHDR(jb) >= sizeof(uint32))
-	{
-		uint32 *header = (uint32*)VARDATA_ANY(jb);
-
-		*header &= ~JB_FLAG_UNUSED;
-	}
-
-	PG_RETURN_JSONB(jb);
-}
-
-PG_FUNCTION_INFO_V1(jsonb2hstore);
-Datum		jsonb2hstore(PG_FUNCTION_ARGS);
-Datum
-jsonb2hstore(PG_FUNCTION_ARGS)
-{
-	Jsonb	*jb = PG_GETARG_JSONB(0);
-	HStore	*hs = palloc(VARSIZE_ANY(jb));
-
-	memcpy(hs, jb, VARSIZE_ANY(jb));
-
-	if (VARSIZE_ANY_EXHDR(hs) >= sizeof(uint32))
-	{
-		uint32	*header = (uint32*)VARDATA_ANY(hs);
-
-		*header |= HS_FLAG_NEWVERSION;
-	}
-
-	PG_RETURN_POINTER(hs);
-}
-
 void _PG_init(void);
 void
 _PG_init(void)
@@ -1935,12 +1895,11 @@ compressHStore(HStoreValue *v, char *buffer)
 {
 	uint32	l = compressJsonb(v, buffer);
 
-	if (l > sizeof(uint32))
-	{
-		uint32	*header = (uint32*)buffer;
-
-		*header |= HS_FLAG_NEWVERSION;
-	}
+	/*
+	 * Check for the future: currently jsonb has this true, but in
+	 * future it could be changed
+	 */
+	Assert(l < sizeof(uint32) || ( *(uint32*)buffer & HS_FLAG_NEWVERSION ));
 
 	return l;
 }

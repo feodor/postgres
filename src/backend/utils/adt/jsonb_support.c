@@ -1102,6 +1102,9 @@ compressJsonb(JsonbValue *v, char *buffer)
 	l = state.ptr - buffer;
 	Assert(l <= v->size);
 
+	if (l>= sizeof(uint32))
+		*(uint32*)buffer |= JB_FLAG_HSTORE_COMPAT;
+
 	return l;
 }
 

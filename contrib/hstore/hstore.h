@@ -59,7 +59,7 @@ typedef Jsonb HStore;
  * so we reserve the top few bits of the size field. See hstore_compat.c
  * for one reason why.	Some bits are left for future use here.
  */
-#define HS_FLAG_NEWVERSION 		0x80000000
+#define HS_FLAG_NEWVERSION 		JB_FLAG_HSTORE_COMPAT
 #define HS_FLAG_ARRAY			JB_FLAG_ARRAY
 #define HS_FLAG_HASH			JB_FLAG_OBJECT
 #define HS_FLAG_SCALAR			JB_FLAG_SCALAR
