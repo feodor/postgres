@@ -177,15 +177,32 @@ jsonb_in(PG_FUNCTION_ARGS)
  * jsonb type recv function
  *
  * the type is sent as text in binary mode, so this is almost the same
- * as the input function.
+ * as the input function, but it's prefixed with a version number so we
+ * can change the binary format sent in future if necessary. For now,
+ * only version 1 is supported.
  */
 Datum
 jsonb_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
-	text	   *result = cstring_to_text_with_len(buf->data, buf->len);
+	int         version = pq_getint(buf, 1);
+	text	   *result;
 
-	return deserialize_json_text(result);
+	if (version == 1)
+	{
+		char       *str;
+		int         nbytes;
+
+		str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
+		result = cstring_to_text_with_len(str, nbytes);
+		pfree(str);
+	}
+	else
+	{
+		elog(ERROR,"Unsupported jsonb version number %d",version);
+	}
+		
+	return deserialize_json_text(result);		
 }
 
 
@@ -380,10 +397,12 @@ jsonb_send(PG_FUNCTION_ARGS)
 	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	StringInfoData buf;
 	char	   *out;
+	int         version = 1; 
 
 	out = JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb));
 
 	pq_begintypsend(&buf);
+	pq_sendint(&buf, version, 1); 
 	pq_sendtext(&buf, out, strlen(out));
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
