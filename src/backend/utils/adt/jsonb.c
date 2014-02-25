@@ -185,7 +185,7 @@ Datum
 jsonb_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
-	int         version = pq_getint(buf, 1);
+	int         version = pq_getmsgint(buf, 1);
 	text	   *result;
 
 	if (version == 1)
