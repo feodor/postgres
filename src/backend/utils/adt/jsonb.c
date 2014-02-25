@@ -201,8 +201,8 @@ jsonb_recv(PG_FUNCTION_ARGS)
 	{
 		elog(ERROR,"Unsupported jsonb version number %d",version);
 	}
-		
-	return deserialize_json_text(result);		
+
+	return deserialize_json_text(result);
 }
 
 
@@ -397,12 +397,12 @@ jsonb_send(PG_FUNCTION_ARGS)
 	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	StringInfoData buf;
 	char	   *out;
-	int         version = 1; 
+	int         version = 1;
 
 	out = JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb));
 
 	pq_begintypsend(&buf);
-	pq_sendint(&buf, version, 1); 
+	pq_sendint(&buf, version, 1);
 	pq_sendtext(&buf, out, strlen(out));
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
