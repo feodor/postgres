@@ -55,9 +55,12 @@ typedef JEntry HEntry;
 typedef Jsonb HStore;
 
 /*
- * it's not possible to get more than 2^28 items into an hstore,
- * so we reserve the top few bits of the size field. See hstore_compat.c
- * for one reason why.	Some bits are left for future use here.
+ * It's not possible to get more than 2^28 items into an hstore, so we reserve
+ * the top few bits of the size field.  See hstore_compat.c for one reason
+ * why.  Some bits are left for future use here.  MaxAllocSize makes the
+ * practical count limit slightly more than 2^28 / 3, or INT_MAX / 24, the
+ * limit for an hstore full of 4-byte keys and null values.  Therefore, we
+ * don't explicitly check the format-imposed limit.
  */
 #define HS_FLAG_NEWVERSION 		JB_FLAG_HSTORE_COMPAT
 #define HS_FLAG_ARRAY			JB_FLAG_ARRAY

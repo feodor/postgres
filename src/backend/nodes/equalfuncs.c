@@ -1503,6 +1503,8 @@ _equalVacuumStmt(const VacuumStmt *a, const VacuumStmt *b)
 	COMPARE_SCALAR_FIELD(options);
 	COMPARE_SCALAR_FIELD(freeze_min_age);
 	COMPARE_SCALAR_FIELD(freeze_table_age);
+	COMPARE_SCALAR_FIELD(multixact_freeze_min_age);
+	COMPARE_SCALAR_FIELD(multixact_freeze_table_age);
 	COMPARE_NODE_FIELD(relation);
 	COMPARE_NODE_FIELD(va_cols);
 
@@ -2237,6 +2239,7 @@ _equalConstraint(const Constraint *a, const Constraint *b)
 	COMPARE_SCALAR_FIELD(fk_upd_action);
 	COMPARE_SCALAR_FIELD(fk_del_action);
 	COMPARE_NODE_FIELD(old_conpfeqop);
+	COMPARE_SCALAR_FIELD(old_pktable_oid);
 	COMPARE_SCALAR_FIELD(skip_validation);
 	COMPARE_SCALAR_FIELD(initially_valid);
 

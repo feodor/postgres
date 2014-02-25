@@ -1883,6 +1883,9 @@ plperl_validator(PG_FUNCTION_ARGS)
 	bool		is_event_trigger = false;
 	int			i;
 
+	if (!CheckFunctionValidatorAccess(fcinfo->flinfo->fn_oid, funcoid))
+		PG_RETURN_VOID();
+
 	/* Get the new function's pg_proc entry */
 	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcoid));
 	if (!HeapTupleIsValid(tuple))
@@ -1964,6 +1967,7 @@ PG_FUNCTION_INFO_V1(plperlu_validator);
 Datum
 plperlu_validator(PG_FUNCTION_ARGS)
 {
+	/* call plperl validator with our fcinfo so it gets our oid */
 	return plperl_validator(fcinfo);
 }
 
@@ -3807,9 +3811,7 @@ hv_store_string(HV *hv, const char *key, SV *val)
 	char	   *hkey;
 	SV		  **ret;
 
-	hkey = (char *)
-		pg_do_encoding_conversion((unsigned char *) key, strlen(key),
-								  GetDatabaseEncoding(), PG_UTF8);
+	hkey = pg_server_to_any(key, strlen(key), PG_UTF8);
 
 	/*
 	 * This seems nowhere documented, but under Perl 5.8.0 and up, hv_store()
@@ -3837,9 +3839,7 @@ hv_fetch_string(HV *hv, const char *key)
 	char	   *hkey;
 	SV		  **ret;
 
-	hkey = (char *)
-		pg_do_encoding_conversion((unsigned char *) key, strlen(key),
-								  GetDatabaseEncoding(), PG_UTF8);
+	hkey = pg_server_to_any(key, strlen(key), PG_UTF8);
 
 	/* See notes in hv_store_string */
 	hlen = -(int) strlen(hkey);

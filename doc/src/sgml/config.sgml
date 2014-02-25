@@ -889,12 +889,71 @@ include 'filename'
       </indexterm>
       <listitem>
        <para>
-        Specifies a list of <acronym>SSL</> ciphers that are allowed to be
+        Specifies a list of <acronym>SSL</> cipher suites that are allowed to be
         used on secure connections.  See
         the <citerefentry><refentrytitle>ciphers</></citerefentry> manual page
         in the <application>OpenSSL</> package for the syntax of this setting
-        and a list of supported values.  The default value is usually
-        reasonable, unless you have specific security requirements.
+        and a list of supported values.  The default value is
+        <literal>HIGH:MEDIUM:+3DES:!aNULL</>.  It is usually reasonable,
+        unless you have specific security requirements.
+       </para>
+
+       <para>
+        Explanation of the default value:
+        <variablelist>
+         <varlistentry>
+          <term><literal>HIGH</literal></term>
+          <listitem>
+           <para>
+            Cipher suites that use ciphers from <literal>HIGH</> group (e.g.,
+            AES, Camellia, 3DES)
+           </para>
+          </listitem>
+         </varlistentry>
+
+         <varlistentry>
+          <term><literal>MEDIUM</literal></term>
+          <listitem>
+           <para>
+            Cipher suites that use ciphers from <literal>MEDIUM</> group
+            (e.g., RC4, SEED)
+           </para>
+          </listitem>
+         </varlistentry>
+
+         <varlistentry>
+          <term><literal>+3DES</literal></term>
+          <listitem>
+           <para>
+            The OpenSSL default order for <literal>HIGH</> is problematic
+            because it orders 3DES higher than AES128.  This is wrong because
+            3DES offers less security than AES128, and it is also much
+            slower.  <literal>+3DES</> reorders it after all other
+            <literal>HIGH</> and <literal>MEDIUM</> ciphers.
+           </para>
+          </listitem>
+         </varlistentry>
+
+         <varlistentry>
+          <term><literal>!aNULL</literal></term>
+          <listitem>
+           <para>
+            Disables anonymous cipher suites that do no authentication.  Such
+            cipher suites are vulnerable to man-in-the-middle attacks and
+            therefore should not be used.
+           </para>
+          </listitem>
+         </varlistentry>
+        </variablelist>
+       </para>
+
+       <para>
+        Available cipher suite details will vary across OpenSSL versions.  Use
+        the command
+        <literal>openssl ciphers -v 'HIGH:MEDIUM:+3DES:!aNULL'</literal> to
+        see actual details for the currently installed <application>OpenSSL</>
+        version.  Note that this list is filtered at run time based on the
+        server key type.
        </para>
       </listitem>
      </varlistentry>
@@ -1213,7 +1272,7 @@ include 'filename'
        <para>
         Specifies the amount of memory to be used by internal sort operations
         and hash tables before writing to temporary disk files. The value
-        defaults to one megabyte (<literal>1MB</>).
+        defaults to four megabytes (<literal>4MB</>).
         Note that for a complex query, several sort or hash operations might be
         running in parallel; each operation will be allowed to use as much memory
         as this value specifies before it starts to write data into temporary
@@ -1239,7 +1298,7 @@ include 'filename'
         Specifies the maximum amount of memory to be used by maintenance
         operations, such as <command>VACUUM</command>, <command>CREATE
         INDEX</>, and <command>ALTER TABLE ADD FOREIGN KEY</>.  It defaults
-        to 16 megabytes (<literal>16MB</>).  Since only one of these
+        to 64 megabytes (<literal>64MB</>).  Since only one of these
         operations can be executed at a time by a database session, and
         an installation normally doesn't have many of them running
         concurrently, it's safe to set this value significantly larger
@@ -4892,6 +4951,33 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
       </listitem>
      </varlistentry>
 
+     <varlistentry id="guc-autovacuum-multixact-freeze-max-age" xreflabel="autovacuum_multixact_freeze_max_age">
+      <term><varname>autovacuum_multixact_freeze_max_age</varname> (<type>integer</type>)</term>
+      <indexterm>
+       <primary><varname>autovacuum_multixact_freeze_max_age</varname> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Specifies the maximum age (in multixacts) that a table's
+        <structname>pg_class</>.<structfield>relminmxid</> field can
+        attain before a <command>VACUUM</> operation is forced to
+        prevent multixact ID wraparound within the table.
+        Note that the system will launch autovacuum processes to
+        prevent wraparound even when autovacuum is otherwise disabled.
+       </para>
+
+       <para>
+        Vacuuming multixacts also allows removal of old files from the
+        <filename>pg_multixact/members</> and <filename>pg_multixact/offsets</>
+        subdirectories, which is why the default is a relatively low
+        400 million multixacts.
+        This parameter can only be set at server start, but the setting
+        can be reduced for individual tables by changing storage parameters.
+        For more information see <xref linkend="vacuum-for-multixact-wraparound">.
+       </para>
+      </listitem>
+     </varlistentry>
+
      <varlistentry id="guc-autovacuum-vacuum-cost-delay" xreflabel="autovacuum_vacuum_cost_delay">
       <term><varname>autovacuum_vacuum_cost_delay</varname> (<type>integer</type>)</term>
       <indexterm>
@@ -5126,9 +5212,11 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
        <para>
         This parameter is normally on. When set to <literal>off</>, it
         disables validation of the function body string during <xref
-        linkend="sql-createfunction">. Disabling validation is
-        occasionally useful to avoid problems such as forward references
-        when restoring function definitions from a dump.
+        linkend="sql-createfunction">.  Disabling validation avoids side
+        effects of the validation process and avoids false positives due
+        to problems such as forward references.  Set this parameter
+        to <literal>off</> before loading functions on behalf of other
+        users; <application>pg_dump</> does so automatically.
        </para>
       </listitem>
      </varlistentry>
@@ -5300,7 +5388,7 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
         <structname>pg_class</>.<structfield>relfrozenxid</> field has reached
         the age specified by this setting.  The default is 150 million
         transactions.  Although users can set this value anywhere from zero to
-        one billion, <command>VACUUM</> will silently limit the effective value
+        two billions, <command>VACUUM</> will silently limit the effective value
         to 95% of <xref linkend="guc-autovacuum-freeze-max-age">, so that a
         periodical manual <command>VACUUM</> has a chance to run before an
         anti-wraparound autovacuum is launched for the table. For more
@@ -5327,6 +5415,47 @@ COPY postgres_log FROM '/full/path/to/logfile.csv' WITH csv;
         that there is not an unreasonably short time between forced
         autovacuums.  For more information see <xref
         linkend="vacuum-for-wraparound">.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-vacuum-multixact-freeze-table-age" xreflabel="vacuum_multixact_freeze_table_age">
+      <term><varname>vacuum_multixact_freeze_table_age</varname> (<type>integer</type>)</term>
+      <indexterm>
+       <primary><varname>vacuum_multixact_freeze_table_age</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        <command>VACUUM</> performs a whole-table scan if the table's
+        <structname>pg_class</>.<structfield>relminmxid</> field has reached
+        the age specified by this setting.  The default is 150 million multixacts.
+        Although users can set this value anywhere from zero to two billions,
+        <command>VACUUM</> will silently limit the effective value to 95% of
+        <xref linkend="guc-autovacuum-multixact-freeze-max-age">, so that a
+        periodical manual <command>VACUUM</> has a chance to run before an
+        anti-wraparound is launched for the table.
+        For more information see <xref linkend="vacuum-for-multixact-wraparound">.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry id="guc-vacuum-multixact-freeze-min-age" xreflabel="vacuum_multixact_freeze_min_age">
+      <term><varname>vacuum_multixact_freeze_min_age</varname> (<type>integer</type>)</term>
+      <indexterm>
+       <primary><varname>vacuum_multixact_freeze_min_age</> configuration parameter</primary>
+      </indexterm>
+      <listitem>
+       <para>
+        Specifies the cutoff age (in multixacts) that <command>VACUUM</>
+        should use to decide whether to replace multixact IDs with a newer
+        transaction ID or multixact ID while scanning a table.  The default
+        is 5 million multixacts.
+        Although users can set this value anywhere from zero to one billion,
+        <command>VACUUM</> will silently limit the effective value to half
+        the value of <xref linkend="guc-autovacuum-multixact-freeze-max-age">,
+        so that there is not an unreasonably short time between forced
+        autovacuums.
+        For more information see <xref linkend="vacuum-for-multixact-wraparound">.
        </para>
       </listitem>
      </varlistentry>

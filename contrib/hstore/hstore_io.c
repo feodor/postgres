@@ -17,6 +17,7 @@
 #include "utils/json.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
+#include "utils/memutils.h"
 #include "utils/syscache.h"
 #include "utils/typcache.h"
 
@@ -529,6 +530,13 @@ hstore_from_arrays(PG_FUNCTION_ARGS)
 					  TEXTOID, -1, false, 'i',
 					  &key_datums, &key_nulls, &key_count);
 
+	/* see discussion in arrayToHStoreSortedArray() */
+	if (key_count > MaxAllocSize / sizeof(HStorePair))
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+			  errmsg("number of pairs (%d) exceeds the maximum allowed (%d)",
+					 key_count, (int) (MaxAllocSize / sizeof(HStorePair)))));
+
 	/* value_array might be NULL */
 
 	if (PG_ARGISNULL(1))
@@ -653,6 +661,13 @@ hstore_from_array(PG_FUNCTION_ARGS)
 					  &in_datums, &in_nulls, &in_count);
 
 	count = in_count / 2;
+
+	/* see discussion in arrayToHStoreSortedArray() */
+	if (count > MaxAllocSize / sizeof(HStorePair))
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+			  errmsg("number of pairs (%d) exceeds the maximum allowed (%d)",
+					 count, (int) (MaxAllocSize / sizeof(HStorePair)))));
 
 	v.type = hsvHash;
 	v.size = 2*sizeof(HEntry);
@@ -788,6 +803,7 @@ hstore_from_record(PG_FUNCTION_ARGS)
 		my_extra->ncolumns = ncolumns;
 	}
 
+	Assert(ncolumns <= MaxTupleAttributeNumber);		/* thus, no overflow */
 	v.type = hsvHash;
 	v.size = 2*sizeof(HEntry);
 	v.hash.npairs = ncolumns;
@@ -1717,6 +1733,15 @@ array_to_hstore(PG_FUNCTION_ARGS)
 
 	if (ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)) == 0)
 		PG_RETURN_POINTER(hstoreDump(NULL));
+
+	/* see discussion in arrayToHStoreSortedArray() */
+	if (ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)) > 
+		MaxAllocSize / sizeof(HStorePair))
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+			  errmsg("number of elements (%d) exceeds the maximum allowed (%d)",
+					 ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)), 
+					 (int) (MaxAllocSize / sizeof(HStorePair)))));
 
 	switch(ARR_ELEMTYPE(array))
 	{

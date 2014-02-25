@@ -28,20 +28,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
-
-#ifdef WIN32
-int			getopt(int argc, char *const argv[], const char *optstring);
-#else
 #include <sys/time.h>
-#include <unistd.h>
 
-#ifdef HAVE_GETOPT_H
-#include <getopt.h>
-#endif
-#endif   /* ! WIN32 */
-
-extern char *optarg;
-extern int	optind;
+#include "pg_getopt.h"
 
 const char *progname;
 
@@ -338,7 +327,7 @@ SetWALFileNameForCleanup(void)
 		if (strcmp(restartWALFileName, nextWALFileName) > 0)
 			return false;
 
-		strcpy(exclusiveCleanupFileName, restartWALFileName);
+		strlcpy(exclusiveCleanupFileName, restartWALFileName, sizeof(exclusiveCleanupFileName));
 		return true;
 	}
 

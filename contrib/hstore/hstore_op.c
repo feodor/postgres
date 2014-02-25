@@ -8,6 +8,7 @@
 #include "catalog/pg_type.h"
 #include "funcapi.h"
 #include "utils/builtins.h"
+#include "utils/memutils.h"
 
 #include "hstore.h"
 
@@ -43,10 +44,22 @@ arrayToHStoreSortedArray(ArrayType *a)
 	if (key_count == 0)
 		return NULL;
 
+	/*
+	 * A text array uses at least eight bytes per element, so any overflow in
+	 * "key_count * sizeof(HStorePair)" is small enough for palloc() to catch.
+	 * However, credible improvements to the array format could invalidate
+	 * that assumption.  Therefore, use an explicit check rather than relying
+	 * on palloc() to complain.
+	 */
+	if (key_count > MaxAllocSize / sizeof(HStorePair))
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+			  errmsg("number of pairs (%d) exceeds the maximum allowed (%d)",
+					 key_count, (int) (MaxAllocSize / sizeof(HStorePair)))));
+
 	v = palloc(sizeof(*v));
 	v->type = hsvArray;
 	v->array.scalar = false;
-
 	v->array.elems = palloc(sizeof(*v->hash.pairs) * key_count);
 
 	for (i = 0, j = 0; i < key_count; i++)

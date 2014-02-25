@@ -1592,6 +1592,22 @@ DESCR("less than or equal");
 DATA(insert OID = 2977 (  ">="	   PGNSP PGUID b f f 2950 2950 16 2976 2974 uuid_ge scalargtsel scalargtjoinsel ));
 DESCR("greater than or equal");
 
+/* pg_lsn operators */
+DATA(insert OID = 3222 (  "="	   PGNSP PGUID b f f 3220 3220 16 3222 3223 pg_lsn_eq eqsel eqjoinsel ));
+DESCR("equal");
+DATA(insert OID = 3223 (  "<>"	   PGNSP PGUID b f f 3220 3220 16 3223 3222 pg_lsn_ne neqsel neqjoinsel ));
+DESCR("not equal");
+DATA(insert OID = 3224 (  "<"	   PGNSP PGUID b f f 3220 3220 16 3225 3227 pg_lsn_lt scalarltsel scalarltjoinsel ));
+DESCR("less than");
+DATA(insert OID = 3225 (  ">"	   PGNSP PGUID b f f 3220 3220 16 3224 3226 pg_lsn_gt scalargtsel scalargtjoinsel ));
+DESCR("greater than");
+DATA(insert OID = 3226 (  "<="	   PGNSP PGUID b f f 3220 3220 16 3227 3225 pg_lsn_le scalarltsel scalarltjoinsel ));
+DESCR("less than or equal");
+DATA(insert OID = 3227 (  ">="	   PGNSP PGUID b f f 3220 3220 16 3226 3224 pg_lsn_ge scalargtsel scalargtjoinsel ));
+DESCR("greater than or equal");
+DATA(insert OID = 3228 (  "-"	   PGNSP PGUID b f f 3220 3220 1700    0	0 pg_lsn_mi - - ));
+DESCR("minus");
+
 /* enum operators */
 DATA(insert OID = 3516 (  "="	   PGNSP PGUID b t t 3500 3500 16 3516 3517 enum_eq eqsel eqjoinsel ));
 DESCR("equal");
@@ -1755,11 +1771,11 @@ DATA(insert OID = 3967 (  "#>>"    PGNSP PGUID b f f 114 1009 25 0 0 json_extrac
 DESCR("get value from json as text with path elements");
 DATA(insert OID = 3211 (  "->"	   PGNSP PGUID b f f 3802 25 3802 0 0 jsonb_object_field - - ));
 DESCR("get jsonb object field");
-DATA(insert OID = 3225 (  "->>"    PGNSP PGUID b f f 3802 25 25 0 0 jsonb_object_field_text - - ));
+DATA(insert OID = 3462 (  "->>"    PGNSP PGUID b f f 3802 25 25 0 0 jsonb_object_field_text - - ));
 DESCR("get jsonb object field as text");
 DATA(insert OID = 3212 (  "->"	   PGNSP PGUID b f f 3802 23 3802 0 0 jsonb_array_element - - ));
 DESCR("get jsonb array element");
-DATA(insert OID = 3226 (  "->>"    PGNSP PGUID b f f 3802 23 25 0 0 jsonb_array_element_text - - ));
+DATA(insert OID = 3463 (  "->>"    PGNSP PGUID b f f 3802 23 25 0 0 jsonb_array_element_text - - ));
 DESCR("get jsonb array element as text");
 DATA(insert OID = 3213 (  "#>"	   PGNSP PGUID b f f 3802 1009 3802 0 0 jsonb_extract_path_op - - ));
 DESCR("get value from jsonb with path elements");

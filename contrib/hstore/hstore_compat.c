@@ -129,8 +129,15 @@ static int	hstoreValidOldFormat(HStoreV2 *hs);
 #define HS_COUNT(hsp_)     (HS_ISEMPTY(hsp_) ? 0 : ((hsp_)->size_ & HS_COUNT_MASK))
 #define HS_SETCOUNT(hsp_,c_)    ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION | ((hsp_)->size_ & ~HS_COUNT_MASK))
 
+/*
+ * "x" comes from an existing HS_COUNT() (as discussed, <= INT_MAX/24) or a
+ * Pairs array length (due to MaxAllocSize, <= INT_MAX/40).  "lenstr" is no
+ * more than INT_MAX, that extreme case arising in hstore_from_arrays().
+ * Therefore, this calculation is limited to about INT_MAX / 5 + INT_MAX.
+ */
 #define HSHRDSIZE   (sizeof(HStoreV2))
 #define CALCDATASIZE(x, lenstr) ( (x) * 2 * sizeof(HEntry) + HSHRDSIZE + (lenstr) )
+
 /* note multiple evaluations of x */
 #define ARRPTR(x)       ( (HEntry*) ( (HStoreV2*)(x) + 1 ) )
 #define STRPTR(x)       ( (char*)(ARRPTR(x) + HS_ROOT_COUNT((HStoreV2*)(x)) * 2) )

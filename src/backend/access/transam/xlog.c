@@ -128,7 +128,7 @@ const struct config_enum_entry sync_method_options[] = {
 
 /*
  * Statistics for current checkpoint are collected in this global struct.
- * Because only the background writer or a stand-alone backend can perform
+ * Because only the checkpointer or a stand-alone backend can perform
  * checkpoints, this will be unused in normal backends.
  */
 CheckpointStatsData CheckpointStats;
@@ -1842,15 +1842,14 @@ WakeupWaiters(XLogRecPtr EndPos)
 	slot->xlogInsertingAt = EndPos;
 
 	/*
-	 * See if there are any waiters that need to be woken up.
+	 * See if there are any LW_WAIT_UNTIL_FREE waiters that need to be woken
+	 * up. They are always in the front of the queue.
 	 */
 	head = slot->head;
 
-	if (head != NULL)
+	if (head != NULL && head->lwWaitMode == LW_WAIT_UNTIL_FREE)
 	{
 		proc = head;
-
-		/* LW_WAIT_UNTIL_FREE waiters are always in the front of the queue */
 		next = proc->lwWaitLink;
 		while (next && next->lwWaitMode == LW_WAIT_UNTIL_FREE)
 		{
@@ -1862,6 +1861,8 @@ WakeupWaiters(XLogRecPtr EndPos)
 		slot->head = next;
 		proc->lwWaitLink = NULL;
 	}
+	else
+		head = NULL;
 
 	/* We are done updating shared state of the lock itself. */
 	SpinLockRelease(&slot->mutex);
@@ -4893,7 +4894,7 @@ ReadControlFile(void)
 				 errhint("It looks like you need to recompile or initdb.")));
 #endif
 
-	/* Make the fixed  settings visible as GUC variables, too */
+	/* Make the initdb settings visible as GUC variables, too */
 	SetConfigOption("data_checksums", DataChecksumsEnabled() ? "yes" : "no",
 					PGC_INTERNAL, PGC_S_OVERRIDE);
 }
@@ -5843,7 +5844,7 @@ recoveryStopsAfter(XLogRecord *record)
 			recoveryStopAfter = true;
 			recoveryStopXid = InvalidTransactionId;
 			(void) getRecordTimestamp(record, &recoveryStopTime);
-			strncpy(recoveryStopName, recordRestorePointData->rp_name, MAXFNAMELEN);
+			strlcpy(recoveryStopName, recordRestorePointData->rp_name, MAXFNAMELEN);
 
 			ereport(LOG,
 					(errmsg("recovery stopping at restore point \"%s\", time %s",
@@ -6310,7 +6311,7 @@ StartupXLOG(void)
 	 * Save archive_cleanup_command in shared memory so that other processes
 	 * can see it.
 	 */
-	strncpy(XLogCtl->archiveCleanupCommand,
+	strlcpy(XLogCtl->archiveCleanupCommand,
 			archiveCleanupCommand ? archiveCleanupCommand : "",
 			sizeof(XLogCtl->archiveCleanupCommand));
 
@@ -9106,7 +9107,7 @@ XLogRestorePoint(const char *rpName)
 	xl_restore_point xlrec;
 
 	xlrec.rp_time = GetCurrentTimestamp();
-	strncpy(xlrec.rp_name, rpName, MAXFNAMELEN);
+	strlcpy(xlrec.rp_name, rpName, MAXFNAMELEN);
 
 	rdata.buffer = InvalidBuffer;
 	rdata.data = (char *) &xlrec;
@@ -11005,17 +11006,15 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 	/*-------
 	 * Standby mode is implemented by a state machine:
 	 *
-	 * 1. Read from archive (XLOG_FROM_ARCHIVE)
-	 * 2. Read from pg_xlog (XLOG_FROM_PG_XLOG)
-	 * 3. Check trigger file
-	 * 4. Read from primary server via walreceiver (XLOG_FROM_STREAM)
-	 * 5. Rescan timelines
-	 * 6. Sleep 5 seconds, and loop back to 1.
+	 * 1. Read from either archive or pg_xlog (XLOG_FROM_ARCHIVE), or just
+	 *    pg_xlog (XLOG_FROM_XLOG)
+	 * 2. Check trigger file
+	 * 3. Read from primary server via walreceiver (XLOG_FROM_STREAM)
+	 * 4. Rescan timelines
+	 * 5. Sleep 5 seconds, and loop back to 1.
 	 *
 	 * Failure to read from the current source advances the state machine to
-	 * the next state. In addition, successfully reading a file from pg_xlog
-	 * moves the state machine from state 2 back to state 1 (we always prefer
-	 * files in the archive over files in pg_xlog).
+	 * the next state.
 	 *
 	 * 'currentSource' indicates the current state. There are no currentSource
 	 * values for "check trigger", "rescan timelines", and "sleep" states,
@@ -11043,9 +11042,6 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 			switch (currentSource)
 			{
 				case XLOG_FROM_ARCHIVE:
-					currentSource = XLOG_FROM_PG_XLOG;
-					break;
-
 				case XLOG_FROM_PG_XLOG:
 
 					/*
@@ -11211,7 +11207,9 @@ WaitForWALToBecomeAvailable(XLogRecPtr RecPtr, bool randAccess,
 				 * Try to restore the file from archive, or read an existing
 				 * file from pg_xlog.
 				 */
-				readFile = XLogFileReadAnyTLI(readSegNo, DEBUG2, currentSource);
+				readFile = XLogFileReadAnyTLI(readSegNo, DEBUG2,
+						currentSource == XLOG_FROM_ARCHIVE ? XLOG_FROM_ANY :
+										 currentSource);
 				if (readFile >= 0)
 					return true;	/* success! */
 
