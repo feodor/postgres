@@ -20,7 +20,7 @@
 #include "utils/jsonapi.h"
 #include "utils/jsonb.h"
 
-static inline Datum deserialize_json_text(text *json);
+static inline Datum deserialize_json_text(char *json, int len);
 
 
 static size_t
@@ -168,9 +168,8 @@ Datum
 jsonb_in(PG_FUNCTION_ARGS)
 {
 	char	   *json = PG_GETARG_CSTRING(0);
-	text	   *result = cstring_to_text(json);
 
-	return deserialize_json_text(result);
+	return deserialize_json_text(json, strlen(json));
 }
 
 /*
@@ -186,23 +185,15 @@ jsonb_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
 	int         version = pq_getmsgint(buf, 1);
-	text	   *result;
+	char 	   *str;
+	int         nbytes;
 
 	if (version == 1)
-	{
-		char       *str;
-		int         nbytes;
-
 		str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
-		result = cstring_to_text_with_len(str, nbytes);
-		pfree(str);
-	}
 	else
-	{
 		elog(ERROR,"Unsupported jsonb version number %d",version);
-	}
 
-	return deserialize_json_text(result);
+	return deserialize_json_text(str, nbytes);
 }
 
 
@@ -214,7 +205,7 @@ jsonb_recv(PG_FUNCTION_ARGS)
  * uses the json parser with hooks to contruct the jsonb.
  */
 static inline Datum
-deserialize_json_text(text *json)
+deserialize_json_text(char *json, int len)
 {
 	JsonLexContext *lex;
 	JsonbInState state;
@@ -222,7 +213,7 @@ deserialize_json_text(text *json)
 
 	memset(&state, 0, sizeof(state));
 	memset(&sem, 0, sizeof(sem));
-	lex = makeJsonLexContext(json, true);
+	lex = makeJsonLexContextCstringLen(json, len, true);
 
 	sem.semstate = (void *) &state;
 
