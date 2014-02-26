@@ -134,7 +134,7 @@ compareJsonbStringValue(const void *a, const void *b, void *arg)
 	if (va->string.len == vb->string.len)
 	{
 		res = memcmp(va->string.val, vb->string.val, va->string.len);
-		if (res == NULL && arg)
+		if (res == 0 && arg)
 			*(bool *) arg = true;
 	}
 	else
