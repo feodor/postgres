@@ -74,7 +74,7 @@ extern Datum jsonb_object_keys(PG_FUNCTION_ARGS);
 extern Datum jsonb_array_length(PG_FUNCTION_ARGS);
 extern Datum jsonb_each(PG_FUNCTION_ARGS);
 extern Datum jsonb_each_text(PG_FUNCTION_ARGS);
-extern Datum json_array_elements_text(PG_FUNCTION_ARGS);
+extern Datum jsonb_array_elements_text(PG_FUNCTION_ARGS);
 extern Datum jsonb_array_elements(PG_FUNCTION_ARGS);
 extern Datum jsonb_populate_record(PG_FUNCTION_ARGS);
 extern Datum jsonb_populate_recordset(PG_FUNCTION_ARGS);

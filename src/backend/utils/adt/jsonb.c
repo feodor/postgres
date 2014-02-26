@@ -64,7 +64,7 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 			v.type = jbvNumeric;
 			v.numeric = DatumGetNumeric(DirectFunctionCall3(numeric_in, CStringGetDatum(token), 0, -1));
 
-			v.size += VARSIZE_ANY(v.numeric) +sizeof(JEntry) /* alignment */ ;
+			v.size += VARSIZE_ANY(v.numeric) + sizeof(JEntry) /* alignment */ ;
 			break;
 		case JSON_TOKEN_TRUE:
 			v.type = jbvBool;
@@ -268,7 +268,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 {
 	bool		first = true;
 	JsonbIterator *it;
-	int			type;
+	int			type = 0;
 	JsonbValue	v;
 	int			level = 0;
 	bool        redo_switch = false;
@@ -326,9 +326,9 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				{
 					Assert(type == WJB_BEGIN_OBJECT || type == WJB_BEGIN_ARRAY);
 					/*
-					 * We need to rerun current switch() due to put
-					 * in current place object which we just got
-					 * from iterator.
+					 * We need to rerun the current switch() since we need to
+					 * output the object which we just got from the iterator
+					 * before calling the iterator again.
 					 */
 					redo_switch = true;
 				}
@@ -387,14 +387,18 @@ jsonb_send(PG_FUNCTION_ARGS)
 {
 	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	StringInfoData buf;
-	char	   *out;
+	StringInfo	jtext = makeStringInfo();
 	int         version = 1;
 
-	out = JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb));
+	(void) JsonbToCString(jtext, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb),
+						  VARSIZE(jb));
 
 	pq_begintypsend(&buf);
 	pq_sendint(&buf, version, 1);
-	pq_sendtext(&buf, out, strlen(out));
+	pq_sendtext(&buf, jtext->data, jtext->len);
+	pfree(jtext->data);
+	pfree(jtext);
+
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
 
