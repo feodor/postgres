@@ -1413,7 +1413,11 @@ each_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 
 	rsi->returnMode = SFRM_Materialize;
 
-	(void) get_call_result_type(fcinfo, NULL, &tupdesc);
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
 
 	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
 
@@ -2100,7 +2104,15 @@ populate_record_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 		if (PG_ARGISNULL(0))
 			PG_RETURN_NULL();
 
-		get_call_result_type(fcinfo, NULL, &tupdesc);
+		json = PG_GETARG_TEXT_P(0);
+
+		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record"),
+					 errhint("Try calling the function in the FROM clause "
+							 "using a column definition list.")));
 	}
 
 	if (jtype == JSONOID)
@@ -2646,7 +2658,11 @@ populate_recordset_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 	 * because we already checked that arg1 is a record type, or we're in a
 	 * to_record function which returns a setof record.
 	 */
-	(void) get_call_result_type(fcinfo, NULL, &tupdesc);
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
 
 	/* if the json is null send back an empty set */
 	if (have_record_arg)
