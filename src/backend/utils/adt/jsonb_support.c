@@ -762,6 +762,8 @@ JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested)
 	if (*it == NULL)
 		return 0;
 
+	check_stack_depth();
+
 	/*
 	 * Encode all possible states by one integer. That's possible because enum
 	 * members of JsonbIterator->state uses different bits than
