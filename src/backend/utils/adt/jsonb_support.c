@@ -11,6 +11,7 @@
  */
 
 #include "postgres.h"
+#include "miscadmin.h"
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
 
@@ -146,7 +147,7 @@ compareJsonbStringValue(const void *a, const void *b, void *arg)
 
 /*
  * qsort helper to compare JsonbPair values, third argument
- * arg will be trasferred as is to subsequent
+ * arg will be transferred as is to subsequent
  * compareJsonbStringValue() call. Pairs with equals keys are
  * ordered with respect of order field.
  */
@@ -176,6 +177,9 @@ compareJsonbPair(const void *a, const void *b, void *arg)
 int
 compareJsonbValue(JsonbValue *a, JsonbValue *b)
 {
+
+	check_stack_depth();
+
 	if (a->type == b->type)
 	{
 		switch (a->type)

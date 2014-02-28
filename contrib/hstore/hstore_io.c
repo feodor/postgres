@@ -1735,12 +1735,12 @@ array_to_hstore(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(hstoreDump(NULL));
 
 	/* see discussion in arrayToHStoreSortedArray() */
-	if (ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)) > 
+	if (ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)) >
 		MaxAllocSize / sizeof(HStorePair))
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 			  errmsg("number of elements (%d) exceeds the maximum allowed (%d)",
-					 ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)), 
+					 ArrayGetNItems(ARR_NDIM(array), ARR_DIMS(array)),
 					 (int) (MaxAllocSize / sizeof(HStorePair)))));
 
 	switch(ARR_ELEMTYPE(array))

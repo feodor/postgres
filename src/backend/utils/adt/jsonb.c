@@ -20,7 +20,7 @@
 #include "utils/jsonapi.h"
 #include "utils/jsonb.h"
 
-static inline Datum deserialize_json_text(text *json);
+static inline Datum deserialize_json_text(char *json, int len);
 
 
 static size_t
@@ -64,7 +64,7 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 			v.type = jbvNumeric;
 			v.numeric = DatumGetNumeric(DirectFunctionCall3(numeric_in, CStringGetDatum(token), 0, -1));
 
-			v.size += VARSIZE_ANY(v.numeric) +sizeof(JEntry) /* alignment */ ;
+			v.size += VARSIZE_ANY(v.numeric) + sizeof(JEntry) /* alignment */ ;
 			break;
 		case JSON_TOKEN_TRUE:
 			v.type = jbvBool;
@@ -168,24 +168,32 @@ Datum
 jsonb_in(PG_FUNCTION_ARGS)
 {
 	char	   *json = PG_GETARG_CSTRING(0);
-	text	   *result = cstring_to_text(json);
 
-	return deserialize_json_text(result);
+	return deserialize_json_text(json, strlen(json));
 }
 
 /*
  * jsonb type recv function
  *
  * the type is sent as text in binary mode, so this is almost the same
- * as the input function.
+ * as the input function, but it's prefixed with a version number so we
+ * can change the binary format sent in future if necessary. For now,
+ * only version 1 is supported.
  */
 Datum
 jsonb_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
-	text	   *result = cstring_to_text_with_len(buf->data, buf->len);
+	int         version = pq_getmsgint(buf, 1);
+	char 	   *str;
+	int         nbytes;
 
-	return deserialize_json_text(result);
+	if (version == 1)
+		str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
+	else
+		elog(ERROR,"Unsupported jsonb version number %d",version);
+
+	return deserialize_json_text(str, nbytes);
 }
 
 
@@ -197,7 +205,7 @@ jsonb_recv(PG_FUNCTION_ARGS)
  * uses the json parser with hooks to contruct the jsonb.
  */
 static inline Datum
-deserialize_json_text(text *json)
+deserialize_json_text(char *json, int len)
 {
 	JsonLexContext *lex;
 	JsonbInState state;
@@ -205,7 +213,7 @@ deserialize_json_text(text *json)
 
 	memset(&state, 0, sizeof(state));
 	memset(&sem, 0, sizeof(sem));
-	lex = makeJsonLexContext(json, true);
+	lex = makeJsonLexContextCstringLen(json, len, true);
 
 	sem.semstate = (void *) &state;
 
@@ -260,7 +268,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 {
 	bool		first = true;
 	JsonbIterator *it;
-	int			type;
+	int			type = 0;
 	JsonbValue	v;
 	int			level = 0;
 	bool        redo_switch = false;
@@ -305,6 +313,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 					appendBinaryStringInfo(out, ", ", 2);
 				first = true;
 
+				/* json rules guarantee this is a string */
 				putEscapedValue(out, &v);
 				appendBinaryStringInfo(out, ": ", 2);
 
@@ -318,9 +327,9 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				{
 					Assert(type == WJB_BEGIN_OBJECT || type == WJB_BEGIN_ARRAY);
 					/*
-					 * We need to rerun current switch() due to put
-					 * in current place object which we just got
-					 * from iterator.
+					 * We need to rerun the current switch() since we need to
+					 * output the object which we just got from the iterator
+					 * before calling the iterator again.
 					 */
 					redo_switch = true;
 				}
@@ -379,12 +388,18 @@ jsonb_send(PG_FUNCTION_ARGS)
 {
 	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	StringInfoData buf;
-	char	   *out;
+	StringInfo	jtext = makeStringInfo();
+	int         version = 1;
 
-	out = JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb));
+	(void) JsonbToCString(jtext, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb),
+						  VARSIZE(jb));
 
 	pq_begintypsend(&buf);
-	pq_sendtext(&buf, out, strlen(out));
+	pq_sendint(&buf, version, 1);
+	pq_sendtext(&buf, jtext->data, jtext->len);
+	pfree(jtext->data);
+	pfree(jtext);
+
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
 
