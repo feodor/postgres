@@ -1298,6 +1298,24 @@ select count(*) from testhstore where h @> 'wait=>CC, public=>t';
      2
 (1 row)
 
+select count(*) from testhstore where h @> 'age=>25';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>25.0';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>+25.00';
+ count 
+-------
+     2
+(1 row)
+
 select count(*) from testhstore where h ? 'public';
  count 
 -------
@@ -1331,6 +1349,24 @@ select count(*) from testhstore where h @> 'wait=>CC';
 (1 row)
 
 select count(*) from testhstore where h @> 'wait=>CC, public=>t';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>25';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>25.0';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>+25.00';
  count 
 -------
      2
@@ -1376,6 +1412,24 @@ select count(*) from testhstore where h @> 'wait=>CC, public=>t';
      2
 (1 row)
 
+select count(*) from testhstore where h @> 'age=>25';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>25.0';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>+25.00';
+ count 
+-------
+     2
+(1 row)
+
 select count(*) from testhstore where h ? 'public';
  count 
 -------
@@ -1398,7 +1452,7 @@ RESET enable_seqscan;
 select count(*) from (select (each(h)).key from testhstore) as wow ;
  count 
 -------
-  4781
+  4783
 (1 row)
 
 select key, count(*) from (select (each(h)).key from testhstore) as wow group by key order by count desc, key;
@@ -1426,20 +1480,21 @@ select key, count(*) from (select (each(h)).key from testhstore) as wow group by
  subtitle  |   169
  auth      |   168
  abstract  |   161
-(22 rows)
+ age       |     2
+(23 rows)
 
 -- sort/hash
 select count(distinct h) from testhstore;
  count 
 -------
-   885
+   886
 (1 row)
 
 set enable_hashagg = false;
 select count(*) from (select h from (select * from testhstore union all select * from testhstore) hs group by h) hs2;
  count 
 -------
-   885
+   886
 (1 row)
 
 set enable_hashagg = true;
@@ -1447,7 +1502,7 @@ set enable_sort = false;
 select count(*) from (select h from (select * from testhstore union all select * from testhstore) hs group by h) hs2;
  count 
 -------
-   885
+   887
 (1 row)
 
 select distinct * from (values (hstore '' || ''),('')) v(h);
@@ -1466,7 +1521,7 @@ set enable_seqscan=off;
 select count(*) from testhstore where h #># 'p=>1';
  count 
 -------
-   884
+   886
 (1 row)
 
 select count(*) from testhstore where h = 'pos=>98, line=>371, node=>CBA, indexed=>t';
@@ -1492,6 +1547,24 @@ select count(*) from testhstore where h @> 'wait=>CC';
 (1 row)
 
 select count(*) from testhstore where h @> 'wait=>CC, public=>t';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>25';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>25.0';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testhstore where h @> 'age=>+25.00';
  count 
 -------
      2

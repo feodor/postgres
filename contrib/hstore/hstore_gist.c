@@ -6,6 +6,7 @@
 #include "access/gist.h"
 #include "access/skey.h"
 #include "catalog/pg_type.h"
+#include "utils/builtins.h"
 #include "utils/pg_crc.h"
 
 #include "hstore.h"
@@ -140,7 +141,8 @@ crc32_HStoreValue(HStoreValue *v, uint32 r)
 			COMP_CRC32(crc, &flag, 1);
 			break;
 		case hsvNumeric:
-			COMP_CRC32(crc, VARDATA_ANY(v->numeric), VARSIZE_ANY_EXHDR(v->numeric));
+			crc = DatumGetInt32(DirectFunctionCall1(hash_numeric,
+								NumericGetDatum(v->numeric)));
 			break;
 		default:
 			elog(ERROR, "wrong hstore scalar type");

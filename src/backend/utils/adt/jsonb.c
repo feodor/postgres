@@ -313,6 +313,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 					appendBinaryStringInfo(out, ", ", 2);
 				first = true;
 
+				/* json rules guarantee this is a string */
 				putEscapedValue(out, &v);
 				appendBinaryStringInfo(out, ": ", 2);
 
