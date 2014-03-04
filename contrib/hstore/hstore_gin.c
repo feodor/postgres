@@ -46,8 +46,17 @@ makeitemFromValue(HStoreValue *v, char flag)
 			item = makeitem((v->boolean) ? " t" : " f", 2, flag);
 			break;
 		case hsvNumeric:
-			cstr = DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric)));
-			item = makeitem(cstr, strlen(cstr), flag);
+			/*
+			 * It's needed to get some text representaion of
+			 * numeric independed from locale setting and 
+			 * preciosion. We use hashed value - it's safe
+			 * because recheck flag will be set anyway
+			 */
+			cstr = palloc(8 /* hex numbers */ + 1 /* \0 */);
+			snprintf(cstr, 9, "%08x",  DatumGetInt32(DirectFunctionCall1(hash_numeric,
+													NumericGetDatum(v->numeric))));
+			item = makeitem(cstr, 8, flag);
+			pfree(cstr);
 			break;
 		case hsvString:
 			item = makeitem(v->string.val, v->string.len, flag);
@@ -311,8 +320,8 @@ hash_value(HStoreValue *v, PathHashStack *stack)
 			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */);
 			break;
 		case hsvNumeric:
-			COMP_CRC32(stack->hash_state,
-					   VARDATA_ANY(v->numeric), VARSIZE_ANY_EXHDR(v->numeric));
+			stack->hash_state ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
+												NumericGetDatum(v->numeric)));
 			break;
 		case hsvString:
 			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
