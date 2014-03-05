@@ -230,8 +230,8 @@ deserialize_json_text(char *json, int len)
 	PG_RETURN_POINTER(JsonbValueToJsonb(state.res));
 }
 
-static void
-putEscapedValue(StringInfo out, JsonbValue *v)
+void
+JsonbPutEscapedValue(StringInfo out, JsonbValue *v)
 {
 	switch (v->type)
 	{
@@ -314,14 +314,14 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				first = true;
 
 				/* json rules guarantee this is a string */
-				putEscapedValue(out, &v);
+				JsonbPutEscapedValue(out, &v);
 				appendBinaryStringInfo(out, ": ", 2);
 
 				type = JsonbIteratorGet(&it, &v, false);
 				if (type == WJB_VALUE)
 				{
 					first = false;
-					putEscapedValue(out, &v);
+					JsonbPutEscapedValue(out, &v);
 				}
 				else
 				{
@@ -340,7 +340,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				else
 					first = false;
 
-				putEscapedValue(out, &v);
+				JsonbPutEscapedValue(out, &v);
 				break;
 			case WJB_END_ARRAY:
 				level--;

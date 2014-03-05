@@ -237,10 +237,27 @@ extern Datum jsonb_out(PG_FUNCTION_ARGS);
 extern Datum jsonb_recv(PG_FUNCTION_ARGS);
 extern Datum jsonb_send(PG_FUNCTION_ARGS);
 
+extern Datum jsonb_exists(PG_FUNCTION_ARGS);
+extern Datum jsonb_exists_idx(PG_FUNCTION_ARGS);
+extern Datum jsonb_exists_path(PG_FUNCTION_ARGS);
+extern Datum jsonb_exists_any(PG_FUNCTION_ARGS);
+extern Datum jsonb_exists_all(PG_FUNCTION_ARGS);
+extern Datum jsonb_contains(PG_FUNCTION_ARGS);
+extern Datum jsonb_contained(PG_FUNCTION_ARGS);
+extern Datum jsonb_cmp(PG_FUNCTION_ARGS);
+extern Datum jsonb_eq(PG_FUNCTION_ARGS);
+extern Datum jsonb_ne(PG_FUNCTION_ARGS);
+extern Datum jsonb_gt(PG_FUNCTION_ARGS);
+extern Datum jsonb_ge(PG_FUNCTION_ARGS);
+extern Datum jsonb_lt(PG_FUNCTION_ARGS);
+extern Datum jsonb_le(PG_FUNCTION_ARGS);
+extern Datum jsonb_has(PG_FUNCTION_ARGS);
+
 extern Datum jsonb_typeof(PG_FUNCTION_ARGS);
 
 extern char *JsonbToCString(StringInfo out, char *in, int estimated_len);
 extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
+extern void JsonbPutEscapedValue(StringInfo out, JsonbValue *v);
 
 #endif   /* __JSONB_H__ */
 
