@@ -4550,6 +4550,7 @@ DATA(insert OID = 4040 (  jsonb_gt		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 
 DATA(insert OID = 4041 (  jsonb_le		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_le _null_ _null_ _null_ ));
 DATA(insert OID = 4042 (  jsonb_ge		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_ge _null_ _null_ _null_ ));
 DATA(insert OID = 4043 (  jsonb_eq		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_eq _null_ _null_ _null_ ));
+DATA(insert OID = 4044 (  jsonb_cmp		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 23 "3802 3802" _null_ _null_ _null_ _null_ jsonb_cmp _null_ _null_ _null_ ));
 DESCR("less-equal-greater");
 DATA(insert OID =  3782 (  gjsonb_in		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3801 "2275" _null_ _null_ _null_ _null_ gjsonb_in _null_ _null_ _null_ ));
 DESCR("GiST support");

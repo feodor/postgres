@@ -436,49 +436,6 @@ hstore_fetchval_path_boolean(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-Jsonb *
-JsonbValueToJsonb(JsonbValue *v)
-{
-	Jsonb			*out;
-
-	if (v == NULL || v->type == jbvNull)
-	{
-		out = NULL;
-	}
-	else if (v->type == jbvString || v->type == jbvBool ||
-			 v->type == jbvNumeric)
-	{
-		ToJsonbState	*state = NULL;
-		JsonbValue		*res;
-		int				r;
-		JsonbValue		scalarArray;
-
-		scalarArray.type = jbvArray;
-		scalarArray.array.scalar = true;
-		scalarArray.array.nelems = 1;
-
-		pushJsonbValue(&state, WJB_BEGIN_ARRAY, &scalarArray);
-		pushJsonbValue(&state, WJB_ELEM, v);
-		res = pushJsonbValue(&state, WJB_END_ARRAY, NULL);
-
-		out = palloc(VARHDRSZ + res->size);
-		SET_VARSIZE(out, VARHDRSZ + res->size);
-		r = compressJsonb(res, VARDATA(out));
-		Assert(r <= res->size);
-		SET_VARSIZE(out, r + VARHDRSZ);
-	}
-	else
-	{
-		out = palloc(VARHDRSZ + v->size);
-
-		Assert(v->type == jbvBinary);
-		SET_VARSIZE(out, VARHDRSZ + v->binary.len);
-		memcpy(VARDATA(out), v->binary.data, v->binary.len);
-	}
-
-	return out;
-}
-
 PG_FUNCTION_INFO_V1(hstore_fetchval_hstore);
 Datum		hstore_fetchval_hstore(PG_FUNCTION_ARGS);
 Datum
@@ -3026,10 +2983,10 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 	return res;
 }
 
-PG_FUNCTION_INFO_V1(hstore_contains);
-Datum		hstore_contains(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(jsonb_contains);
+Datum		jsonb_contains(PG_FUNCTION_ARGS);
 Datum
-hstore_contains(PG_FUNCTION_ARGS)
+jsonb_contains(PG_FUNCTION_ARGS)
 {
 	Jsonb	   		*val = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
 	Jsonb	   		*tmpl = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(1));
@@ -3054,7 +3011,7 @@ Datum		hstore_contained(PG_FUNCTION_ARGS);
 Datum
 hstore_contained(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_DATUM(DirectFunctionCall2(hstore_contains,
+	PG_RETURN_DATUM(DirectFunctionCall2(jsonb_contains,
 										PG_GETARG_DATUM(1),
 										PG_GETARG_DATUM(0)
 										));
@@ -3066,10 +3023,10 @@ hstore_contained(PG_FUNCTION_ARGS)
  * buffer first, then the entry pos array.
  */
 
-PG_FUNCTION_INFO_V1(hstore_cmp);
-Datum		hstore_cmp(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(jsonb_cmp);
+Datum		jsonb_cmp(PG_FUNCTION_ARGS);
 Datum
-hstore_cmp(PG_FUNCTION_ARGS)
+jsonb_cmp(PG_FUNCTION_ARGS)
 {
 	Jsonb	   		*hs1 = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
 	Jsonb	   		*hs2 = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(1));
@@ -3105,72 +3062,72 @@ hstore_cmp(PG_FUNCTION_ARGS)
 }
 
 
-PG_FUNCTION_INFO_V1(hstore_eq);
-Datum		hstore_eq(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(jsonb_eq);
+Datum		jsonb_eq(PG_FUNCTION_ARGS);
 Datum
-hstore_eq(PG_FUNCTION_ARGS)
+jsonb_eq(PG_FUNCTION_ARGS)
 {
-	int			res = DatumGetInt32(DirectFunctionCall2(hstore_cmp,
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
 														PG_GETARG_DATUM(0),
 														PG_GETARG_DATUM(1)));
 
 	PG_RETURN_BOOL(res == 0);
 }
 
-PG_FUNCTION_INFO_V1(hstore_ne);
-Datum		hstore_ne(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(jsonb_ne);
+Datum		jsonb_ne(PG_FUNCTION_ARGS);
 Datum
-hstore_ne(PG_FUNCTION_ARGS)
+jsonb_ne(PG_FUNCTION_ARGS)
 {
-	int			res = DatumGetInt32(DirectFunctionCall2(hstore_cmp,
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
 														PG_GETARG_DATUM(0),
 														PG_GETARG_DATUM(1)));
 
 	PG_RETURN_BOOL(res != 0);
 }
 
-PG_FUNCTION_INFO_V1(hstore_gt);
-Datum		hstore_gt(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(jsonb_gt);
+Datum		jsonb_gt(PG_FUNCTION_ARGS);
 Datum
-hstore_gt(PG_FUNCTION_ARGS)
+jsonb_gt(PG_FUNCTION_ARGS)
 {
-	int			res = DatumGetInt32(DirectFunctionCall2(hstore_cmp,
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
 														PG_GETARG_DATUM(0),
 														PG_GETARG_DATUM(1)));
 
 	PG_RETURN_BOOL(res > 0);
 }
 
-PG_FUNCTION_INFO_V1(hstore_ge);
-Datum		hstore_ge(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(jsonb_ge);
+Datum		jsonb_ge(PG_FUNCTION_ARGS);
 Datum
-hstore_ge(PG_FUNCTION_ARGS)
+jsonb_ge(PG_FUNCTION_ARGS)
 {
-	int			res = DatumGetInt32(DirectFunctionCall2(hstore_cmp,
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
 														PG_GETARG_DATUM(0),
 														PG_GETARG_DATUM(1)));
 
 	PG_RETURN_BOOL(res >= 0);
 }
 
-PG_FUNCTION_INFO_V1(hstore_lt);
-Datum		hstore_lt(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(jsonb_lt);
+Datum		jsonb_lt(PG_FUNCTION_ARGS);
 Datum
-hstore_lt(PG_FUNCTION_ARGS)
+jsonb_lt(PG_FUNCTION_ARGS)
 {
-	int			res = DatumGetInt32(DirectFunctionCall2(hstore_cmp,
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
 														PG_GETARG_DATUM(0),
 														PG_GETARG_DATUM(1)));
 
 	PG_RETURN_BOOL(res < 0);
 }
 
-PG_FUNCTION_INFO_V1(hstore_le);
-Datum		hstore_le(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(jsonb_le);
+Datum		jsonb_le(PG_FUNCTION_ARGS);
 Datum
-hstore_le(PG_FUNCTION_ARGS)
+jsonb_le(PG_FUNCTION_ARGS)
 {
-	int			res = DatumGetInt32(DirectFunctionCall2(hstore_cmp,
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
 														PG_GETARG_DATUM(0),
 														PG_GETARG_DATUM(1)));
 
