@@ -251,7 +251,28 @@ extern Datum jsonb_gt(PG_FUNCTION_ARGS);
 extern Datum jsonb_ge(PG_FUNCTION_ARGS);
 extern Datum jsonb_lt(PG_FUNCTION_ARGS);
 extern Datum jsonb_le(PG_FUNCTION_ARGS);
-extern Datum jsonb_has(PG_FUNCTION_ARGS);
+extern Datum jsonb_hash(PG_FUNCTION_ARGS);
+
+/* GIN support functions */
+extern Datum gin_extract_hstore(PG_FUNCTION_ARGS);
+extern Datum gin_extract_hstore_query(PG_FUNCTION_ARGS);
+extern Datum gin_consistent_hstore(PG_FUNCTION_ARGS);
+extern Datum gin_consistent_hstore_hash(PG_FUNCTION_ARGS);
+extern Datum gin_extract_hstore_hash(PG_FUNCTION_ARGS);
+extern Datum gin_extract_hstore_hash_query(PG_FUNCTION_ARGS);
+
+/* GiST support functions */
+extern Datum gjsonb_consistent(PG_FUNCTION_ARGS);
+extern Datum gjsonb_compress(PG_FUNCTION_ARGS);
+extern Datum gjsonb_decompress(PG_FUNCTION_ARGS);
+extern Datum gjsonb_penalty(PG_FUNCTION_ARGS);
+extern Datum gjsonb_picksplit(PG_FUNCTION_ARGS);
+extern Datum gjsonb_union(PG_FUNCTION_ARGS);
+extern Datum gjsonb_same(PG_FUNCTION_ARGS);
+extern Datum gjsonb_in(PG_FUNCTION_ARGS);
+extern Datum gjsonb_out(PG_FUNCTION_ARGS);
+
+
 
 extern Datum jsonb_typeof(PG_FUNCTION_ARGS);
 

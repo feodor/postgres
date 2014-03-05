@@ -1,3 +1,17 @@
+/*-------------------------------------------------------------------------
+ *
+ * jsonb_gist.c
+ *	 GiST support functions for jsonb
+ *
+ * Portions Copyright (c) 2002-2014, PostgreSQL Global Development Group
+ *
+ *
+ * IDENTIFICATION
+ *	  src/backend/utils/adt/jsonb_gist.c
+ *
+ *-------------------------------------------------------------------------
+ */
+
 #include "postgres.h"
 
 #include "access/gist.h"
@@ -6,12 +20,6 @@
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
 #include "utils/pg_crc.h"
-
-extern bool stringIsNumber(char *string, int len, bool jsonNumber);
-extern uint32 compressJsonb(JsonbValue *v, char *buffer);
-text* JsonbValueToText(JsonbValue *v);
-
-extern JsonbValue* parseJsonb(const char *str, int len, bool json);
 
 /*
  * When using a GIN/GiST index for jsonb, we choose to index both keys and
@@ -83,13 +91,6 @@ typedef struct
 
 #define WISH_F(a,b,c) (double)( -(double)(((a)-(b))*((a)-(b))*((a)-(b)))*(c) )
 
-PG_FUNCTION_INFO_V1(gjsonb_in);
-Datum		gjsonb_in(PG_FUNCTION_ARGS);
-
-PG_FUNCTION_INFO_V1(gjsonb_out);
-Datum		gjsonb_out(PG_FUNCTION_ARGS);
-
-
 Datum
 gjsonb_in(PG_FUNCTION_ARGS)
 {
@@ -103,22 +104,6 @@ gjsonb_out(PG_FUNCTION_ARGS)
 	elog(ERROR, "not implemented");
 	PG_RETURN_DATUM(0);
 }
-
-PG_FUNCTION_INFO_V1(gjsonb_consistent);
-PG_FUNCTION_INFO_V1(gjsonb_compress);
-PG_FUNCTION_INFO_V1(gjsonb_decompress);
-PG_FUNCTION_INFO_V1(gjsonb_penalty);
-PG_FUNCTION_INFO_V1(gjsonb_picksplit);
-PG_FUNCTION_INFO_V1(gjsonb_union);
-PG_FUNCTION_INFO_V1(gjsonb_same);
-
-Datum		gjsonb_consistent(PG_FUNCTION_ARGS);
-Datum		gjsonb_compress(PG_FUNCTION_ARGS);
-Datum		gjsonb_decompress(PG_FUNCTION_ARGS);
-Datum		gjsonb_penalty(PG_FUNCTION_ARGS);
-Datum		gjsonb_picksplit(PG_FUNCTION_ARGS);
-Datum		gjsonb_union(PG_FUNCTION_ARGS);
-Datum		gjsonb_same(PG_FUNCTION_ARGS);
 
 static int
 crc32_JsonbValue(JsonbValue *v, uint32 r)

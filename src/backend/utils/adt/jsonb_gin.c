@@ -1,5 +1,15 @@
-/*
- * contrib/hstore/hstore_gin.c
+/*-------------------------------------------------------------------------
+ *
+ * jsonb_gin.c
+ *	 GIN support functions for jsonb
+ *
+ * Portions Copyright (c) 2002-2014, PostgreSQL Global Development Group
+ *
+ *
+ * IDENTIFICATION
+ *	  src/backend/utils/adt/jsonb_gin.c
+ *
+ *-------------------------------------------------------------------------
  */
 #include "postgres.h"
 
@@ -8,9 +18,6 @@
 #include "catalog/pg_type.h"
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
-
-PG_FUNCTION_INFO_V1(gin_extract_hstore);
-Datum		gin_extract_hstore(PG_FUNCTION_ARGS);
 
 /* Build an indexable text value */
 static text *
@@ -116,9 +123,6 @@ gin_extract_hstore(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(entries);
 }
 
-PG_FUNCTION_INFO_V1(gin_extract_hstore_query);
-Datum		gin_extract_hstore_query(PG_FUNCTION_ARGS);
-
 Datum
 gin_extract_hstore_query(PG_FUNCTION_ARGS)
 {
@@ -189,9 +193,6 @@ gin_extract_hstore_query(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(entries);
 }
 
-PG_FUNCTION_INFO_V1(gin_consistent_hstore);
-Datum		gin_consistent_hstore(PG_FUNCTION_ARGS);
-
 Datum
 gin_consistent_hstore(PG_FUNCTION_ARGS)
 {
@@ -254,9 +255,6 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(res);
 }
 
-PG_FUNCTION_INFO_V1(gin_consistent_hstore_hash);
-Datum		gin_consistent_hstore_hash(PG_FUNCTION_ARGS);
-
 Datum
 gin_consistent_hstore_hash(PG_FUNCTION_ARGS)
 {
@@ -293,9 +291,6 @@ gin_consistent_hstore_hash(PG_FUNCTION_ARGS)
 
 	PG_RETURN_BOOL(res);
 }
-
-PG_FUNCTION_INFO_V1(gin_extract_hstore_hash);
-Datum		gin_extract_hstore_hash(PG_FUNCTION_ARGS);
 
 typedef struct PathHashStack
 {
@@ -415,9 +410,6 @@ gin_extract_hstore_hash(PG_FUNCTION_ARGS)
 
 	PG_RETURN_POINTER(entries);
 }
-
-PG_FUNCTION_INFO_V1(gin_extract_hstore_hash_query);
-Datum		gin_extract_hstore_hash_query(PG_FUNCTION_ARGS);
 
 Datum
 gin_extract_hstore_hash_query(PG_FUNCTION_ARGS)
