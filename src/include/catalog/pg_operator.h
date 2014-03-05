@@ -1785,11 +1785,14 @@ DATA(insert OID = 3240 (  "="    PGNSP PGUID b f f 3802 3802  16 3240 3241 jsonb
 DESCR("equal");
 DATA(insert OID = 3241 (  "<>"   PGNSP PGUID b f f 3802 3802  16 3241 3240 jsonb_ne neqsel neqjoinsel ));
 DESCR("not equal");
-/* Undocumented operators that comprise rest of jsonb B-Tree operator class */
-DATA(insert OID = 3242 (  "#<#"		PGNSP PGUID b f f 3802 3802	16 3243 3245 jsonb_lt scalarltsel scalarltjoinsel ));
-DATA(insert OID = 3243 (  "#>#"		PGNSP PGUID b f f 3802 3802	16 3242 3244 jsonb_gt scalargtsel scalargtjoinsel ));
-DATA(insert OID = 3244 (  "#<=#"	PGNSP PGUID b f f 3802 3802	16 3245 3243 jsonb_le scalarltsel scalarltjoinsel ));
-DATA(insert OID = 3245 (  "#>=#"	PGNSP PGUID b f f 3802 3802	16 3244 3242 jsonb_ge scalargtsel scalargtjoinsel ));
+DATA(insert OID = 3242 (  "<"		PGNSP PGUID b f f 3802 3802	16 3243 3245 jsonb_lt scalarltsel scalarltjoinsel ));
+DESCR("less than");
+DATA(insert OID = 3243 (  ">"		PGNSP PGUID b f f 3802 3802	16 3242 3244 jsonb_gt scalargtsel scalargtjoinsel ));
+DESCR("greater than");
+DATA(insert OID = 3244 (  "<="	PGNSP PGUID b f f 3802 3802	16 3245 3243 jsonb_le scalarltsel scalarltjoinsel ));
+DESCR("less than or equal to");
+DATA(insert OID = 3245 (  ">="	PGNSP PGUID b f f 3802 3802	16 3244 3242 jsonb_ge scalargtsel scalargtjoinsel ));
+DESCR("greater than or equal to");
 
 
 
