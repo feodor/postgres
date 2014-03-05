@@ -4769,11 +4769,19 @@ DESCR("int8range constructor");
 DATA(insert OID = 3946 (  int8range PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 3926 "20 20 25" _null_ _null_ _null_ _null_ range_constructor3 _null_ _null_ _null_ ));
 DESCR("int8range constructor");
 
-/* date, time constructors */
+/* date, time, timestamp constructors */
 DATA(insert OID = 3846 ( make_date	PGNSP PGUID 12 1 0 0 0 f f f f t f i 3 0 1082 "23 23 23" _null_ _null_ "{year,month,day}" _null_ make_date _null_ _null_ _null_ ));
 DESCR("construct date");
 DATA(insert OID = 3847 ( make_time	PGNSP PGUID 12 1 0 0 0 f f f f t f i 3 0 1083 "23 23 701" _null_ _null_ "{hour,min,sec}" _null_ make_time _null_ _null_ _null_ ));
 DESCR("construct time");
+DATA(insert OID = 3461 ( make_timestamp	PGNSP PGUID 12 1 0 0 0 f f f f t f i 6 0 1114 "23 23 23 23 23 701" _null_ _null_ "{year,month,mday,hour,min,sec}" _null_ make_timestamp _null_ _null_ _null_ ));
+DESCR("construct timestamp");
+DATA(insert OID = 3462 ( make_timestamptz	PGNSP PGUID 12 1 0 0 0 f f f f t f s 6 0 1184 "23 23 23 23 23 701" _null_ _null_ "{year,month,mday,hour,min,sec}" _null_ make_timestamptz _null_ _null_ _null_ ));
+DESCR("construct timestamp with time zone");
+DATA(insert OID = 3463 ( make_timestamptz	PGNSP PGUID 12 1 0 0 0 f f f f t f s 7 0 1184 "23 23 23 23 23 701 25" _null_ _null_ "{year,month,mday,hour,min,sec,timezone}" _null_ make_timestamptz_at_timezone _null_ _null_ _null_ ));
+DESCR("construct timestamp with time zone");
+DATA(insert OID = 3464 ( make_interval	PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 1186 "23 23 23 23 23 23 701" _null_ _null_ "{years,months,weeks,days,hours,mins,secs}" _null_ make_interval _null_ _null_ _null_ ));
+DESCR("construct interval");
 
 /* spgist support functions */
 DATA(insert OID = 4001 (  spggettuple	   PGNSP PGUID 12 1 0 0 0 f f f f t f v 2 0 16 "2281 2281" _null_ _null_ _null_ _null_	spggettuple _null_ _null_ _null_ ));
@@ -4851,12 +4859,22 @@ DATA(insert OID = 3473 (  spg_range_quad_leaf_consistent	PGNSP PGUID 12 1 0 0 0 
 DESCR("SP-GiST support for quad tree over range");
 
 /* replication slots */
-DATA(insert OID = 3779 (  pg_create_physical_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2249 "19" "{19,25,3220}" "{i,o,o}" "{slotname,slotname,xlog_position}" _null_ pg_create_physical_replication_slot _null_ _null_ _null_ ));
+DATA(insert OID = 3779 (  pg_create_physical_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2249 "19" "{19,19,3220}" "{i,o,o}" "{slotname,slotname,xlog_position}" _null_ pg_create_physical_replication_slot _null_ _null_ _null_ ));
 DESCR("create a physical replication slot");
 DATA(insert OID = 3780 (  pg_drop_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 1 0 2278 "19" _null_ _null_ _null_ _null_ pg_drop_replication_slot _null_ _null_ _null_ ));
 DESCR("drop a replication slot");
-DATA(insert OID = 3781 (  pg_get_replication_slots	PGNSP PGUID 12 1 10 0 0 f f f f f t s 0 0 2249 "" "{25,25,26,16,28,3220}" "{o,o,o,o,o,o}" "{slot_name,slot_type,datoid,active,xmin,restart_lsn}" _null_ pg_get_replication_slots _null_ _null_ _null_ ));
+DATA(insert OID = 3781 (  pg_get_replication_slots	PGNSP PGUID 12 1 10 0 0 f f f f f t s 0 0 2249 "" "{19,19,25,26,16,28,28,3220}" "{o,o,o,o,o,o,o,o}" "{slot_name,plugin,slot_type,datoid,active,xmin,catalog_xmin,restart_lsn}" _null_ pg_get_replication_slots _null_ _null_ _null_ ));
 DESCR("information about replication slots currently in use");
+DATA(insert OID = 3786 (  pg_create_logical_replication_slot PGNSP PGUID 12 1 0 0 0 f f f f f f v 2 0 2249 "19 19" "{19,19,25,3220}" "{i,i,o,o}" "{slotname,plugin,slotname,xlog_position}" _null_ pg_create_logical_replication_slot _null_ _null_ _null_ ));
+DESCR("set up a logical replication slot");
+DATA(insert OID = 3782 (  pg_logical_slot_get_changes PGNSP PGUID 12 1000 1000 25 0 f f f f f t v 4 0 2249 "19 3220 23 1009" "{19,3220,23,1009,3220,28,25}" "{i,i,i,v,o,o,o}" "{slotname,upto_lsn,upto_nchanges,options,location,xid,data}" _null_ pg_logical_slot_get_changes _null_ _null_ _null_ ));
+DESCR("get changes from replication slot");
+DATA(insert OID = 3783 (  pg_logical_slot_get_binary_changes PGNSP PGUID 12 1000 1000 25 0 f f f f f t v 4 0 2249 "19 3220 23 1009" "{19,3220,23,1009,3220,28,17}" "{i,i,i,v,o,o,o}" "{slotname,upto_lsn,upto_nchanges,options,location,xid,data}" _null_ pg_logical_slot_get_binary_changes _null_ _null_ _null_ ));
+DESCR("get binary changes from replication slot");
+DATA(insert OID = 3784 (  pg_logical_slot_peek_changes PGNSP PGUID 12 1000 1000 25 0 f f f f f t v 4 0 2249 "19 3220 23 1009" "{19,3220,23,1009,3220,28,25}" "{i,i,i,v,o,o,o}" "{slotname,upto_lsn,upto_nchanges,options,location,xid,data}" _null_ pg_logical_slot_peek_changes _null_ _null_ _null_ ));
+DESCR("peek at changes from replication slot");
+DATA(insert OID = 3785 (  pg_logical_slot_peek_binary_changes PGNSP PGUID 12 1000 1000 25 0 f f f f f t v 4 0 2249 "19 3220 23 1009" "{19,3220,23,1009,3220,28,17}" "{i,i,i,v,o,o,o}" "{slotname,upto_lsn,upto_nchanges,options,location,xid,data}" _null_ pg_logical_slot_peek_binary_changes _null_ _null_ _null_ ));
+DESCR("peek at binary changes from replication slot");
 
 /* event triggers */
 DATA(insert OID = 3566 (  pg_event_trigger_dropped_objects		PGNSP PGUID 12 10 100 0 0 f f f f t t s 0 0 2249 "" "{26,26,23,25,25,25,25}" "{o,o,o,o,o,o,o}" "{classid, objid, objsubid, object_type, schema_name, object_name, object_identity}" _null_ pg_event_trigger_dropped_objects _null_ _null_ _null_ ));
