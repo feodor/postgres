@@ -4544,7 +4544,17 @@ DATA(insert OID = 3461 (  jsonb_populate_recordset  PGNSP PGUID 12 1 100 0 0 f f
 DESCR("get set of records with fields from a jsonb array of objects");
 DATA(insert OID = 3210 (  jsonb_typeof              PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 25 "3802" _null_ _null_ _null_ _null_ jsonb_typeof _null_ _null_ _null_ ));
 DESCR("get the type of a jsonb value");
-
+DATA(insert OID = 4038 (  jsonb_ne		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_ne _null_ _null_ _null_ ));
+DATA(insert OID = 4039 (  jsonb_lt		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_lt _null_ _null_ _null_ ));
+DATA(insert OID = 4040 (  jsonb_gt		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_gt _null_ _null_ _null_ ));
+DATA(insert OID = 4041 (  jsonb_le		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_le _null_ _null_ _null_ ));
+DATA(insert OID = 4042 (  jsonb_ge		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_ge _null_ _null_ _null_ ));
+DATA(insert OID = 4043 (  jsonb_eq		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_eq _null_ _null_ _null_ ));
+DESCR("less-equal-greater");
+DATA(insert OID =  3782 (  gjsonb_in		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3801 "2275" _null_ _null_ _null_ _null_ gjsonb_in _null_ _null_ _null_ ));
+DESCR("GiST support");
+DATA(insert OID =  3783 (  gjsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2275 "3801" _null_ _null_ _null_ _null_ gjsonb_out _null_ _null_ _null_ ));
+DESCR("GiST support");
 
 /* txid */
 DATA(insert OID = 2939 (  txid_snapshot_in			PGNSP PGUID 12 1  0 0 0 f f f f t f i 1 0 2970 "2275" _null_ _null_ _null_ _null_ txid_snapshot_in _null_ _null_ _null_ ));

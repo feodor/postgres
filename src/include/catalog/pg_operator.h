@@ -1781,6 +1781,15 @@ DATA(insert OID = 3213 (  "#>"	   PGNSP PGUID b f f 3802 1009 3802 0 0 jsonb_ext
 DESCR("get value from jsonb with path elements");
 DATA(insert OID = 3206 (  "#>>"    PGNSP PGUID b f f 3802 1009 25 0 0 jsonb_extract_path_text_op - - ));
 DESCR("get value from jsonb as text with path elements");
+DATA(insert OID = 3240 (  "="    PGNSP PGUID b f f 3802 3802  16 3240 3241 jsonb_eq eqsel eqjoinsel ));
+DESCR("equal");
+DATA(insert OID = 3241 (  "<>"   PGNSP PGUID b f f 3802 3802  16 3241 3240 jsonb_ne neqsel neqjoinsel ));
+DESCR("not equal");
+/* Undocumented operators that comprise rest of jsonb B-Tree operator class */
+DATA(insert OID = 3242 (  "#<#"		PGNSP PGUID b f f 3802 3802	16 3243 3245 jsonb_lt scalarltsel scalarltjoinsel ));
+DATA(insert OID = 3243 (  "#>#"		PGNSP PGUID b f f 3802 3802	16 3242 3244 jsonb_gt scalargtsel scalargtjoinsel ));
+DATA(insert OID = 3244 (  "#<=#"	PGNSP PGUID b f f 3802 3802	16 3245 3243 jsonb_le scalarltsel scalarltjoinsel ));
+DATA(insert OID = 3245 (  "#>=#"	PGNSP PGUID b f f 3802 3802	16 3244 3242 jsonb_ge scalargtsel scalargtjoinsel ));
 
 
 
