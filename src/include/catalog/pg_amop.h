@@ -787,6 +787,11 @@ DATA(insert (	4033   3802 3802 4 s	3245 403 0 ));
 DATA(insert (	4033   3802 3802 5 s	3243 403 0 ));
 
 /*
+ * hash jsonb ops
+ */
+DATA(insert (	4034   3802 3802 1 s 3240 405 0 ));
+
+/*
  * SP-GiST range_ops
  */
 DATA(insert (	3474   3831 3831 1 s	3893 4000 0 ));
