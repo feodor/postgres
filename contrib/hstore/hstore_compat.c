@@ -271,7 +271,6 @@ hstoreValidOldFormat(HStoreV2 *hs)
 	return 2;
 }
 
-
 /*
  * hstoreUpgrade: PG_DETOAST_DATUM plus support for conversion of old hstores
  */
