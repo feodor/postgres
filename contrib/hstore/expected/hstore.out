@@ -1502,7 +1502,7 @@ set enable_sort = false;
 select count(*) from (select h from (select * from testhstore union all select * from testhstore) hs group by h) hs2;
  count 
 -------
-   887
+   886
 (1 row)
 
 select distinct * from (values (hstore '' || ''),('')) v(h);
