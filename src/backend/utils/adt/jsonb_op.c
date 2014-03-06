@@ -17,8 +17,10 @@
 #include "access/hash.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
+#include "utils/builtins.h"
 #include "utils/jsonb.h"
 #include "utils/memutils.h"
+#include "utils/pg_crc.h"
 
 static JsonbValue*
 arrayToJsonbSortedArray(ArrayType *a)
@@ -509,11 +511,67 @@ jsonb_le(PG_FUNCTION_ARGS)
 Datum
 jsonb_hash(PG_FUNCTION_ARGS)
 {
-	Jsonb	   	*hs = PG_GETARG_JSONB(0);
+	Jsonb	   		*jb = PG_GETARG_JSONB(0);
+	JsonbIterator	*it;
+	int32			r;
+	JsonbValue		v;
+	int				crc;
 
-	Datum		hval = hash_any((unsigned char *) VARDATA(hs),
-								VARSIZE(hs) - VARHDRSZ);
+	if (JB_ROOT_COUNT(jb) == 0)
+		PG_RETURN_INT32(0x1EEE);
 
-	PG_FREE_IF_COPY(hs, 0);
-	PG_RETURN_DATUM(hval);
+	it = JsonbIteratorInit(VARDATA(jb));
+	INIT_CRC32(crc);
+
+	while((r = JsonbIteratorGet(&it, &v, false)) != 0)
+	{
+		switch(r)
+		{
+			case WJB_BEGIN_ARRAY:
+				COMP_CRC32(crc, "ab", 3);
+				COMP_CRC32(crc, &v.array.nelems, sizeof(v.array.nelems));
+				COMP_CRC32(crc, &v.array.scalar, sizeof(v.array.scalar));
+				break;
+			case WJB_BEGIN_OBJECT:
+				COMP_CRC32(crc, "hb", 3);
+				COMP_CRC32(crc, &v.hash.npairs, sizeof(v.hash.npairs));
+				break;
+			case WJB_KEY:
+				COMP_CRC32(crc, "k", 2);
+			case WJB_VALUE:
+			case WJB_ELEM:
+				switch(v.type)
+				{
+					case jbvString:
+						COMP_CRC32(crc, v.string.val, v.string.len);
+						break;
+					case jbvNull:
+						COMP_CRC32(crc, "N", 2);
+						break;
+					case jbvBool:
+						COMP_CRC32(crc, &v.boolean, sizeof(v.boolean));
+						break;
+					case jbvNumeric:
+						crc ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
+																 NumericGetDatum(v.numeric)));
+						break;
+					default:
+						elog(ERROR, "unexpected state of jsonb iterator");
+				}
+				break;
+			case WJB_END_ARRAY:
+				COMP_CRC32(crc, "ae", 3);
+				break;
+			case WJB_END_OBJECT:
+				COMP_CRC32(crc, "he", 3);
+				break;
+			default:
+				elog(ERROR, "unexpected state of hstore iterator");
+		}
+	}
+
+	FIN_CRC32(crc);
+
+	PG_FREE_IF_COPY(jb, 0);
+	PG_RETURN_INT32(crc);
 }
