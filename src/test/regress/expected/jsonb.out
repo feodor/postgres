@@ -626,6 +626,15 @@ select '{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>>'{f2,1}';
  1
 (1 row)
 
+-- same on jsonb scalars (expecting errors)
+select '42'::jsonb#>array['f2'];
+ERROR:  cannot call extract path from a scalar
+select '42'::jsonb#>array['0'];
+ERROR:  cannot call extract path from a scalar
+select '42'::jsonb#>>array['f2'];
+ERROR:  cannot call extract path from a scalar
+select '42'::jsonb#>>array['0'];
+ERROR:  cannot call extract path from a scalar
 -- array_elements
 select jsonb_array_elements('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false]');
     jsonb_array_elements    

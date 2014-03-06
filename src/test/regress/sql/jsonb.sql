@@ -158,6 +158,12 @@ select '{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>>'{f2}';
 select '{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>>'{f2,0}';
 select '{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>>'{f2,1}';
 
+-- same on jsonb scalars (expecting errors)
+select '42'::jsonb#>array['f2'];
+select '42'::jsonb#>array['0'];
+select '42'::jsonb#>>array['f2'];
+select '42'::jsonb#>>array['0'];
+
 -- array_elements
 
 select jsonb_array_elements('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false]');
