@@ -33,28 +33,6 @@ SELECT	'{a}'::hstore;
 SELECT	''::hstore;
 SELECT	'{}'::hstore;
 
---nested json
-
-SELECT	hstore_to_json('a=>1');
-SELECT	hstore_to_json('{a=>1}');
-SELECT	hstore_to_json('{a,b}');
-SELECT	hstore_to_json('{a,{b}}');
-SELECT	hstore_to_json('{{a},b}');
-SELECT	hstore_to_json('{a,{b},{c}}');
-SELECT	hstore_to_json('{{a},{b},c}');
-SELECT	hstore_to_json('{{a},b,{c}}');
-SELECT	hstore_to_json('{a,{b=>1}}');
-SELECT	hstore_to_json('{{a},{b=>1}}');
-SELECT	hstore_to_json('{{a},{b=>1},{c}}');
-SELECT	hstore_to_json('a');
-SELECT	hstore_to_json('{a}');
-SELECT	hstore_to_json('');
-SELECT	hstore_to_json('{}');
-
-SELECT hstore_to_json('"aa"=>{a,aaa}, "qq"=>{"a"=>"12", "b"=>"16", "c"=>{c1,c2,{c3},{c4=>4}}, "d"=>{"d1"=>"d1", "d2"=>"d2"}}'::hstore);
-
---
-
 SELECT 'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'ff',
 	   'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'qq',
 	   ('ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'Y') IS NULL AS t,
