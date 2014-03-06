@@ -90,31 +90,16 @@ SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'object';
 
 -- nulls
 
-select (test_json->'field3') is null as expect_false
-from test_jsonb
-where json_type = 'object';
-
-select (test_json->>'field3') is null as expect_true
-from test_jsonb
-where json_type = 'object';
-
-select (test_json->3) is null as expect_false
-from test_jsonb
-where json_type = 'array';
-
-select (test_json->>3) is null as expect_true
-from test_jsonb
-where json_type = 'array';
-
+select (test_json->'field3') is null as expect_false from test_jsonb where json_type = 'object';
+select (test_json->>'field3') is null as expect_true from test_jsonb where json_type = 'object';
+select (test_json->3) is null as expect_false from test_jsonb where json_type = 'array';
+select (test_json->>3) is null as expect_true from test_jsonb where json_type = 'array';
 
 -- array length
 
 SELECT jsonb_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]');
-
 SELECT jsonb_array_length('[]');
-
 SELECT jsonb_array_length('{"f1":1,"f2":[5,6]}');
-
 SELECT jsonb_array_length('4');
 
 -- each
