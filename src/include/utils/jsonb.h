@@ -3,7 +3,7 @@
  * jsonb.h
  *	  Declarations for JSONB data type support.
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Copyright (c) 1996-2014, PostgreSQL Global Development Group
  *
  * src/include/utils/jsonb.h
  *
@@ -40,9 +40,34 @@
 #define JB_ROOT_IS_ARRAY(jbp_)	(JB_ISEMPTY(jbp_) ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_ARRAY))
 #define JB_ROOT_IS_SCALAR(jbp_) (JB_ISEMPTY(jbp_) ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_SCALAR))
 
+#define WJB_KEY				(0x001)
+#define WJB_VALUE			(0x002)
+#define WJB_ELEM			(0x004)
+#define WJB_BEGIN_ARRAY		(0x008)
+#define WJB_END_ARRAY		(0x010)
+#define WJB_BEGIN_OBJECT	(0x020)
+#define WJB_END_OBJECT		(0x040)
+
+/*
+ * When using a GIN/GiST index for jsonb, we choose to index both keys and
+ * values.  The storage format is "text" values, with K, V, or N prepended to
+ * the string to indicate key, value, or null values.  (As of 9.1 it might be
+ * better to store null values as nulls, but we'll keep it this way for on-disk
+ * compatibility.)
+ */
+#define ELEMFLAG    'E'
+#define KEYFLAG     'K'
+#define VALFLAG     'V'
+#define NULLFLAG    'N'
+
+#define JsonbContainsStrategyNumber		7
+#define JsonbExistsStrategyNumber		9
+#define JsonbExistsAnyStrategyNumber	10
+#define JsonbExistsAllStrategyNumber	11
+
+/* Convenience macros */
 #define DatumGetJsonb(d)	((Jsonb*) PG_DETOAST_DATUM(d))
 #define JsonbGetDatum(p)	PointerGetDatum(p)
-
 #define PG_GETARG_JSONB(x) DatumGetJsonb(PG_GETARG_DATUM(x))
 #define PG_RETURN_JSONB(x) PG_RETURN_POINTER(x)
 
@@ -131,33 +156,6 @@ typedef struct ToJsonbState
 	struct ToJsonbState *next;
 } ToJsonbState;
 
-/*
- * jsonb support functions
- */
-#define WJB_KEY				(0x001)
-#define WJB_VALUE			(0x002)
-#define WJB_ELEM			(0x004)
-#define WJB_BEGIN_ARRAY		(0x008)
-#define WJB_END_ARRAY		(0x010)
-#define WJB_BEGIN_OBJECT	(0x020)
-#define WJB_END_OBJECT		(0x040)
-
-typedef void (*walk_jsonb_cb) (void * /* arg */ , JsonbValue * /* value */ ,
-								   uint32 /* flags */ , uint32 /* level */ );
-extern void walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg);
-extern int	compareJsonbStringValue(const void *a, const void *b, void *arg);
-extern int	compareJsonbPair(const void *a, const void *b, void *arg);
-extern int	compareJsonbBinaryValue(char *a, char *b);
-extern int	compareJsonbValue(JsonbValue *a, JsonbValue *b);
-extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
-								  uint32 *lowbound, JsonbValue *key);
-extern JsonbValue *findUncompressedJsonbValue(char *buffer, uint32 flags,
-						   uint32 *lowbound, char *key, uint32 keylen);
-extern JsonbValue *getJsonbValue(char *buffer, uint32 flags, int32 i);
-extern JsonbValue *pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue *v);
-extern void uniqueJsonbValue(JsonbValue *v);
-extern uint32 compressJsonb(JsonbValue *v, char *buffer);
-
 typedef struct JsonbIterator
 {
 	uint32		type;
@@ -170,20 +168,39 @@ typedef struct JsonbIterator
 	int			i;
 
 	/*
-	 * enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_JSONB
-	 * with possiblity of decoding. See optimization in JsonbIteratorGet()
+	 * Enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_JSONB
+	 * with possibility of decoding. See optimization in JsonbIteratorGet()
 	 */
 	enum
 	{
-		jbi_start = 0x00,
-		jbi_key = 0x01,
-		jbi_value = 0x02,
-		jbi_elem = 0x04
+		jbi_start	= 0x00,
+		jbi_key		= 0x01,
+		jbi_value	= 0x02,
+		jbi_elem	= 0x04
 	} state;
 
 	struct JsonbIterator *next;
 } JsonbIterator;
 
+typedef void (*walk_jsonb_cb) (void * /* arg */ , JsonbValue * /* value */ ,
+								   uint32 /* flags */ , uint32 /* level */ );
+
+/*
+ * jsonb support functions
+ */
+extern void walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg);
+extern int	compareJsonbStringValue(const void *a, const void *b, void *arg);
+extern int	compareJsonbPair(const void *a, const void *b, void *arg);
+extern int	compareJsonbBinaryValue(char *a, char *b);
+extern int	compareJsonbValue(JsonbValue *a, JsonbValue *b);
+extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
+								  uint32 *lowbound, JsonbValue *key);
+extern JsonbValue *findUncompressedJsonbValue(char *buffer, uint32 flags,
+						   uint32 *lowbound, char *key, uint32 keylen);
+extern JsonbValue *getJsonbValue(char *buffer, uint32 flags, int32 i);
+extern JsonbValue *pushJsonbValue(ToJsonbState ** state, int r, JsonbValue *v);
+extern void uniqueJsonbValue(JsonbValue *v);
+extern uint32 compressJsonb(JsonbValue *v, char *buffer);
 extern JsonbIterator *JsonbIteratorInit(char *buffer);
 extern int JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested);
 extern char *JsonbToCString(StringInfo out, char *in, int estimated_len);
@@ -234,22 +251,5 @@ extern Datum gjsonb_same(PG_FUNCTION_ARGS);
 /* Dummy GiST routines */
 extern Datum gjsonb_in(PG_FUNCTION_ARGS);
 extern Datum gjsonb_out(PG_FUNCTION_ARGS);
-
-/*
- * When using a GIN/GiST index for jsonb, we choose to index both keys and
- * values.  The storage format is "text" values, with K, V, or N prepended to
- * the string to indicate key, value, or null values.  (As of 9.1 it might be
- * better to store null values as nulls, but we'll keep it this way for on-disk
- * compatibility.)
- */
-#define ELEMFLAG    'E'
-#define KEYFLAG     'K'
-#define VALFLAG     'V'
-#define NULLFLAG    'N'
-
-#define JsonbContainsStrategyNumber		7
-#define JsonbExistsStrategyNumber		9
-#define JsonbExistsAnyStrategyNumber	10
-#define JsonbExistsAllStrategyNumber	11
 
 #endif   /* __JSONB_H__ */
