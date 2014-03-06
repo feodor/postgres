@@ -104,6 +104,13 @@ select (test_json->>'field3') is null as expect_true from test_jsonb where json_
 select (test_json->3) is null as expect_false from test_jsonb where json_type = 'array';
 select (test_json->>3) is null as expect_true from test_jsonb where json_type = 'array';
 
+-- equality and inequality
+select '{"x":"y"}'::jsonb = '{"x":"y"}'::jsonb;
+select '{"x":"y"}'::jsonb = '{"x":"z"}'::jsonb;
+
+select '{"x":"y"}'::jsonb <> '{"x":"y"}'::jsonb;
+select '{"x":"y"}'::jsonb <> '{"x":"z"}'::jsonb;
+
 -- array length
 
 SELECT jsonb_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]');

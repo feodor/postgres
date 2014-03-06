@@ -399,6 +399,31 @@ select (test_json->>3) is null as expect_true from test_jsonb where json_type = 
  t
 (1 row)
 
+-- equality and inequality
+select '{"x":"y"}'::jsonb = '{"x":"y"}'::jsonb;
+ ?column? 
+----------
+ t
+(1 row)
+
+select '{"x":"y"}'::jsonb = '{"x":"z"}'::jsonb;
+ ?column? 
+----------
+ f
+(1 row)
+
+select '{"x":"y"}'::jsonb <> '{"x":"y"}'::jsonb;
+ ?column? 
+----------
+ f
+(1 row)
+
+select '{"x":"y"}'::jsonb <> '{"x":"z"}'::jsonb;
+ ?column? 
+----------
+ t
+(1 row)
+
 -- array length
 SELECT jsonb_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]');
  jsonb_array_length 
