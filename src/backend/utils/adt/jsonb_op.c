@@ -516,6 +516,28 @@ jsonb_contains(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(res);
 }
 
+/*
+ * Kludge to work around the need for an alternative pg_proc entry for each
+ * operator's oprcode procedure
+ */
+Datum
+jsonb_contained_alt(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(DirectFunctionCall2(jsonb_contained,
+										PG_GETARG_DATUM(0),
+										PG_GETARG_DATUM(1)
+										));
+}
+
+Datum
+jsonb_contains_alt(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATUM(DirectFunctionCall2(jsonb_contains,
+										PG_GETARG_DATUM(0),
+										PG_GETARG_DATUM(1)
+										));
+}
+
 Datum
 jsonb_contained(PG_FUNCTION_ARGS)
 {

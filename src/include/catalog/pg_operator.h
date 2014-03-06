@@ -1802,6 +1802,10 @@ DATA(insert OID = 3248 (  "?|"	   PGNSP PGUID b f f 3802 1009 16 0 0 jsonb_exist
 DESCR("exists any");
 DATA(insert OID = 3249 (  "?&"	   PGNSP PGUID b f f 3802 1009 16 0 0 jsonb_exists_all contsel contjoinsel ));
 DESCR("exists all");
+DATA(insert OID = 3250 (  "<@"	   PGNSP PGUID b f f 3802 3802 16 0 0 jsonb_contained_alt contsel contjoinsel ));
+DESCR("contained");
+DATA(insert OID = 3251 (  "@"	   PGNSP PGUID b f f 3802 3802 16 0 0 jsonb_contains_alt contsel contjoinsel ));
+DESCR("contains");
 
 /*
  * function prototypes
