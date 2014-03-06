@@ -294,7 +294,7 @@ LINE 1: SELECT '    '::jsonb;
                ^
 DETAIL:  The input string ended unexpectedly.
 CONTEXT:  JSON data, line 1:     
--- make sure jsonb is passed throught json generators without being escaped
+-- make sure jsonb is passed through json generators without being escaped
 select array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
       array_to_json       
 --------------------------
