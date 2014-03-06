@@ -217,7 +217,7 @@ JsonbDeepFetch(Jsonb *in, ArrayType *path)
 Datum
 jsonb_exists(PG_FUNCTION_ARGS)
 {
-	Jsonb	   	*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
+	Jsonb	   	*hs = PG_GETARG_JSONB(0);
 	text		*key = PG_GETARG_TEXT_PP(1);
 	JsonbValue	*v = NULL;
 
@@ -234,7 +234,7 @@ jsonb_exists(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_idx(PG_FUNCTION_ARGS)
 {
-	Jsonb	   	*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
+	Jsonb	   	*hs = PG_GETARG_JSONB(0);
 	int			ith = PG_GETARG_INT32(1);
 	JsonbValue	*v = NULL;
 
@@ -247,7 +247,7 @@ jsonb_exists_idx(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_path(PG_FUNCTION_ARGS)
 {
-	Jsonb	   	*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
+	Jsonb	   	*hs = PG_GETARG_JSONB(0);
 	ArrayType	*path = PG_GETARG_ARRAYTYPE_P(1);
 
 	PG_RETURN_BOOL(JsonbDeepFetch(hs, path) != NULL);
@@ -256,7 +256,7 @@ jsonb_exists_path(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_any(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
+	Jsonb	   		*hs = PG_GETARG_JSONB(0);
 	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
 	JsonbValue		*v = arrayToJsonbSortedArray(keys);
 	int				i;
@@ -290,7 +290,7 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_all(PG_FUNCTION_ARGS)
 {
-	Jsonb			*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
+	Jsonb	   		*hs = PG_GETARG_JSONB(0);
 	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
 	JsonbValue		*v = arrayToJsonbSortedArray(keys);
 	int				i;
@@ -499,8 +499,8 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 Datum
 jsonb_contains(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*val = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
-	Jsonb	   		*tmpl = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(1));
+	Jsonb	   		*val = PG_GETARG_JSONB(0);
+	Jsonb	   		*tmpl = PG_GETARG_JSONB(1);
 
 	bool			res = true;
 	JsonbIterator	*it1, *it2;
@@ -553,8 +553,8 @@ jsonb_contained(PG_FUNCTION_ARGS)
 Datum
 jsonb_cmp(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs1 = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
-	Jsonb	   		*hs2 = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(1));
+	Jsonb	   		*hs1 = PG_GETARG_JSONB(0);
+	Jsonb	   		*hs2 = PG_GETARG_JSONB(1);
 
 	int				res;
 
@@ -650,7 +650,7 @@ jsonb_le(PG_FUNCTION_ARGS)
 Datum
 jsonb_hash(PG_FUNCTION_ARGS)
 {
-	Jsonb	   	*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
+	Jsonb	   	*hs = PG_GETARG_JSONB(0);
 
 	Datum		hval = hash_any((unsigned char *) VARDATA(hs),
 								VARSIZE(hs) - VARHDRSZ);

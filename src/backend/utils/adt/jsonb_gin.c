@@ -76,7 +76,7 @@ makeitemFromValue(JsonbValue *v, char flag)
 Datum
 gin_extract_jsonb(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
+	Jsonb	   		*hs = (Jsonb*) PG_GETARG_JSONB(0);
 	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
 	Datum	   		*entries = NULL;
 	int				total = 2 * JB_ROOT_COUNT(hs);
@@ -327,7 +327,7 @@ hash_value(JsonbValue *v, PathHashStack *stack)
 Datum
 gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
+	Jsonb	   		*hs = PG_GETARG_JSONB(0);
 	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
 	Datum	   		*entries = NULL;
 	int				total = 2 * JB_ROOT_COUNT(hs);

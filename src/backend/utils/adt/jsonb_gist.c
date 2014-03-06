@@ -262,7 +262,7 @@ gjsonb_consistent(PG_FUNCTION_ARGS)
 		qe = fcinfo->flinfo->fn_extra;
 		if (qe == NULL)
 		{
-			Jsonb	   		*query = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(1));
+			Jsonb	   		*query = PG_GETARG_JSONB(1);
 
 			qe = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(BITVEC));
 			memset(qe, 0, sizeof(BITVEC));
