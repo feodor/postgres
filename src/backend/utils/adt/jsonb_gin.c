@@ -66,7 +66,7 @@ makeitemFromValue(JsonbValue *v, char flag)
 			item = makeitem(v->string.val, v->string.len, flag);
 			break;
 		default:
-			elog(ERROR, "wrong hstore scalar type");
+			elog(ERROR, "wrong jsonb scalar type");
 	}
 
 	return item;
@@ -74,7 +74,7 @@ makeitemFromValue(JsonbValue *v, char flag)
 
 
 Datum
-gin_extract_hstore(PG_FUNCTION_ARGS)
+gin_extract_jsonb(PG_FUNCTION_ARGS)
 {
 	Jsonb	   		*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
 	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
@@ -124,7 +124,7 @@ gin_extract_hstore(PG_FUNCTION_ARGS)
 }
 
 Datum
-gin_extract_hstore_query(PG_FUNCTION_ARGS)
+gin_extract_jsonb_query(PG_FUNCTION_ARGS)
 {
 	int32	   *nentries = (int32 *) PG_GETARG_POINTER(1);
 	StrategyNumber strategy = PG_GETARG_UINT16(2);
@@ -133,9 +133,9 @@ gin_extract_hstore_query(PG_FUNCTION_ARGS)
 
 	if (strategy == JsonbContainsStrategyNumber)
 	{
-		/* Query is an hstore, so just apply gin_extract_hstore... */
+		/* Query is a jsonb, so just apply gin_extract_jsonb... */
 		entries = (Datum *)
-			DatumGetPointer(DirectFunctionCall2(gin_extract_hstore,
+			DatumGetPointer(DirectFunctionCall2(gin_extract_jsonb,
 												PG_GETARG_DATUM(0),
 												PointerGetDatum(nentries)));
 		/* ... except that "contains {}" requires a full index scan */
@@ -171,7 +171,7 @@ gin_extract_hstore_query(PG_FUNCTION_ARGS)
 
 		for (i = 0, j = 0; i < key_count; ++i)
 		{
-			/* Nulls in the array are ignored, cf hstoreArrayToPairs */
+			/* Nulls in the array are ignored */
 			if (key_nulls[i])
 				continue;
 			item = makeitem(VARDATA(key_datums[i]),
@@ -194,7 +194,7 @@ gin_extract_hstore_query(PG_FUNCTION_ARGS)
 }
 
 Datum
-gin_consistent_hstore(PG_FUNCTION_ARGS)
+gin_consistent_jsonb(PG_FUNCTION_ARGS)
 {
 	bool	   *check = (bool *) PG_GETARG_POINTER(0);
 	StrategyNumber strategy = PG_GETARG_UINT16(1);
@@ -256,7 +256,7 @@ gin_consistent_hstore(PG_FUNCTION_ARGS)
 }
 
 Datum
-gin_consistent_hstore_hash(PG_FUNCTION_ARGS)
+gin_consistent_jsonb_hash(PG_FUNCTION_ARGS)
 {
 	bool	   *check = (bool *) PG_GETARG_POINTER(0);
 	StrategyNumber strategy = PG_GETARG_UINT16(1);
@@ -319,13 +319,13 @@ hash_value(JsonbValue *v, PathHashStack *stack)
 			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
 			break;
 		default:
-			elog(ERROR, "wrong hstore scalar type");
+			elog(ERROR, "wrong jsonb scalar type");
 			break;
 	}
 }
 
 Datum
-gin_extract_hstore_hash(PG_FUNCTION_ARGS)
+gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 {
 	Jsonb	   		*hs = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(0));
 	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
@@ -412,7 +412,7 @@ gin_extract_hstore_hash(PG_FUNCTION_ARGS)
 }
 
 Datum
-gin_extract_hstore_hash_query(PG_FUNCTION_ARGS)
+gin_extract_jsonb_hash_query(PG_FUNCTION_ARGS)
 {
 	int32	   *nentries = (int32 *) PG_GETARG_POINTER(1);
 	StrategyNumber strategy = PG_GETARG_UINT16(2);
@@ -421,9 +421,9 @@ gin_extract_hstore_hash_query(PG_FUNCTION_ARGS)
 
 	if (strategy == JsonbContainsStrategyNumber)
 	{
-		/* Query is an hstore, so just apply gin_extract_hstore... */
+		/* Query is a jsonb, so just apply gin_extract_jsonb... */
 		entries = (Datum *)
-			DatumGetPointer(DirectFunctionCall2(gin_extract_hstore_hash,
+			DatumGetPointer(DirectFunctionCall2(gin_extract_jsonb_hash,
 												PG_GETARG_DATUM(0),
 												PointerGetDatum(nentries)));
 		/* ... except that "contains {}" requires a full index scan */
