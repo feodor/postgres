@@ -237,28 +237,6 @@ jsonb_exists(PG_FUNCTION_ARGS)
 }
 
 Datum
-jsonb_exists_idx(PG_FUNCTION_ARGS)
-{
-	Jsonb	   	*hs = PG_GETARG_JSONB(0);
-	int			ith = PG_GETARG_INT32(1);
-	JsonbValue	*v = NULL;
-
-	if (!JB_ISEMPTY(hs))
-		v = getJsonbValue(VARDATA(hs), JB_FLAG_OBJECT | JB_FLAG_ARRAY, ith);
-
-	PG_RETURN_BOOL(v != NULL);
-}
-
-Datum
-jsonb_exists_path(PG_FUNCTION_ARGS)
-{
-	Jsonb	   	*hs = PG_GETARG_JSONB(0);
-	ArrayType	*path = PG_GETARG_ARRAYTYPE_P(1);
-
-	PG_RETURN_BOOL(JsonbDeepFetch(hs, path) != NULL);
-}
-
-Datum
 jsonb_exists_any(PG_FUNCTION_ARGS)
 {
 	Jsonb	   		*hs = PG_GETARG_JSONB(0);
@@ -651,7 +629,7 @@ jsonb_le(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(res <= 0);
 }
 
-
+/* Hash operator class hashing function */
 Datum
 jsonb_hash(PG_FUNCTION_ARGS)
 {

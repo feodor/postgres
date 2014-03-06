@@ -232,8 +232,6 @@ extern void JsonbPutEscapedValue(StringInfo out, JsonbValue *v);
 
 /* Indexing-related ops */
 extern Datum jsonb_exists(PG_FUNCTION_ARGS);
-extern Datum jsonb_exists_idx(PG_FUNCTION_ARGS);
-extern Datum jsonb_exists_path(PG_FUNCTION_ARGS);
 extern Datum jsonb_exists_any(PG_FUNCTION_ARGS);
 extern Datum jsonb_exists_all(PG_FUNCTION_ARGS);
 extern Datum jsonb_contains(PG_FUNCTION_ARGS);
