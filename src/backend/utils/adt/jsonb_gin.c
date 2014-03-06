@@ -75,10 +75,10 @@ makeitemFromValue(JsonbValue *v, char flag)
 Datum
 gin_extract_jsonb(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs = (Jsonb*) PG_GETARG_JSONB(0);
+	Jsonb	   		*jb = (Jsonb*) PG_GETARG_JSONB(0);
 	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
 	Datum	   		*entries = NULL;
-	int				total = 2 * JB_ROOT_COUNT(hs);
+	int				total = 2 * JB_ROOT_COUNT(jb);
 	int				i = 0, r;
 	JsonbIterator	*it;
 	JsonbValue		v;
@@ -91,7 +91,7 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 
 	entries = (Datum *) palloc(sizeof(Datum) * total);
 
-	it = JsonbIteratorInit(VARDATA(hs));
+	it = JsonbIteratorInit(VARDATA(jb));
 
 	while((r = JsonbIteratorGet(&it, &v, false)) != 0)
 	{
@@ -198,7 +198,7 @@ gin_consistent_jsonb(PG_FUNCTION_ARGS)
 	bool	   *check = (bool *) PG_GETARG_POINTER(0);
 	StrategyNumber strategy = PG_GETARG_UINT16(1);
 
-	/* Jsonb	   *query = PG_GETARG_HS(2); */
+	/* Jsonb	   *query = PG_GETARG_JSONB(2); */
 	int32		nkeys = PG_GETARG_INT32(3);
 
 	/* Pointer	   *extra_data = (Pointer *) PG_GETARG_POINTER(4); */
@@ -260,7 +260,7 @@ gin_consistent_jsonb_hash(PG_FUNCTION_ARGS)
 	bool	   *check = (bool *) PG_GETARG_POINTER(0);
 	StrategyNumber strategy = PG_GETARG_UINT16(1);
 
-	/* Jsonb	   *query = PG_GETARG_HS(2); */
+	/* Jsonb	   *query = PG_GETARG_JSONB(2); */
 	int32		nkeys = PG_GETARG_INT32(3);
 
 	/* Pointer	   *extra_data = (Pointer *) PG_GETARG_POINTER(4); */
@@ -326,10 +326,10 @@ hash_value(JsonbValue *v, PathHashStack *stack)
 Datum
 gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs = PG_GETARG_JSONB(0);
+	Jsonb	   		*jb = PG_GETARG_JSONB(0);
 	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
 	Datum	   		*entries = NULL;
-	int				total = 2 * JB_ROOT_COUNT(hs);
+	int				total = 2 * JB_ROOT_COUNT(jb);
 	int				i = 0, r;
 	JsonbIterator	*it;
 	JsonbValue		v;
@@ -345,7 +345,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 
 	entries = (Datum *) palloc(sizeof(Datum) * total);
 
-	it = JsonbIteratorInit(VARDATA(hs));
+	it = JsonbIteratorInit(VARDATA(jb));
 
 	tail.next = NULL;
 	INIT_CRC32(tail.hash_state);

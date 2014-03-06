@@ -100,12 +100,12 @@ arrayToJsonbSortedArray(ArrayType *a)
 Datum
 jsonb_exists(PG_FUNCTION_ARGS)
 {
-	Jsonb	   	*hs = PG_GETARG_JSONB(0);
+	Jsonb	   	*jb = PG_GETARG_JSONB(0);
 	text		*key = PG_GETARG_TEXT_PP(1);
 	JsonbValue	*v = NULL;
 
-	if (!JB_ISEMPTY(hs))
-		v = findUncompressedJsonbValue(VARDATA(hs),
+	if (!JB_ISEMPTY(jb))
+		v = findUncompressedJsonbValue(VARDATA(jb),
 										JB_FLAG_OBJECT | JB_FLAG_ARRAY,
 										NULL,
 										VARDATA_ANY(key),
@@ -117,17 +117,17 @@ jsonb_exists(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_any(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs = PG_GETARG_JSONB(0);
+	Jsonb	   		*jb = PG_GETARG_JSONB(0);
 	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
 	JsonbValue		*v = arrayToJsonbSortedArray(keys);
 	int				i;
 	uint32			*plowbound = NULL, lowbound = 0;
 	bool			res = false;
 
-	if (JB_ISEMPTY(hs) || v == NULL || v->hash.npairs == 0)
+	if (JB_ISEMPTY(jb) || v == NULL || v->hash.npairs == 0)
 		PG_RETURN_BOOL(false);
 
-	if (JB_ROOT_IS_OBJECT(hs))
+	if (JB_ROOT_IS_OBJECT(jb))
 		plowbound = &lowbound;
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
@@ -137,7 +137,7 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedJsonbValueByValue(VARDATA(hs), JB_FLAG_OBJECT | JB_FLAG_ARRAY, plowbound,
+		if (findUncompressedJsonbValueByValue(VARDATA(jb), JB_FLAG_OBJECT | JB_FLAG_ARRAY, plowbound,
 											   v->array.elems + i) != NULL)
 		{
 			res = true;
@@ -151,17 +151,17 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_all(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs = PG_GETARG_JSONB(0);
+	Jsonb	   		*js = PG_GETARG_JSONB(0);
 	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
 	JsonbValue		*v = arrayToJsonbSortedArray(keys);
 	int				i;
 	uint32			*plowbound = NULL, lowbound = 0;
 	bool			res = false;
 
-	if (JB_ISEMPTY(hs) || v == NULL || v->hash.npairs == 0)
+	if (JB_ISEMPTY(js) || v == NULL || v->hash.npairs == 0)
 		PG_RETURN_BOOL(false);
 
-	if (JB_ROOT_IS_OBJECT(hs))
+	if (JB_ROOT_IS_OBJECT(js))
 		plowbound = &lowbound;
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
@@ -171,7 +171,7 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedJsonbValueByValue(VARDATA(hs), JB_FLAG_OBJECT | JB_FLAG_ARRAY, plowbound,
+		if (findUncompressedJsonbValueByValue(VARDATA(js), JB_FLAG_OBJECT | JB_FLAG_ARRAY, plowbound,
 											   v->array.elems + i) != NULL)
 		{
 			res = true;
@@ -181,36 +181,6 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 
 	PG_RETURN_BOOL(res);
 }
-
-/*
- * Common initialization function for the various set-returning funcs.
- *
- * fcinfo is only passed if the function is to return a composite; it will be
- * used to look up the return tupledesc.  we stash a copy of the jsonb in the
- * multi-call context in case it was originally toasted.  (At least I assume
- * that's why; there was no explanatory comment in the original code. --AG)
- */
-typedef struct SetReturningState
-{
-	Jsonb			*hs;
-	JsonbIterator	*it;
-	MemoryContext	ctx;
-
-	JsonbValue		init;
-	int				path_len;
-	int				level;
-	struct {
-		JsonbValue		v;
-		Datum           varStr;
-		int				varInt;
-		enum {
-			pathStr,
-			pathInt,
-			pathAny
-		} 				varKind;
-		int				i;
-	}				*path;
-} SetReturningState;
 
 static bool
 deepContains(JsonbIterator **it1, JsonbIterator **it2)
@@ -414,16 +384,16 @@ jsonb_contained(PG_FUNCTION_ARGS)
 Datum
 jsonb_cmp(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*hs1 = PG_GETARG_JSONB(0);
-	Jsonb	   		*hs2 = PG_GETARG_JSONB(1);
+	Jsonb	   		*jb1 = PG_GETARG_JSONB(0);
+	Jsonb	   		*jb2 = PG_GETARG_JSONB(1);
 
 	int				res;
 
-	if (JB_ISEMPTY(hs1) || JB_ISEMPTY(hs2))
+	if (JB_ISEMPTY(jb1) || JB_ISEMPTY(jb2))
 	{
-		if (JB_ISEMPTY(hs1))
+		if (JB_ISEMPTY(jb1))
 		{
-			if (JB_ISEMPTY(hs2))
+			if (JB_ISEMPTY(jb2))
 				res = 0;
 			else
 				res = -1;
@@ -435,15 +405,15 @@ jsonb_cmp(PG_FUNCTION_ARGS)
 	}
 	else
 	{
-		res = compareJsonbBinaryValue(VARDATA(hs1), VARDATA(hs2));
+		res = compareJsonbBinaryValue(VARDATA(jb1), VARDATA(jb2));
 	}
 
 	/*
 	 * this is a btree support function; this is one of the few places where
 	 * memory needs to be explicitly freed.
 	 */
-	PG_FREE_IF_COPY(hs1, 0);
-	PG_FREE_IF_COPY(hs2, 1);
+	PG_FREE_IF_COPY(jb1, 0);
+	PG_FREE_IF_COPY(jb2, 1);
 	PG_RETURN_INT32(res);
 }
 
@@ -566,7 +536,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 				COMP_CRC32(crc, "he", 3);
 				break;
 			default:
-				elog(ERROR, "unexpected state of hstore iterator");
+				elog(ERROR, "unexpected state of jsonb iterator");
 		}
 	}
 
