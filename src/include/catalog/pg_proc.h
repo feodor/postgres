@@ -4584,6 +4584,12 @@ DATA(insert OID =  3479 (  gjsonb_in		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3
 DESCR("GiST support");
 DATA(insert OID =  3480 (  gjsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2275 "3801" _null_ _null_ _null_ _null_ gjsonb_out _null_ _null_ _null_ ));
 DESCR("GiST support");
+DATA(insert OID = 3482 (  gin_extract_jsonb  PGNSP PGUID 12 1 0 0 0 f f f f t f i 3 0 2281 "2281 2281 2281" _null_ _null_ _null_ _null_ gin_extract_jsonb _null_ _null_ _null_ ));
+DESCR("GIN support");
+DATA(insert OID = 3483 (  gin_extract_jsonb_query  PGNSP PGUID 12 1 0 0 0 f f f f t f i 7 0 2281 "2277 2281 21 2281 2281 2281 2281" _null_ _null_ _null_ _null_ gin_extract_jsonb_query _null_ _null_ _null_ ));
+DESCR("GIN support");
+DATA(insert OID = 3484 (  gin_consistent_jsonb  PGNSP PGUID 12 1 0 0 0 f f f f t f i 8 0 16 "2281 21 2277 23 2281 2281 2281 2281" _null_ _null_ _null_ _null_ gin_consistent_jsonb _null_ _null_ _null_ ));
+DESCR("GIN support");
 
 /* txid */
 DATA(insert OID = 2939 (  txid_snapshot_in			PGNSP PGUID 12 1  0 0 0 f f f f t f i 1 0 2970 "2275" _null_ _null_ _null_ _null_ txid_snapshot_in _null_ _null_ _null_ ));
