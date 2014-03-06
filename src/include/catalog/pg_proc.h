@@ -4558,6 +4558,8 @@ DATA(insert OID = 4046 (  jsonb_contains   PGNSP PGUID 12 1 0 0 0 f f f f t f i 
 DESCR("implementation of @> operator");
 DATA(insert OID = 4047 (  jsonb_exists   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 25" _null_ _null_ _null_ _null_ jsonb_exists _null_ _null_ _null_ ));
 DESCR("implementation of ? operator");
+DATA(insert OID = 4048 (  jsonb_exists_any   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 1009" _null_ _null_ _null_ _null_ jsonb_exists_any _null_ _null_ _null_ ));
+DESCR("implementation of ?| operator");
 DATA(insert OID =  3479 (  gjsonb_in		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3801 "2275" _null_ _null_ _null_ _null_ gjsonb_in _null_ _null_ _null_ ));
 DESCR("GiST support");
 DATA(insert OID =  3480 (  gjsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2275 "3801" _null_ _null_ _null_ _null_ gjsonb_out _null_ _null_ _null_ ));
