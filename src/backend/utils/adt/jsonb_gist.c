@@ -91,20 +91,6 @@ typedef struct
 
 #define WISH_F(a,b,c) (double)( -(double)(((a)-(b))*((a)-(b))*((a)-(b)))*(c) )
 
-Datum
-gjsonb_in(PG_FUNCTION_ARGS)
-{
-	elog(ERROR, "not implemented");
-	PG_RETURN_DATUM(0);
-}
-
-Datum
-gjsonb_out(PG_FUNCTION_ARGS)
-{
-	elog(ERROR, "not implemented");
-	PG_RETURN_DATUM(0);
-}
-
 static int
 crc32_JsonbValue(JsonbValue *v, uint32 r)
 {
@@ -164,6 +150,268 @@ crc32_Key(char *buf, int sz)
 
 	FIN_CRC32(crc);
 	return crc;
+}
+
+static int32
+sizebitvec(BITVECP sign)
+{
+	int32		size = 0,
+				i;
+
+	LOOPBYTE
+	{
+		size += SUMBIT(sign);
+		sign = (BITVECP) (((char *) sign) + 1);
+	}
+	return size;
+}
+
+static int
+hemdistsign(BITVECP a, BITVECP b)
+{
+	int			i,
+				dist = 0;
+
+	LOOPBIT
+	{
+		if (GETBIT(a, i) != GETBIT(b, i))
+			dist++;
+	}
+	return dist;
+}
+
+static int
+hemdist(GISTTYPE *a, GISTTYPE *b)
+{
+	if (ISALLTRUE(a))
+	{
+		if (ISALLTRUE(b))
+			return 0;
+		else
+			return SIGLENBIT - sizebitvec(GETSIGN(b));
+	}
+	else if (ISALLTRUE(b))
+		return SIGLENBIT - sizebitvec(GETSIGN(a));
+
+	return hemdistsign(GETSIGN(a), GETSIGN(b));
+}
+
+static int32
+unionkey(BITVECP sbase, GISTTYPE *add)
+{
+	int32		i;
+	BITVECP		sadd = GETSIGN(add);
+
+	if (ISALLTRUE(add))
+		return 1;
+	LOOPBYTE
+		sbase[i] |= sadd[i];
+	return 0;
+}
+
+typedef struct
+{
+	OffsetNumber pos;
+	int32		cost;
+} SPLITCOST;
+
+static int
+comparecost(const void *a, const void *b)
+{
+	return ((const SPLITCOST *) a)->cost - ((const SPLITCOST *) b)->cost;
+}
+
+Datum
+gjsonb_in(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "not implemented");
+	PG_RETURN_DATUM(0);
+}
+
+Datum
+gjsonb_out(PG_FUNCTION_ARGS)
+{
+	elog(ERROR, "not implemented");
+	PG_RETURN_DATUM(0);
+}
+
+Datum
+gjsonb_consistent(PG_FUNCTION_ARGS)
+{
+	GISTTYPE   *entry = (GISTTYPE *) DatumGetPointer(((GISTENTRY *) PG_GETARG_POINTER(0))->key);
+	StrategyNumber strategy = (StrategyNumber) PG_GETARG_UINT16(2);
+
+	/* Oid		subtype = PG_GETARG_OID(3); */
+	bool	   *recheck = (bool *) PG_GETARG_POINTER(4);
+	bool		res = true;
+	BITVECP		sign;
+
+	/* All cases served by this function are inexact */
+	*recheck = true;
+
+	if (ISALLTRUE(entry))
+		PG_RETURN_BOOL(true);
+
+	sign = GETSIGN(entry);
+
+	if (strategy == JsonbContainsStrategyNumber)
+	{
+		BITVECP		qe;
+		int			i;
+
+		qe = fcinfo->flinfo->fn_extra;
+		if (qe == NULL)
+		{
+			Jsonb	   		*query = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(1));
+
+			qe = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(BITVEC));
+			memset(qe, 0, sizeof(BITVEC));
+
+			if (!JB_ISEMPTY(query))
+			{
+				int				r;
+				JsonbIterator	*it = JsonbIteratorInit(VARDATA(query));
+				JsonbValue		v;
+
+				while((r = JsonbIteratorGet(&it, &v, false)) != 0)
+				{
+					if ((r == WJB_ELEM || r == WJB_KEY || r == WJB_VALUE) && v.type != jbvNull)
+					{
+						int   crc = crc32_JsonbValue(&v, r);
+
+						HASH(qe, crc);
+					}
+				}
+			}
+
+			fcinfo->flinfo->fn_extra = qe;
+		}
+
+		LOOPBYTE
+		{
+			if ((sign[i] & qe[i]) != qe[i])
+			{
+				res = false;
+				break;
+			}
+		}
+	}
+	else if (strategy == JsonbExistsStrategyNumber)
+	{
+		int 	*qval;
+
+		qval = fcinfo->flinfo->fn_extra;
+		if (qval == NULL)
+		{
+			text	   *query = PG_GETARG_TEXT_PP(1);
+			int			crc = crc32_Key(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query));
+
+			qval = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(*qval));
+			*qval = HASHVAL(crc);
+
+			fcinfo->flinfo->fn_extra = qval;
+		}
+
+		res = (GETBIT(sign, *qval)) ? true : false;
+	}
+	else if (strategy == JsonbExistsAllStrategyNumber ||
+			 strategy == JsonbExistsAnyStrategyNumber)
+	{
+		BITVECP	arrentry;
+		int		i;
+
+		arrentry = fcinfo->flinfo->fn_extra;
+		if (arrentry == NULL)
+		{
+			ArrayType  *query = PG_GETARG_ARRAYTYPE_P(1);
+			Datum	   *key_datums;
+			bool	   *key_nulls;
+			int			key_count;
+
+			arrentry = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
+										  sizeof(BITVEC));
+			memset(arrentry, 0, sizeof(BITVEC));
+
+			deconstruct_array(query,
+							  TEXTOID, -1, false, 'i',
+							  &key_datums, &key_nulls, &key_count);
+
+			for (i = 0; i < key_count; ++i)
+			{
+				int			crc;
+
+				if (key_nulls[i])
+					continue;
+				crc = crc32_Key(VARDATA(key_datums[i]),
+								VARSIZE(key_datums[i]) - VARHDRSZ);
+				HASH(arrentry, crc);
+			}
+
+			fcinfo->flinfo->fn_extra = arrentry;
+		}
+
+		if (strategy == JsonbExistsAllStrategyNumber)
+		{
+			LOOPBYTE
+			{
+				if ((sign[i] & arrentry[i]) != arrentry[i])
+				{
+					res = false;
+					break;
+				}
+			}
+		}
+		else /* JsonbExistsAnyStrategyNumber */
+		{
+			res = false;
+
+			LOOPBYTE
+			{
+				if (sign[i] & arrentry[i])
+				{
+					res = true;
+					break;
+				}
+			}
+		}
+	}
+	else
+		elog(ERROR, "unsupported strategy number: %d", strategy);
+
+	PG_RETURN_BOOL(res);
+}
+
+Datum
+gjsonb_union(PG_FUNCTION_ARGS)
+{
+	GistEntryVector *entryvec = (GistEntryVector *) PG_GETARG_POINTER(0);
+	int32		len = entryvec->n;
+
+	int		   *size = (int *) PG_GETARG_POINTER(1);
+	BITVEC		base;
+	int32		i;
+	int32		flag = 0;
+	GISTTYPE   *result;
+
+	MemSet((void *) base, 0, sizeof(BITVEC));
+	for (i = 0; i < len; i++)
+	{
+		if (unionkey(base, GETENTRY(entryvec, i)))
+		{
+			flag = ALLISTRUE;
+			break;
+		}
+	}
+
+	len = CALCGTSIZE(flag);
+	result = (GISTTYPE *) palloc(len);
+	SET_VARSIZE(result, len);
+	result->flag = flag;
+	if (!ISALLTRUE(result))
+		memcpy((void *) GETSIGN(result), (void *) base, sizeof(BITVEC));
+	*size = len;
+
+	PG_RETURN_POINTER(result);
 }
 
 Datum
@@ -241,128 +489,6 @@ gjsonb_decompress(PG_FUNCTION_ARGS)
 }
 
 Datum
-gjsonb_same(PG_FUNCTION_ARGS)
-{
-	GISTTYPE   *a = (GISTTYPE *) PG_GETARG_POINTER(0);
-	GISTTYPE   *b = (GISTTYPE *) PG_GETARG_POINTER(1);
-	bool	   *result = (bool *) PG_GETARG_POINTER(2);
-
-	if (ISALLTRUE(a) && ISALLTRUE(b))
-		*result = true;
-	else if (ISALLTRUE(a))
-		*result = false;
-	else if (ISALLTRUE(b))
-		*result = false;
-	else
-	{
-		int32		i;
-		BITVECP		sa = GETSIGN(a),
-					sb = GETSIGN(b);
-
-		*result = true;
-		LOOPBYTE
-		{
-			if (sa[i] != sb[i])
-			{
-				*result = false;
-				break;
-			}
-		}
-	}
-	PG_RETURN_POINTER(result);
-}
-
-static int32
-sizebitvec(BITVECP sign)
-{
-	int32		size = 0,
-				i;
-
-	LOOPBYTE
-	{
-		size += SUMBIT(sign);
-		sign = (BITVECP) (((char *) sign) + 1);
-	}
-	return size;
-}
-
-static int
-hemdistsign(BITVECP a, BITVECP b)
-{
-	int			i,
-				dist = 0;
-
-	LOOPBIT
-	{
-		if (GETBIT(a, i) != GETBIT(b, i))
-			dist++;
-	}
-	return dist;
-}
-
-static int
-hemdist(GISTTYPE *a, GISTTYPE *b)
-{
-	if (ISALLTRUE(a))
-	{
-		if (ISALLTRUE(b))
-			return 0;
-		else
-			return SIGLENBIT - sizebitvec(GETSIGN(b));
-	}
-	else if (ISALLTRUE(b))
-		return SIGLENBIT - sizebitvec(GETSIGN(a));
-
-	return hemdistsign(GETSIGN(a), GETSIGN(b));
-}
-
-static int32
-unionkey(BITVECP sbase, GISTTYPE *add)
-{
-	int32		i;
-	BITVECP		sadd = GETSIGN(add);
-
-	if (ISALLTRUE(add))
-		return 1;
-	LOOPBYTE
-		sbase[i] |= sadd[i];
-	return 0;
-}
-
-Datum
-gjsonb_union(PG_FUNCTION_ARGS)
-{
-	GistEntryVector *entryvec = (GistEntryVector *) PG_GETARG_POINTER(0);
-	int32		len = entryvec->n;
-
-	int		   *size = (int *) PG_GETARG_POINTER(1);
-	BITVEC		base;
-	int32		i;
-	int32		flag = 0;
-	GISTTYPE   *result;
-
-	MemSet((void *) base, 0, sizeof(BITVEC));
-	for (i = 0; i < len; i++)
-	{
-		if (unionkey(base, GETENTRY(entryvec, i)))
-		{
-			flag = ALLISTRUE;
-			break;
-		}
-	}
-
-	len = CALCGTSIZE(flag);
-	result = (GISTTYPE *) palloc(len);
-	SET_VARSIZE(result, len);
-	result->flag = flag;
-	if (!ISALLTRUE(result))
-		memcpy((void *) GETSIGN(result), (void *) base, sizeof(BITVEC));
-	*size = len;
-
-	PG_RETURN_POINTER(result);
-}
-
-Datum
 gjsonb_penalty(PG_FUNCTION_ARGS)
 {
 	GISTENTRY  *origentry = (GISTENTRY *) PG_GETARG_POINTER(0); /* always ISSIGNKEY */
@@ -374,20 +500,6 @@ gjsonb_penalty(PG_FUNCTION_ARGS)
 	*penalty = hemdist(origval, newval);
 	PG_RETURN_POINTER(penalty);
 }
-
-
-typedef struct
-{
-	OffsetNumber pos;
-	int32		cost;
-} SPLITCOST;
-
-static int
-comparecost(const void *a, const void *b)
-{
-	return ((const SPLITCOST *) a)->cost - ((const SPLITCOST *) b)->cost;
-}
-
 
 Datum
 gjsonb_picksplit(PG_FUNCTION_ARGS)
@@ -556,147 +668,34 @@ gjsonb_picksplit(PG_FUNCTION_ARGS)
 }
 
 Datum
-gjsonb_consistent(PG_FUNCTION_ARGS)
+gjsonb_same(PG_FUNCTION_ARGS)
 {
-	GISTTYPE   *entry = (GISTTYPE *) DatumGetPointer(((GISTENTRY *) PG_GETARG_POINTER(0))->key);
-	StrategyNumber strategy = (StrategyNumber) PG_GETARG_UINT16(2);
+	GISTTYPE   *a = (GISTTYPE *) PG_GETARG_POINTER(0);
+	GISTTYPE   *b = (GISTTYPE *) PG_GETARG_POINTER(1);
+	bool	   *result = (bool *) PG_GETARG_POINTER(2);
 
-	/* Oid		subtype = PG_GETARG_OID(3); */
-	bool	   *recheck = (bool *) PG_GETARG_POINTER(4);
-	bool		res = true;
-	BITVECP		sign;
-
-	/* All cases served by this function are inexact */
-	*recheck = true;
-
-	if (ISALLTRUE(entry))
-		PG_RETURN_BOOL(true);
-
-	sign = GETSIGN(entry);
-
-	if (strategy == JsonbContainsStrategyNumber)
+	if (ISALLTRUE(a) && ISALLTRUE(b))
+		*result = true;
+	else if (ISALLTRUE(a))
+		*result = false;
+	else if (ISALLTRUE(b))
+		*result = false;
+	else
 	{
-		BITVECP		qe;
-		int			i;
+		int32		i;
+		BITVECP		sa = GETSIGN(a),
+					sb = GETSIGN(b);
 
-		qe = fcinfo->flinfo->fn_extra;
-		if (qe == NULL)
-		{
-			Jsonb	   		*query = (Jsonb*) PG_DETOAST_DATUM(PG_GETARG_POINTER(1));
-
-			qe = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(BITVEC));
-			memset(qe, 0, sizeof(BITVEC));
-
-			if (!JB_ISEMPTY(query))
-			{
-				int				r;
-				JsonbIterator	*it = JsonbIteratorInit(VARDATA(query));
-				JsonbValue		v;
-
-				while((r = JsonbIteratorGet(&it, &v, false)) != 0)
-				{
-					if ((r == WJB_ELEM || r == WJB_KEY || r == WJB_VALUE) && v.type != jbvNull)
-					{
-						int   crc = crc32_JsonbValue(&v, r);
-
-						HASH(qe, crc);
-					}
-				}
-			}
-
-			fcinfo->flinfo->fn_extra = qe;
-		}
-
+		*result = true;
 		LOOPBYTE
 		{
-			if ((sign[i] & qe[i]) != qe[i])
+			if (sa[i] != sb[i])
 			{
-				res = false;
+				*result = false;
 				break;
 			}
 		}
 	}
-	else if (strategy == JsonbExistsStrategyNumber)
-	{
-		int 	*qval;
-
-		qval = fcinfo->flinfo->fn_extra;
-		if (qval == NULL)
-		{
-			text	   *query = PG_GETARG_TEXT_PP(1);
-			int			crc = crc32_Key(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query));
-
-			qval = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(*qval));
-			*qval = HASHVAL(crc);
-
-			fcinfo->flinfo->fn_extra = qval;
-		}
-
-		res = (GETBIT(sign, *qval)) ? true : false;
-	}
-	else if (strategy == JsonbExistsAllStrategyNumber ||
-			 strategy == JsonbExistsAnyStrategyNumber)
-	{
-		BITVECP	arrentry;
-		int		i;
-
-		arrentry = fcinfo->flinfo->fn_extra;
-		if (arrentry == NULL)
-		{
-			ArrayType  *query = PG_GETARG_ARRAYTYPE_P(1);
-			Datum	   *key_datums;
-			bool	   *key_nulls;
-			int			key_count;
-
-			arrentry = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-										  sizeof(BITVEC));
-			memset(arrentry, 0, sizeof(BITVEC));
-
-			deconstruct_array(query,
-							  TEXTOID, -1, false, 'i',
-							  &key_datums, &key_nulls, &key_count);
-
-			for (i = 0; i < key_count; ++i)
-			{
-				int			crc;
-
-				if (key_nulls[i])
-					continue;
-				crc = crc32_Key(VARDATA(key_datums[i]),
-								VARSIZE(key_datums[i]) - VARHDRSZ);
-				HASH(arrentry, crc);
-			}
-
-			fcinfo->flinfo->fn_extra = arrentry;
-		}
-
-		if (strategy == JsonbExistsAllStrategyNumber)
-		{
-			LOOPBYTE
-			{
-				if ((sign[i] & arrentry[i]) != arrentry[i])
-				{
-					res = false;
-					break;
-				}
-			}
-		}
-		else /* JsonbExistsAnyStrategyNumber */
-		{
-			res = false;
-
-			LOOPBYTE
-			{
-				if (sign[i] & arrentry[i])
-				{
-					res = true;
-					break;
-				}
-			}
-		}
-	}
-	else
-		elog(ERROR, "unsupported strategy number: %d", strategy);
-
-	PG_RETURN_BOOL(res);
+	PG_RETURN_POINTER(result);
 }
+

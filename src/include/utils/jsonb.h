@@ -237,6 +237,7 @@ extern Datum jsonb_out(PG_FUNCTION_ARGS);
 extern Datum jsonb_recv(PG_FUNCTION_ARGS);
 extern Datum jsonb_send(PG_FUNCTION_ARGS);
 
+/* Indexing-related ops */
 extern Datum jsonb_exists(PG_FUNCTION_ARGS);
 extern Datum jsonb_exists_idx(PG_FUNCTION_ARGS);
 extern Datum jsonb_exists_path(PG_FUNCTION_ARGS);
@@ -263,12 +264,13 @@ extern Datum gin_extract_hstore_hash_query(PG_FUNCTION_ARGS);
 
 /* GiST support functions */
 extern Datum gjsonb_consistent(PG_FUNCTION_ARGS);
+extern Datum gjsonb_union(PG_FUNCTION_ARGS);
 extern Datum gjsonb_compress(PG_FUNCTION_ARGS);
 extern Datum gjsonb_decompress(PG_FUNCTION_ARGS);
 extern Datum gjsonb_penalty(PG_FUNCTION_ARGS);
 extern Datum gjsonb_picksplit(PG_FUNCTION_ARGS);
-extern Datum gjsonb_union(PG_FUNCTION_ARGS);
 extern Datum gjsonb_same(PG_FUNCTION_ARGS);
+/* Dummy GiST routines */
 extern Datum gjsonb_in(PG_FUNCTION_ARGS);
 extern Datum gjsonb_out(PG_FUNCTION_ARGS);
 
