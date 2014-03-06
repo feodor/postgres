@@ -287,7 +287,6 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(res);
 }
 
-
 Datum
 jsonb_exists_all(PG_FUNCTION_ARGS)
 {
