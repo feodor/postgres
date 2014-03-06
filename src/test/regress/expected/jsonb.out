@@ -320,13 +320,17 @@ SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'object';
  
 (1 row)
 
-SELECT test_json->'field2' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json -> 'field2' FROM test_jsonb WHERE json_type = 'object';
  ?column? 
 ----------
  "val2"
 (1 row)
 
-SELECT test_json->>'field2' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'scalar';
+ERROR:  cannot call jsonb_object_field_text on a scalar
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'array';
+ERROR:  cannot call jsonb_object_field_text on an array
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'object';
  ?column? 
 ----------
  val2
@@ -340,14 +344,24 @@ SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'array';
  "two"
 (1 row)
 
+SELECT test_json -> 9 FROM test_jsonb WHERE json_type = 'array';
+ ?column? 
+----------
+ 
+(1 row)
+
 SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'object';
 ERROR:  cannot call jsonb_array_element on an object
-SELECT test_json->>2 FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'scalar';
+ERROR:  cannot call jsonb_array_element_text on a scalar
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'array';
  ?column? 
 ----------
  two
 (1 row)
 
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'object';
+ERROR:  cannot call jsonb_array_element_text on an object
 SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'scalar';
 ERROR:  cannot call jsonb_object_keys on a scalar
 SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'array';

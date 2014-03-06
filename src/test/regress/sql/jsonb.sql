@@ -78,12 +78,21 @@ INSERT INTO test_jsonb VALUES
 SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'scalar';
 SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'array';
 SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'object';
-SELECT test_json->'field2' FROM test_jsonb WHERE json_type = 'object';
-SELECT test_json->>'field2' FROM test_jsonb WHERE json_type = 'object';
+SELECT test_json -> 'field2' FROM test_jsonb WHERE json_type = 'object';
+
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'scalar';
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'object';
+
 SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'scalar';
 SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json -> 9 FROM test_jsonb WHERE json_type = 'array';
 SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'object';
-SELECT test_json->>2 FROM test_jsonb WHERE json_type = 'array';
+
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'scalar';
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'array';
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'object';
+
 SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'scalar';
 SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'array';
 SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'object';
