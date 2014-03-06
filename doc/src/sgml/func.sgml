@@ -10187,16 +10187,16 @@ table2-mapping
        </row>
        <row>
         <entry><literal>&#63;&#124;</literal></entry>
-        <entry>array[]</entry>
+        <entry>text[]</entry>
         <entry>Do any of these keys exist?</entry>
         <entry><literal>select '{"a":1, "b":2}'::jsonb &#63;&#124; array['b', 'c'];</literal></entry>
         <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
        </row>
        <row>
         <entry><literal>&#63;&amp;</literal></entry>
-        <entry>jsonb</entry>
+        <entry>text[]</entry>
         <entry>Do all keys exist?</entry>
-        <entry><literal>'[1,2,3]'::jsonb &#63;&amp; '[1,2,3]'::jsonb</literal></entry>
+        <entry><literal>select '{"a":1, "b":2}'::jsonb &#63;&amp; array['a', 'b'];</literal></entry>
         <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
        </row>
       </tbody>
