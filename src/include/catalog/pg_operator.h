@@ -1796,6 +1796,8 @@ DESCR("greater than or equal to");
 /* No commutator? */
 DATA(insert OID = 3246 (  "@>"	   PGNSP PGUID b f f 3802 3802 16 0 0 jsonb_contains contsel contjoinsel ));
 DESCR("contains");
+DATA(insert OID = 3247 (  "?"	   PGNSP PGUID b f f 3802 25 16 0 0 jsonb_exists contsel contjoinsel ));
+DESCR("exists");
 
 
 /*
