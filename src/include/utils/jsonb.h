@@ -17,33 +17,8 @@
 #include "utils/array.h"
 #include "utils/numeric.h"
 
-#define JENTRY_ISFIRST		(0x80000000)
-#define JENTRY_ISSTRING		(0x00000000)
-#define JENTRY_ISNUMERIC	(0x10000000)
-#define JENTRY_ISNEST		(0x20000000)
-#define JENTRY_ISNULL		(0x40000000)
-#define JENTRY_ISBOOL		(0x10000000 | 0x20000000)
-#define JENTRY_ISFALSE		JENTRY_ISBOOL
-#define JENTRY_ISTRUE		(0x10000000 | 0x20000000 | 0x40000000)
-
 #define JENTRY_POSMASK	0x0FFFFFFF
 #define JENTRY_TYPEMASK (~(JENTRY_POSMASK | JENTRY_ISFIRST))
-
-/* note possible multiple evaluations, also access to prior array element */
-#define JBE_ISFIRST(he_)		(((he_).entry & JENTRY_ISFIRST) != 0)
-#define JBE_ISSTRING(he_)		(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISSTRING)
-#define JBE_ISNUMERIC(he_)		(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISNUMERIC)
-#define JBE_ISNEST(he_)			(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISNEST)
-#define JBE_ISNULL(he_)			(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISNULL)
-#define JBE_ISBOOL(he_)			(((he_).entry & JENTRY_TYPEMASK & JENTRY_ISBOOL) == JENTRY_ISBOOL)
-#define JBE_ISBOOL_TRUE(he_)	(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISTRUE)
-#define JBE_ISBOOL_FALSE(he_)	(JBE_ISBOOL(he_) && !JBE_ISBOOL_TRUE(he_))
-
-#define JBE_ENDPOS(he_) ((he_).entry & JENTRY_POSMASK)
-#define JBE_OFF(he_) (JBE_ISFIRST(he_) ? 0 : JBE_ENDPOS((&(he_))[-1]))
-#define JBE_LEN(he_) (JBE_ISFIRST(he_)	\
-					  ? JBE_ENDPOS(he_) \
-					  : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
 
 /*
  * determined by the size of "endpos" (ie JENTRY_POSMASK)
