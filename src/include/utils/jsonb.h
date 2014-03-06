@@ -181,31 +181,6 @@ typedef struct JsonbIterator
 	struct JsonbIterator *next;
 } JsonbIterator;
 
-typedef void (*walk_jsonb_cb) (void * /* arg */ , JsonbValue * /* value */ ,
-								   uint32 /* flags */ , uint32 /* level */ );
-
-/*
- * jsonb support functions
- */
-extern void walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg);
-extern int	compareJsonbStringValue(const void *a, const void *b, void *arg);
-extern int	compareJsonbPair(const void *a, const void *b, void *arg);
-extern int	compareJsonbBinaryValue(char *a, char *b);
-extern int	compareJsonbValue(JsonbValue *a, JsonbValue *b);
-extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
-								  uint32 *lowbound, JsonbValue *key);
-extern JsonbValue *findUncompressedJsonbValue(char *buffer, uint32 flags,
-						   uint32 *lowbound, char *key, uint32 keylen);
-extern JsonbValue *getJsonbValue(char *buffer, uint32 flags, int32 i);
-extern JsonbValue *pushJsonbValue(ToJsonbState ** state, int r, JsonbValue *v);
-extern void uniqueJsonbValue(JsonbValue *v);
-extern uint32 compressJsonb(JsonbValue *v, char *buffer);
-extern JsonbIterator *JsonbIteratorInit(char *buffer);
-extern int JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested);
-extern char *JsonbToCString(StringInfo out, char *in, int estimated_len);
-extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
-extern void JsonbPutEscapedValue(StringInfo out, JsonbValue *v);
-
 /* I/O routines */
 extern Datum jsonb_in(PG_FUNCTION_ARGS);
 extern Datum jsonb_out(PG_FUNCTION_ARGS);
@@ -250,5 +225,23 @@ extern Datum gjsonb_same(PG_FUNCTION_ARGS);
 /* Dummy GiST routines */
 extern Datum gjsonb_in(PG_FUNCTION_ARGS);
 extern Datum gjsonb_out(PG_FUNCTION_ARGS);
+
+/* Support functions */
+extern int	compareJsonbStringValue(const void *a, const void *b, void *arg);
+extern int	compareJsonbPair(const void *a, const void *b, void *arg);
+extern int	compareJsonbBinaryValue(char *a, char *b);
+extern int	compareJsonbValue(JsonbValue *a, JsonbValue *b);
+extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
+								  uint32 *lowbound, JsonbValue *key);
+extern JsonbValue *findUncompressedJsonbValue(char *buffer, uint32 flags,
+						   uint32 *lowbound, char *key, uint32 keylen);
+extern JsonbValue *getJsonbValue(char *buffer, uint32 flags, int32 i);
+extern JsonbValue *pushJsonbValue(ToJsonbState ** state, int r, JsonbValue *v);
+extern JsonbIterator *JsonbIteratorInit(char *buffer);
+extern int JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested);
+extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
+
+/* jsonb.c support function */
+extern char *JsonbToCString(StringInfo out, char *in, int estimated_len);
 
 #endif   /* __JSONB_H__ */

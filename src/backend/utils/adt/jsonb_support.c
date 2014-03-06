@@ -39,6 +39,14 @@
 #define JBE_LEN(he_) (JBE_ISFIRST(he_)	\
 					  ? JBE_ENDPOS(he_) \
 					  : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
+
+typedef void (*walk_jsonb_cb) (void * /* arg */ , JsonbValue * /* value */ ,
+								   uint32 /* flags */ , uint32 /* level */ );
+
+static void walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg);
+static uint32 compressJsonb(JsonbValue *v, char *buffer);
+static void uniqueJsonbValue(JsonbValue *v);
+
 /*
  * Turn a JsonbValue into a Jsonb
  */
@@ -93,46 +101,6 @@ JsonbValueToJsonb(JsonbValue *v)
 	}
 
 	return out;
-}
-
-/*
- * Sort and unique pairs in hash-like JsonbValue
- */
-void
-uniqueJsonbValue(JsonbValue *v)
-{
-	bool		hasNonUniq = false;
-
-	Assert(v->type == jbvHash);
-
-	if (v->hash.npairs > 1)
-		qsort_arg(v->hash.pairs, v->hash.npairs, sizeof(*v->hash.pairs),
-				  compareJsonbPair, &hasNonUniq);
-
-	if (hasNonUniq)
-	{
-		JsonbPair  *ptr = v->hash.pairs + 1,
-				   *res = v->hash.pairs;
-
-		while (ptr - v->hash.pairs < v->hash.npairs)
-		{
-			if (ptr->key.string.len == res->key.string.len &&
-				memcmp(ptr->key.string.val, res->key.string.val,
-					   ptr->key.string.len) == 0)
-			{
-				v->size -= ptr->key.size + ptr->value.size;
-			}
-			else
-			{
-				res++;
-				if (ptr != res)
-					memcpy(res, ptr, sizeof(*res));
-			}
-			ptr++;
-		}
-
-		v->hash.npairs = res + 1 - v->hash.pairs;
-	}
 }
 
 /****************************************************************************
@@ -660,7 +628,7 @@ walkUncompressedJsonbDo(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg, uint32 le
 	}
 }
 
-void
+static void
 walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg)
 {
 	if (v)
@@ -1117,7 +1085,7 @@ compressCallback(void *arg, JsonbValue *value, uint32 flags, uint32 level)
 /*
  * puts JsonbValue tree into preallocated buffer
  */
-uint32
+static uint32
 compressJsonb(JsonbValue *v, char *buffer)
 {
 	uint32		l = 0;
@@ -1196,6 +1164,46 @@ appendValue(ToJsonbState * state, JsonbValue *v)
 	h->hash.pairs[h->hash.npairs++].value = *v;
 
 	h->size += v->size;
+}
+
+/*
+ * Sort and unique pairs in hash-like JsonbValue
+ */
+static void
+uniqueJsonbValue(JsonbValue *v)
+{
+	bool		hasNonUniq = false;
+
+	Assert(v->type == jbvHash);
+
+	if (v->hash.npairs > 1)
+		qsort_arg(v->hash.pairs, v->hash.npairs, sizeof(*v->hash.pairs),
+				  compareJsonbPair, &hasNonUniq);
+
+	if (hasNonUniq)
+	{
+		JsonbPair  *ptr = v->hash.pairs + 1,
+				   *res = v->hash.pairs;
+
+		while (ptr - v->hash.pairs < v->hash.npairs)
+		{
+			if (ptr->key.string.len == res->key.string.len &&
+				memcmp(ptr->key.string.val, res->key.string.val,
+					   ptr->key.string.len) == 0)
+			{
+				v->size -= ptr->key.size + ptr->value.size;
+			}
+			else
+			{
+				res++;
+				if (ptr != res)
+					memcpy(res, ptr, sizeof(*res));
+			}
+			ptr++;
+		}
+
+		v->hash.npairs = res + 1 - v->hash.pairs;
+	}
 }
 
 /*

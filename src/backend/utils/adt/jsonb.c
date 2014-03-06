@@ -19,7 +19,14 @@
 #include "utils/jsonb.h"
 
 static inline Datum deserialize_json_text(char *json, int len);
+static void jsonb_put_escaped_value(StringInfo out, JsonbValue *v);
+static void jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype);
 
+typedef struct JsonbInState
+{
+	ToJsonbState *state;
+	JsonbValue *res;
+}	JsonbInState;
 
 static size_t
 checkStringLen(size_t len)
@@ -31,15 +38,115 @@ checkStringLen(size_t len)
 	return len;
 }
 
-typedef struct JsonbInState
+static void
+jsonb_in_object_start(void *state)
 {
-	ToJsonbState *state;
-	JsonbValue *res;
-}	JsonbInState;
+	JsonbInState *_state = (JsonbInState *) state;
 
+	_state->res = pushJsonbValue(&_state->state, WJB_BEGIN_OBJECT, NULL);
+}
+
+static void
+jsonb_in_object_end(void *state)
+{
+	JsonbInState *_state = (JsonbInState *) state;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_END_OBJECT, NULL);
+}
+
+static void
+jsonb_in_array_start(void *state)
+{
+	JsonbInState *_state = (JsonbInState *) state;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_BEGIN_ARRAY, NULL);
+}
+
+static void
+jsonb_in_array_end(void *state)
+{
+	JsonbInState *_state = (JsonbInState *) state;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_END_ARRAY, NULL);
+}
+
+static void
+jsonb_in_object_field_start(void *state, char *fname, bool isnull)
+{
+	JsonbInState *_state = (JsonbInState *) state;
+	JsonbValue	v;
+
+	v.type = jbvString;
+	v.string.len = fname ? checkStringLen(strlen(fname)) : 0;
+	v.string.val = fname ? pnstrdup(fname, v.string.len) : NULL;
+	v.size = sizeof(JEntry) + v.string.len;
+
+	_state->res = pushJsonbValue(&_state->state, WJB_KEY, &v);
+}
+
+static void
+jsonb_put_escaped_value(StringInfo out, JsonbValue *v)
+{
+	switch (v->type)
+	{
+		case jbvNull:
+			appendBinaryStringInfo(out, "null", 4);
+			break;
+		case jbvString:
+			escape_json(out, pnstrdup(v->string.val, v->string.len));
+			break;
+		case jbvBool:
+			if (v->boolean)
+				appendBinaryStringInfo(out, "true", 4);
+			else
+				appendBinaryStringInfo(out, "false", 5);
+			break;
+		case jbvNumeric:
+			appendStringInfoString(out, DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
+			break;
+		default:
+			elog(ERROR, "unknown jsonb scalar type");
+	}
+}
 
 /*
- * for jsonb we always want the de-escaped value - that's what's in token
+ * jsonb type input function
+ *
+ */
+Datum
+jsonb_in(PG_FUNCTION_ARGS)
+{
+	char	   *json = PG_GETARG_CSTRING(0);
+
+	return deserialize_json_text(json, strlen(json));
+}
+
+/*
+ * jsonb type recv function
+ *
+ * the type is sent as text in binary mode, so this is almost the same
+ * as the input function, but it's prefixed with a version number so we
+ * can change the binary format sent in future if necessary. For now,
+ * only version 1 is supported.
+ */
+Datum
+jsonb_recv(PG_FUNCTION_ARGS)
+{
+	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
+	int         version = pq_getmsgint(buf, 1);
+	char 	   *str;
+	int         nbytes;
+
+	if (version == 1)
+		str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
+	else
+		elog(ERROR,"Unsupported jsonb version number %d",version);
+
+	return deserialize_json_text(str, nbytes);
+}
+
+/*
+ * For jsonb we always want the de-escaped value - that's what's in token
  */
 static void
 jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
@@ -112,89 +219,6 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 	}
 }
 
-static void
-jsonb_in_object_start(void *state)
-{
-	JsonbInState *_state = (JsonbInState *) state;
-
-	_state->res = pushJsonbValue(&_state->state, WJB_BEGIN_OBJECT, NULL);
-}
-
-static void
-jsonb_in_object_end(void *state)
-{
-	JsonbInState *_state = (JsonbInState *) state;
-
-	_state->res = pushJsonbValue(&_state->state, WJB_END_OBJECT, NULL);
-}
-
-static void
-jsonb_in_array_start(void *state)
-{
-	JsonbInState *_state = (JsonbInState *) state;
-
-	_state->res = pushJsonbValue(&_state->state, WJB_BEGIN_ARRAY, NULL);
-}
-
-static void
-jsonb_in_array_end(void *state)
-{
-	JsonbInState *_state = (JsonbInState *) state;
-
-	_state->res = pushJsonbValue(&_state->state, WJB_END_ARRAY, NULL);
-}
-
-static void
-jsonb_in_object_field_start(void *state, char *fname, bool isnull)
-{
-	JsonbInState *_state = (JsonbInState *) state;
-	JsonbValue	v;
-
-	v.type = jbvString;
-	v.string.len = fname ? checkStringLen(strlen(fname)) : 0;
-	v.string.val = fname ? pnstrdup(fname, v.string.len) : NULL;
-	v.size = sizeof(JEntry) + v.string.len;
-
-	_state->res = pushJsonbValue(&_state->state, WJB_KEY, &v);
-}
-
-/*
- * jsonb type input function
- *
- */
-Datum
-jsonb_in(PG_FUNCTION_ARGS)
-{
-	char	   *json = PG_GETARG_CSTRING(0);
-
-	return deserialize_json_text(json, strlen(json));
-}
-
-/*
- * jsonb type recv function
- *
- * the type is sent as text in binary mode, so this is almost the same
- * as the input function, but it's prefixed with a version number so we
- * can change the binary format sent in future if necessary. For now,
- * only version 1 is supported.
- */
-Datum
-jsonb_recv(PG_FUNCTION_ARGS)
-{
-	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
-	int         version = pq_getmsgint(buf, 1);
-	char 	   *str;
-	int         nbytes;
-
-	if (version == 1)
-		str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
-	else
-		elog(ERROR,"Unsupported jsonb version number %d",version);
-
-	return deserialize_json_text(str, nbytes);
-}
-
-
 /*
  * deserialize_json_text
  *
@@ -226,31 +250,6 @@ deserialize_json_text(char *json, int len)
 
 	/* after parsing, the item member has the composed jsonb structure */
 	PG_RETURN_POINTER(JsonbValueToJsonb(state.res));
-}
-
-void
-JsonbPutEscapedValue(StringInfo out, JsonbValue *v)
-{
-	switch (v->type)
-	{
-		case jbvNull:
-			appendBinaryStringInfo(out, "null", 4);
-			break;
-		case jbvString:
-			escape_json(out, pnstrdup(v->string.val, v->string.len));
-			break;
-		case jbvBool:
-			if (v->boolean)
-				appendBinaryStringInfo(out, "true", 4);
-			else
-				appendBinaryStringInfo(out, "false", 5);
-			break;
-		case jbvNumeric:
-			appendStringInfoString(out, DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
-			break;
-		default:
-			elog(ERROR, "unknown jsonb scalar type");
-	}
 }
 
 /*
@@ -312,14 +311,14 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				first = true;
 
 				/* json rules guarantee this is a string */
-				JsonbPutEscapedValue(out, &v);
+				jsonb_put_escaped_value(out, &v);
 				appendBinaryStringInfo(out, ": ", 2);
 
 				type = JsonbIteratorGet(&it, &v, false);
 				if (type == WJB_VALUE)
 				{
 					first = false;
-					JsonbPutEscapedValue(out, &v);
+					jsonb_put_escaped_value(out, &v);
 				}
 				else
 				{
@@ -338,7 +337,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				else
 					first = false;
 
-				JsonbPutEscapedValue(out, &v);
+				jsonb_put_escaped_value(out, &v);
 				break;
 			case WJB_END_ARRAY:
 				level--;
