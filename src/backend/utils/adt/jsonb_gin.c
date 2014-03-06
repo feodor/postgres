@@ -72,7 +72,6 @@ makeitemFromValue(JsonbValue *v, char flag)
 	return item;
 }
 
-
 Datum
 gin_extract_jsonb(PG_FUNCTION_ARGS)
 {

@@ -12,7 +12,6 @@
 #ifndef __JSONB_H__
 #define __JSONB_H__
 
-#include "fmgr.h"
 #include "lib/stringinfo.h"
 #include "utils/array.h"
 #include "utils/numeric.h"
@@ -68,8 +67,8 @@
 /* Convenience macros */
 #define DatumGetJsonb(d)	((Jsonb*) PG_DETOAST_DATUM(d))
 #define JsonbGetDatum(p)	PointerGetDatum(p)
-#define PG_GETARG_JSONB(x) DatumGetJsonb(PG_GETARG_DATUM(x))
-#define PG_RETURN_JSONB(x) PG_RETURN_POINTER(x)
+#define PG_GETARG_JSONB(x)	DatumGetJsonb(PG_GETARG_DATUM(x))
+#define PG_RETURN_JSONB(x)	PG_RETURN_POINTER(x)
 
 typedef struct JsonbPair JsonbPair;
 typedef struct JsonbValue JsonbValue;
@@ -89,8 +88,8 @@ typedef struct
 typedef struct
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	/* header of hash or array jsonb type */
-	/* array of JEntry follows */
+	/* header of hash or array jsonb type
+	 * array of JEntry follows */
 } Jsonb;
 
 struct JsonbValue
