@@ -130,7 +130,7 @@ crc32_JsonbValue(JsonbValue *v, uint32 r)
 								NumericGetDatum(v->numeric)));
 			break;
 		default:
-			elog(ERROR, "wrong hstore scalar type");
+			elog(ERROR, "wrong jsonb scalar type");
 	}
 
 	FIN_CRC32(crc);

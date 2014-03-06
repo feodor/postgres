@@ -6,14 +6,10 @@
  * There are three formats to consider:
  * 1) old contrib/hstore (referred to as hstore-old)
  * 2) prerelease pgfoundry hstore
- * 3) new contrib/hstore (v2)
- * 4) nested contrib/hstore (v3)
+ * 3) new contrib/hstore
  *
- * (3) and (4) are upward binary compatible.
  * (2) and (3) are identical except for the HS_FLAG_NEWVERSION
  * bit, which is set in (3) but not (2).
- * (4) has HS_FLAG_ARRAY, HS_FLAG_HASH, HS_FLAG_SCALAR bits after
- * HS_FLAG_NEWVERSION
  *
  * Values that are already in format (3), or which are
  * unambiguously in format (2), are handled by the first
@@ -109,48 +105,9 @@ typedef struct
 				pos:31;
 } HOldEntry;
 
-/*
- * New Old version (new not-nested version of hstore, v2 version)
- * V2 and v3 (nested) are upward binary compatible. But
- * framework was fully changed. Keep here old definitions (v2)
- */
+static int	hstoreValidNewFormat(HStore *hs);
+static int	hstoreValidOldFormat(HStore *hs);
 
-
-typedef struct
-{
-	int32       vl_len_;        /* varlena header (do not touch directly!) */
-	uint32      size_;          /* flags and number of items in hstore */
-	/* array of HEntry follows */
-} HStoreV2;
-
-static int	hstoreValidNewFormat(HStoreV2 *hs);
-static int	hstoreValidOldFormat(HStoreV2 *hs);
-
-#define HS_COUNT(hsp_)     (HS_ISEMPTY(hsp_) ? 0 : ((hsp_)->size_ & HS_COUNT_MASK))
-#define HS_SETCOUNT(hsp_,c_)    ((hsp_)->size_ = (c_) | HS_FLAG_NEWVERSION | ((hsp_)->size_ & ~HS_COUNT_MASK))
-
-/*
- * "x" comes from an existing HS_COUNT() (as discussed, <= INT_MAX/24) or a
- * Pairs array length (due to MaxAllocSize, <= INT_MAX/40).  "lenstr" is no
- * more than INT_MAX, that extreme case arising in hstore_from_arrays().
- * Therefore, this calculation is limited to about INT_MAX / 5 + INT_MAX.
- */
-#define HSHRDSIZE   (sizeof(HStoreV2))
-#define CALCDATASIZE(x, lenstr) ( (x) * 2 * sizeof(HEntry) + HSHRDSIZE + (lenstr) )
-
-/* note multiple evaluations of x */
-#define ARRPTR(x)       ( (HEntry*) ( (HStoreV2*)(x) + 1 ) )
-#define STRPTR(x)       ( (char*)(ARRPTR(x) + HS_ROOT_COUNT((HStoreV2*)(x)) * 2) )
-
-/* note multiple/non evaluations */
-#define HS_KEYLEN(arr_,i_) (HSE_LEN((arr_)[2*(i_)]))
-
-/* ensure the varlena size of an existing hstore is correct */
-#define HS_FIXSIZE(hsp_,count_)                                         \
-	do {                                                                \
-		int bl = (count_) ? HSE_ENDPOS(ARRPTR(hsp_)[2*(count_)-1]) : 0; \
-		SET_VARSIZE((hsp_), CALCDATASIZE((count_),bl));                 \
-	} while (0)
 
 /*
  * Validity test for a new-format hstore.
@@ -159,7 +116,7 @@ static int	hstoreValidOldFormat(HStoreV2 *hs);
  *	2 = exactly valid
  */
 static int
-hstoreValidNewFormat(HStoreV2 *hs)
+hstoreValidNewFormat(HStore *hs)
 {
 	int			count = HS_COUNT(hs);
 	HEntry	   *entries = ARRPTR(hs);
@@ -211,7 +168,7 @@ hstoreValidNewFormat(HStoreV2 *hs)
  *	2 = exactly valid
  */
 static int
-hstoreValidOldFormat(HStoreV2 *hs)
+hstoreValidOldFormat(HStore *hs)
 {
 	int			count = hs->size_;
 	HOldEntry  *entries = (HOldEntry *) ARRPTR(hs);
@@ -271,32 +228,23 @@ hstoreValidOldFormat(HStoreV2 *hs)
 	return 2;
 }
 
+
 /*
  * hstoreUpgrade: PG_DETOAST_DATUM plus support for conversion of old hstores
  */
 HStore *
 hstoreUpgrade(Datum orig)
 {
-	HStoreV2	   *hs = (HStoreV2 *) PG_DETOAST_DATUM(orig);
+	HStore	   *hs = (HStore *) PG_DETOAST_DATUM(orig);
 	int			valid_new;
 	int			valid_old;
 	bool		writable;
 
 	/* Return immediately if no conversion needed */
-	if (VARSIZE_ANY(hs) <= VARHDRSZ ||
-		(hs->size_ & HS_FLAG_NEWVERSION) ||
+	if ((hs->size_ & HS_FLAG_NEWVERSION) ||
 		hs->size_ == 0 ||
 		(VARSIZE(hs) < 32768 && HSE_ISFIRST((ARRPTR(hs)[0]))))
-	{
-		if (VARSIZE_ANY_EXHDR(hs) == sizeof(hs->size_))
-		{
-			/* 'new' format but not nested. And empty */
-			hs = palloc(sizeof(VARHDRSZ));
-			SET_VARSIZE(hs, VARHDRSZ);
-		}
-
-		return (HStore*)hs;
-	}
+		return hs;
 
 	valid_new = hstoreValidNewFormat(hs);
 	valid_old = hstoreValidOldFormat(hs);
@@ -318,7 +266,7 @@ hstoreUpgrade(Datum orig)
 				HS_SETCOUNT(hs, HS_COUNT(hs));
 				HS_FIXSIZE(hs, HS_COUNT(hs));
 			}
-			return (HStore*)hs;
+			return hs;
 		}
 		else
 		{
@@ -375,7 +323,7 @@ hstoreUpgrade(Datum orig)
 	 */
 
 	if (!writable)
-		hs = (HStoreV2 *) PG_DETOAST_DATUM_COPY(orig);
+		hs = (HStore *) PG_DETOAST_DATUM_COPY(orig);
 
 	{
 		int			count = hs->size_;
@@ -404,7 +352,7 @@ hstoreUpgrade(Datum orig)
 		HS_FIXSIZE(hs, count);
 	}
 
-	return (HStore*)hs;
+	return hs;
 }
 
 
@@ -413,7 +361,7 @@ Datum		hstore_version_diag(PG_FUNCTION_ARGS);
 Datum
 hstore_version_diag(PG_FUNCTION_ARGS)
 {
-	HStoreV2	   *hs = (HStoreV2 *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+	HStore	   *hs = (HStore *) PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 	int			valid_new = hstoreValidNewFormat(hs);
 	int			valid_old = hstoreValidOldFormat(hs);
 

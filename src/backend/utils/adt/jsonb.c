@@ -5,8 +5,6 @@
  *
  * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
  *
- * NOTE. JSONB type is designed to be binary compatible with hstore.
- *
  * src/backend/utils/adt/jsonb_support.c
  *
  *-------------------------------------------------------------------------
