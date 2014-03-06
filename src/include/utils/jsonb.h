@@ -17,23 +17,11 @@
 #include "utils/array.h"
 #include "utils/numeric.h"
 
-/*
- * JEntry: there is one of these for each key _and_ value in an jsonb
- *
- * the position offset points to the _end_ so that we can get the length
- * by subtraction from the previous entry.	the ISFIRST flag lets us tell
- * whether there is a previous entry.
- */
-typedef struct
-{
-	uint32		entry;
-}	JEntry;
-
-#define JENTRY_ISFIRST		0x80000000
-#define JENTRY_ISSTRING		(0x00000000)		/* keep binary compatibility */
+#define JENTRY_ISFIRST		(0x80000000)
+#define JENTRY_ISSTRING		(0x00000000)
 #define JENTRY_ISNUMERIC	(0x10000000)
 #define JENTRY_ISNEST		(0x20000000)
-#define JENTRY_ISNULL		(0x40000000)		/* keep binary compatibility */
+#define JENTRY_ISNULL		(0x40000000)
 #define JENTRY_ISBOOL		(0x10000000 | 0x20000000)
 #define JENTRY_ISFALSE		JENTRY_ISBOOL
 #define JENTRY_ISTRUE		(0x10000000 | 0x20000000 | 0x40000000)
@@ -62,13 +50,6 @@ typedef struct
  */
 #define JSONB_MAX_STRING_LEN		JENTRY_POSMASK
 
-typedef struct
-{
-	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	/* header of hash or array jsonb type */
-	/* array of JEntry follows */
-} Jsonb;
-
 /*
  * it's not possible to get more than 2^28 items into an jsonb.
  */
@@ -93,6 +74,25 @@ typedef struct
 typedef struct JsonbPair JsonbPair;
 typedef struct JsonbValue JsonbValue;
 
+/*
+ * JEntry: there is one of these for each key _and_ value in a jsonb
+ *
+ * The position offset points to the _end_ so that we can get the length
+ * by subtraction from the previous entry.	the ISFIRST flag lets us tell
+ * whether there is a previous entry.
+ */
+typedef struct
+{
+	uint32		entry;
+}	JEntry;
+
+typedef struct
+{
+	int32		vl_len_;		/* varlena header (do not touch directly!) */
+	/* header of hash or array jsonb type */
+	/* array of JEntry follows */
+} Jsonb;
+
 struct JsonbValue
 {
 	enum
@@ -103,10 +103,10 @@ struct JsonbValue
 		jbvBool,
 		jbvArray,
 		jbvHash,
-		jbvBinary				/* binary form of jbvArray/jbvHash */
+		jbvBinary				/* Binary form of jbvArray/jbvHash */
 	}			type;
 
-	uint32		size;			/* estimation size of node (including
+	uint32		size;			/* Estimation size of node (including
 								 * subnodes) */
 
 	union
@@ -116,14 +116,14 @@ struct JsonbValue
 		struct
 		{
 			uint32		len;
-			char	   *val;	/* could be not null-terminated */
+			char	   *val;	/* Not necessarily null-terminated */
 		}			string;
 
 		struct
 		{
 			int			nelems;
 			JsonbValue *elems;
-			bool		scalar; /* scalar actually shares representation with
+			bool		scalar; /* Scalar actually shares representation with
 								 * array */
 		}			array;
 
@@ -146,13 +146,19 @@ struct JsonbPair
 {
 	JsonbValue	key;
 	JsonbValue	value;
-	uint32		order;			/* to keep order of pairs with equal key */
+	uint32		order;			/* To preserve order of pairs with equal keys */
 };
 
-/*
- * jsonb support functios
- */
+typedef struct ToJsonbState
+{
+	JsonbValue	v;
+	uint32		size;
+	struct ToJsonbState *next;
+} ToJsonbState;
 
+/*
+ * jsonb support functions
+ */
 #define WJB_KEY				(0x001)
 #define WJB_VALUE			(0x002)
 #define WJB_ELEM			(0x004)
@@ -164,31 +170,17 @@ struct JsonbPair
 typedef void (*walk_jsonb_cb) (void * /* arg */ , JsonbValue * /* value */ ,
 								   uint32 /* flags */ , uint32 /* level */ );
 extern void walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg);
-
 extern int	compareJsonbStringValue(const void *a, const void *b, void *arg);
 extern int	compareJsonbPair(const void *a, const void *b, void *arg);
-
 extern int	compareJsonbBinaryValue(char *a, char *b);
 extern int	compareJsonbValue(JsonbValue *a, JsonbValue *b);
-
 extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 								  uint32 *lowbound, JsonbValue *key);
 extern JsonbValue *findUncompressedJsonbValue(char *buffer, uint32 flags,
 						   uint32 *lowbound, char *key, uint32 keylen);
-
 extern JsonbValue *getJsonbValue(char *buffer, uint32 flags, int32 i);
-
-typedef struct ToJsonbState
-{
-	JsonbValue	v;
-	uint32		size;
-	struct ToJsonbState *next;
-}	ToJsonbState;
-
 extern JsonbValue *pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue *v);
-
 extern void uniqueJsonbValue(JsonbValue *v);
-
 extern uint32 compressJsonb(JsonbValue *v, char *buffer);
 
 typedef struct JsonbIterator
@@ -218,17 +210,17 @@ typedef struct JsonbIterator
 } JsonbIterator;
 
 extern JsonbIterator *JsonbIteratorInit(char *buffer);
-extern int /* WJB_* */ JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested);
+extern int JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested);
+extern char *JsonbToCString(StringInfo out, char *in, int estimated_len);
+extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
+extern void JsonbPutEscapedValue(StringInfo out, JsonbValue *v);
 
+/* I/O routines */
 extern Datum jsonb_in(PG_FUNCTION_ARGS);
 extern Datum jsonb_out(PG_FUNCTION_ARGS);
 extern Datum jsonb_recv(PG_FUNCTION_ARGS);
 extern Datum jsonb_send(PG_FUNCTION_ARGS);
-
 extern Datum jsonb_typeof(PG_FUNCTION_ARGS);
-extern char *JsonbToCString(StringInfo out, char *in, int estimated_len);
-extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
-extern void JsonbPutEscapedValue(StringInfo out, JsonbValue *v);
 
 /* Indexing-related ops */
 extern Datum jsonb_exists(PG_FUNCTION_ARGS);

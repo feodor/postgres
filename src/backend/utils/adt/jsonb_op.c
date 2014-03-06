@@ -95,130 +95,6 @@ arrayToJsonbSortedArray(ArrayType *a)
 	return v;
 }
 
-static bool
-j_atoi(char *c, int l, int *acc)
-{
-	bool	negative = false;
-	char 	*p = c;
-
-	*acc = 0;
-
-	while(isspace(*p) && p - c < l)
-		p++;
-
-	if (p - c >= l)
-		return false;
-
-	if (*p == '-')
-	{
-		negative = true;
-		p++;
-	}
-	else if (*p == '+')
-	{
-		p++;
-	}
-
-	if (p - c >= l)
-		return false;
-
-
-	while(p - c < l)
-	{
-		if (!isdigit(*p))
-			return false;
-
-		*acc *= 10;
-		*acc += (*p - '0');
-		p++;
-	}
-
-	if (negative)
-		*acc = - *acc;
-
-	return true;
-}
-
-static JsonbValue*
-JsonbDeepFetch(Jsonb *in, ArrayType *path)
-{
-	JsonbValue			*v = NULL;
-	static JsonbValue 	init /* could be returned */;
-	Datum				*path_elems;
-	bool				*path_nulls;
-	int					path_len, i;
-
-	Assert(ARR_ELEMTYPE(path) == TEXTOID);
-
-	if (ARR_NDIM(path) > 1)
-		ereport(ERROR,
-				(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
-				 errmsg("wrong number of array subscripts")));
-
-	if (JB_ROOT_COUNT(in) == 0)
-		return NULL;
-
-	deconstruct_array(path, TEXTOID, -1, false, 'i',
-					  &path_elems, &path_nulls, &path_len);
-
-	init.type = jbvBinary;
-	init.size = VARSIZE(in);
-	init.binary.data = VARDATA(in);
-	init.binary.len = VARSIZE_ANY_EXHDR(in);
-
-	v = &init;
-
-	if (path_len == 0)
-		return v;
-
-	for(i=0; v != NULL && i<path_len; i++)
-	{
-		uint32	header;
-
-		if (v->type != jbvBinary || path_nulls[i])
-			return NULL;
-
-		header = *(uint32*)v->binary.data;
-
-		if (header & JB_FLAG_OBJECT)
-		{
-			v = findUncompressedJsonbValue(v->binary.data, JB_FLAG_OBJECT,
-											NULL,
-											VARDATA_ANY(path_elems[i]),
-											VARSIZE_ANY_EXHDR(path_elems[i]));
-		}
-		else if (header & JB_FLAG_ARRAY)
-		{
-			int ith;
-
-			if (j_atoi(VARDATA_ANY(path_elems[i]),
-					   VARSIZE_ANY_EXHDR(path_elems[i]), &ith) == false)
-				return NULL;
-
-			if (ith < 0)
-			{
-				if (-ith > (int)(header & JB_COUNT_MASK))
-					return NULL;
-				else
-					ith = ((int)(header & JB_COUNT_MASK)) + ith;
-			}
-			else
-			{
-				if (ith >= (int)(header & JB_COUNT_MASK))
-					return NULL;
-			}
-
-			v = getJsonbValue(v->binary.data, JB_FLAG_ARRAY, ith);
-		}
-		else
-		{
-			elog(ERROR,"wrong jsonb container type");
-		}
-	}
-
-	return v;
-}
-
 Datum
 jsonb_exists(PG_FUNCTION_ARGS)
 {
@@ -531,7 +407,7 @@ jsonb_contained(PG_FUNCTION_ARGS)
 }
 
 /*
- * B-Tree operator class functions.
+ * B-Tree operator class procedures
  */
 Datum
 jsonb_cmp(PG_FUNCTION_ARGS)
