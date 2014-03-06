@@ -9,6 +9,7 @@
 #include "funcapi.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
+#include "utils/pg_crc.h"
 
 #include "hstore.h"
 
@@ -1259,9 +1260,67 @@ Datum		hstore_hash(PG_FUNCTION_ARGS);
 Datum
 hstore_hash(PG_FUNCTION_ARGS)
 {
-	HStore	   *hs = PG_GETARG_HS(0);
-	Datum		hval = hash_any((unsigned char *) VARDATA(hs),
-								VARSIZE(hs) - VARHDRSZ);
+	HStore	   		*hs = PG_GETARG_HS(0);
+	HStoreIterator	*it;
+	int32			r;
+	HStoreValue		v;
+	int				crc;
+
+	if (HS_ROOT_COUNT(hs) == 0)
+		PG_RETURN_INT32(0x1EEE);
+
+	it = HStoreIteratorInit(VARDATA(hs));
+	INIT_CRC32(crc);
+
+	while((r = HStoreIteratorGet(&it, &v, false)) != 0)
+	{
+		switch(r)
+		{
+			case WHS_BEGIN_ARRAY:
+				COMP_CRC32(crc, "ab", 3);
+				COMP_CRC32(crc, &v.array.nelems, sizeof(v.array.nelems));
+				COMP_CRC32(crc, &v.array.scalar, sizeof(v.array.scalar));
+				break;
+			case WHS_BEGIN_HASH:
+				COMP_CRC32(crc, "hb", 3);
+				COMP_CRC32(crc, &v.hash.npairs, sizeof(v.hash.npairs));
+				break;
+			case WHS_KEY:
+				COMP_CRC32(crc, "k", 2);
+			case WHS_VALUE:
+			case WHS_ELEM:
+				switch(v.type)
+				{
+					case hsvString:
+						COMP_CRC32(crc, v.string.val, v.string.len);
+						break;
+					case hsvNull:
+						COMP_CRC32(crc, "N", 2);
+						break;
+					case hsvBool:
+						COMP_CRC32(crc, &v.boolean, sizeof(v.boolean));
+						break;
+					case hsvNumeric:
+						crc ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
+											 NumericGetDatum(v.numeric)));
+						break;
+					default:
+						elog(ERROR, "unexpected state of hstore iterator");
+				}
+
+				break;
+			case WHS_END_ARRAY:
+				COMP_CRC32(crc, "ae", 3);
+				break;
+			case WHS_END_HASH:
+				COMP_CRC32(crc, "he", 3);
+				break;
+			default:
+				elog(ERROR, "unexpected state of hstore iterator");
+		}
+	}
+
+	FIN_CRC32(crc);
 
 	/*
 	 * this is the only place in the code that cares whether the overall
@@ -1275,5 +1334,5 @@ hstore_hash(PG_FUNCTION_ARGS)
 			HSHRDSIZE));
 
 	PG_FREE_IF_COPY(hs, 0);
-	PG_RETURN_DATUM(hval);
+	PG_RETURN_INT32(crc);
 }
