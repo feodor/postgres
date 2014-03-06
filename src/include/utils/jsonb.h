@@ -72,7 +72,6 @@ typedef struct
 /*
  * it's not possible to get more than 2^28 items into an jsonb.
  */
-#define JB_FLAG_HSTORE_COMPAT	0x80000000 /* should be always set in jsonb */
 #define JB_FLAG_ARRAY			0x40000000
 #define JB_FLAG_OBJECT			0x20000000
 #define JB_FLAG_SCALAR			0x10000000
