@@ -412,7 +412,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 }
 
 Datum
-gin_extract_jsonb_hash_query(PG_FUNCTION_ARGS)
+gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS)
 {
 	int32	   *nentries = (int32 *) PG_GETARG_POINTER(1);
 	StrategyNumber strategy = PG_GETARG_UINT16(2);

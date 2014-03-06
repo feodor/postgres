@@ -369,6 +369,10 @@ DATA(insert (	4036   3802 3802 1 360 ));
 DATA(insert (	4036   3802 3802 2 3482 ));
 DATA(insert (	4036   3802 3802 3 3483 ));
 DATA(insert (	4036   3802 3802 4 3484 ));
+DATA(insert (	4037   3802 3802 1 351 ));
+DATA(insert (	4037   3802 3802 2 3485 ));
+DATA(insert (	4037   3802 3802 3 3486 ));
+DATA(insert (	4037   3802 3802 4 3487 ));
 
 /* sp-gist */
 DATA(insert (	3474   3831 3831 1 3469 ));

@@ -255,7 +255,7 @@ extern Datum gin_extract_jsonb_query(PG_FUNCTION_ARGS);
 extern Datum gin_consistent_jsonb(PG_FUNCTION_ARGS);
 /* GIN hash opclass functions */
 extern Datum gin_extract_jsonb_hash(PG_FUNCTION_ARGS);
-extern Datum gin_extract_jsonb_hash_query(PG_FUNCTION_ARGS);
+extern Datum gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS);
 extern Datum gin_consistent_jsonb_hash(PG_FUNCTION_ARGS);
 
 /* GiST support functions */
