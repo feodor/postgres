@@ -883,3 +883,105 @@ select value, jsonb_typeof(value)
                         | 
 (11 rows)
 
+-- indexing
+CREATE TABLE testjsonb (j jsonb);
+\copy testjsonb from 'data/jsonb.data'
+select count(*) from testjsonb where j @> '{"wait":null}';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+ count 
+-------
+    15
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25.0}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j ? 'public';
+ count 
+-------
+   194
+(1 row)
+
+select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
+ count 
+-------
+   337
+(1 row)
+
+select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
+ count 
+-------
+    42
+(1 row)
+
+create index hidx on testhstore using gist(h);
+ERROR:  relation "testhstore" does not exist
+set enable_seqscan=off;
+select count(*) from testjsonb where j @> '{"wait":null}';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+ count 
+-------
+    15
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25.0}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j ? 'public';
+ count 
+-------
+   194
+(1 row)
+
+select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
+ count 
+-------
+   337
+(1 row)
+
+select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
+ count 
+-------
+   337
+(1 row)
+

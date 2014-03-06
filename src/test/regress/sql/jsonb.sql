@@ -237,3 +237,29 @@ select value, jsonb_typeof(value)
                (jsonb '{}'),
                (NULL::jsonb))
       as data(value);
+
+-- indexing
+
+CREATE TABLE testjsonb (j jsonb);
+\copy testjsonb from 'data/jsonb.data'
+
+select count(*) from testjsonb where j @> '{"wait":null}';
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+select count(*) from testjsonb where j @> '{"age":25}';
+select count(*) from testjsonb where j @> '{"age":25.0}';
+select count(*) from testjsonb where j ? 'public';
+select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
+select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
+
+create index hidx on testhstore using gist(h);
+set enable_seqscan=off;
+
+select count(*) from testjsonb where j @> '{"wait":null}';
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+select count(*) from testjsonb where j @> '{"age":25}';
+select count(*) from testjsonb where j @> '{"age":25.0}';
+select count(*) from testjsonb where j ? 'public';
+select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
+select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
