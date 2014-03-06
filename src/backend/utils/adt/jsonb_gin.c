@@ -3,7 +3,7 @@
  * jsonb_gin.c
  *	 GIN support functions for jsonb
  *
- * Portions Copyright (c) 2002-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2014, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION

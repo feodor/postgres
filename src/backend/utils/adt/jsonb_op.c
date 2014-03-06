@@ -1,19 +1,24 @@
+/*-------------------------------------------------------------------------
+ *
+ * jsonb_op.c
+ *	 Operators for jsonb common to multiple access methods
+ *
+ * Copyright (c) 2014, PostgreSQL Global Development Group
+ *
+ *
+ * IDENTIFICATION
+ *	  src/backend/utils/adt/jsonb_op.c
+ *
+ *-------------------------------------------------------------------------
+ */
+
 #include "postgres.h"
 
 #include "access/hash.h"
-#include "access/htup_details.h"
 #include "catalog/pg_type.h"
 #include "funcapi.h"
-#include "utils/builtins.h"
 #include "utils/jsonb.h"
 #include "utils/memutils.h"
-
-typedef enum JsonbOutputKind {
-	JsonOutput = 0x01,
-	LooseOutput = 0x02,
-	ArrayCurlyBraces = 0x04,
-	PrettyPrint = 0x08
-} JsonbOutputKind;
 
 static JsonbValue*
 arrayToJsonbSortedArray(ArrayType *a)

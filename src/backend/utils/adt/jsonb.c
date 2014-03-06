@@ -1,9 +1,9 @@
 /*-------------------------------------------------------------------------
  *
  * jsonb.c
- *		I/O for jsonb type
+ *		I/O routines for jsonb type
  *
- * Portions Copyright (c) 1996-2013, PostgreSQL Global Development Group
+ * Copyright (c) 2014, PostgreSQL Global Development Group
  *
  * src/backend/utils/adt/jsonb_support.c
  *
