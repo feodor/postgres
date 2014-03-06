@@ -10123,13 +10123,87 @@ table2-mapping
 
   <note>
    <para>
-    The operators above can take either <type>json</type> or <type>jsonb</type>
-    values as their left hand operands. In general they work much faster with
-    <type>jsonb</type>.
+    There are parallel variants of the above listed operators for both
+    the <type>json</type> type and the <type>jsonb</type> type.  In
+    addition to those operators common to both types, a further set of
+    operators exists for <type>jsonb</type>.  These additional
+    operators are principally intended to facilitate advanced
+    indexing, but have independent value.
+   </para>
+   <para>
+    The <type>json</type> type is a textual representation of JSON.
+    It should be preferred only where there is a requirement to store
+    JSON as text, with permissive sanitization of user-input.  There
+    are few subtleties in using the <type>json</type> type as a
+    universal interchange format.  In contrast, the <type>jsonb</type>
+    type uses a binary data representation, with <emphasis>nested</>
+    types, and supports advanced <acronym>GiST</acronym> and
+    <acronym>GIN</acronym> indexing.  Types described by
+    <acronym>RFC</> 4627 are effectively mapped onto native
+    <productname>PostgreSQL</productname> types.
    </para>
   </note>
 
-  <!-- 
+  <table id="functions-jsonb-op-table">
+     <title>Additonal JSONB Operators</title>
+     <tgroup cols="5">
+      <thead>
+       <row>
+        <entry>Operator</entry>
+        <entry>Right Operand Type</entry>
+        <entry>Description</entry>
+        <entry>Example</entry>
+        <entry>Notes</entry>
+       </row>
+      </thead>
+      <tbody>
+       <row>
+        <entry><literal>&#61;</literal></entry>
+        <entry>jsonb</entry>
+        <entry>JSONB equality</entry>
+        <entry><literal>'[1,2,3]'::jsonb &#61; '[1,2,3]'::jsonb</literal></entry>
+        <entry>Part of default B-Tree operator class, which also includes complementary operators not listed here</entry>
+       </row>
+       <row>
+        <entry><literal>&#64;&gt;</literal></entry>
+        <entry>jsonb</entry>
+        <entry>JSONB contains</entry>
+        <entry><literal>select '{"a":1, "b":2}'::jsonb &#64;&gt; '{"b":2}'::jsonb</literal></entry>
+        <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
+       </row>
+       <row>
+        <entry><literal>&lt;&#64;</literal></entry>
+        <entry>jsonb</entry>
+        <entry>JSONB contained</entry>
+        <entry><literal>select '{"b":2}'::jsonb &lt;&#64; '{"a":1, "b":2}'::jsonb</literal></entry>
+        <entry>Checks least-nested layer only.  Unused by any operator class</entry>
+       </row>
+       <row>
+        <entry><literal>&#63;</literal></entry>
+        <entry>text</entry>
+        <entry>JSONB exists</entry>
+        <entry><literal>'{"a":1, "b":2}'::jsonb &#63; 'b'</literal></entry>
+        <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
+       </row>
+       <row>
+        <entry><literal>&#63;&#124;</literal></entry>
+        <entry>array[]</entry>
+        <entry>Do any of these keys exist?</entry>
+        <entry><literal>select '{"a":1, "b":2}'::jsonb &#63;&#124; array['b', 'c'];</literal></entry>
+        <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
+       </row>
+       <row>
+        <entry><literal>&#63;&amp;</literal></entry>
+        <entry>jsonb</entry>
+        <entry>Do all keys exist?</entry>
+        <entry><literal>'[1,2,3]'::jsonb &#63;&amp; '[1,2,3]'::jsonb</literal></entry>
+        <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
+       </row>
+      </tbody>
+     </tgroup>
+   </table>
+
+  <!--
      The release notes contain a reference to "functions-json-table". Since
      that table is now split in two, the id has been parked here so we don't
      have to change the release notes.
@@ -10235,9 +10309,9 @@ table2-mapping
        </entry>
        <entry><type>json</type></entry>
        <entry>
-         Builds a JSON array out of a variadic argument list.
-         By convention, the object is 
-         constructed out of alternating name/value arguments.
+         Builds a JSON array out of a variadic argument list.  By
+         convention, the object is constructed out of alternating
+         name/value arguments.
        </entry>
        <entry><literal>SELECT json_build_object('foo',1,'bar',2);</literal></entry>
        <entry>
@@ -10484,8 +10558,8 @@ table2-mapping
          Expands the object in <replaceable>from_json</replaceable> to a row whose columns match
          the record type defined by base. Conversion will be best
          effort; columns in base with no corresponding key in <replaceable>from_json</replaceable>
-         will be left null. When processing <type>json</type>, if a column is 
-         specified more than once, the last value is used.
+         will be left null. When processing <type>json</type>, if a
+         column is specified more than once, the last value is used.
        </entry>
        <entry><literal>select * from json_populate_record(null::x, '{"a":1,"b":2}')</literal></entry>
        <entry>
@@ -10506,7 +10580,7 @@ table2-mapping
          whose columns match the record type defined by base.
          Conversion will be best effort; columns in base with no
          corresponding key in <replaceable>from_json</replaceable> will be left null.
-         When processing <type>json</type>, if a column is specified more 
+         When processing <type>json</type>, if a column is specified more
          than once, the last value is used.
        </entry>
        <entry><literal>select * from json_populate_recordset(null::x, '[{"a":1,"b":2},{"a":3,"b":4}]')</literal></entry>

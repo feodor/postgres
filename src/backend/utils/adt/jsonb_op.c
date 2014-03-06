@@ -163,11 +163,12 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 
 	if (JB_ROOT_IS_OBJECT(js))
 		plowbound = &lowbound;
+
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
-	 * increasing order to narrow the findUncompressedJsonbValue search; each search can
-	 * start one entry past the previous "found" entry, or at the lower bound
-	 * of the last search.
+	 * increasing order to narrow the findUncompressedJsonbValue search; each
+	 * search can start one entry past the previous "found" entry, or at the
+	 * lower bound of the last search.
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
