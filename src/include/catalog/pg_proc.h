@@ -4554,6 +4554,8 @@ DATA(insert OID = 4044 (  jsonb_cmp		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0
 DESCR("less-equal-greater");
 DATA(insert OID = 4045 (  jsonb_hash	   PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 23 "3802" _null_ _null_ _null_ _null_ jsonb_hash _null_ _null_ _null_ ));
 DESCR("hash");
+DATA(insert OID = 4046 (  jsonb_contains   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "3802 3802" _null_ _null_ _null_ _null_ jsonb_contains _null_ _null_ _null_ ));
+DESCR("implementation of @> operator");
 DATA(insert OID =  3479 (  gjsonb_in		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3801 "2275" _null_ _null_ _null_ _null_ gjsonb_in _null_ _null_ _null_ ));
 DESCR("GiST support");
 DATA(insert OID =  3480 (  gjsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2275 "3801" _null_ _null_ _null_ _null_ gjsonb_out _null_ _null_ _null_ ));

@@ -1793,7 +1793,9 @@ DATA(insert OID = 3244 (  "<="	PGNSP PGUID b f f 3802 3802	16 3245 3243 jsonb_le
 DESCR("less than or equal to");
 DATA(insert OID = 3245 (  ">="	PGNSP PGUID b f f 3802 3802	16 3244 3242 jsonb_ge scalargtsel scalargtjoinsel ));
 DESCR("greater than or equal to");
-
+/* No commutator? */
+DATA(insert OID = 3246 (  "@>"	   PGNSP PGUID b f f 3802 3802 16 0 0 jsonb_contains contsel contjoinsel ));
+DESCR("contains");
 
 
 /*
