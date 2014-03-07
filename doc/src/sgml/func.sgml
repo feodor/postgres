@@ -10147,15 +10147,15 @@ table2-mapping
     restrictions are permitted by <acronym>RFC</> 4627.
    </para>
    <para>
-    Note that currently, the <acronym>GiST</acronym> and
-    <acronym>GIN</acronym> operator classes for <type>jsonb</type>
-    that are comprised of the operators described in the following
-    table do not permit searching for keys that are not at the
-    least-nested level.  However, they can be used to efficiently
-    search among more than one possible key, or more than one possible
-    key/value pair within a single <type>jsonb</type> datum/document,
-    among a large number of such <quote>documents</> within a column
-    in a table (i.e. among many rows).
+    Note that currently, the <type>jsonb</type>-only operators (which
+    comprise various <acronym>GiST</acronym> and
+    <acronym>GIN</acronym> operator classes for indexing) do not
+    permit searching for keys that are not at the least-nested level.
+    However, they can be used to efficiently search among more than
+    one possible key, or more than one possible key/value pair within
+    a single <type>jsonb</type> datum/document, among a large number
+    of such <quote>documents</> within a column in a table (i.e. among
+    many rows).
    </para>
    <para>
     Comparisons and related operations are <emphasis>type-wise</>, in
