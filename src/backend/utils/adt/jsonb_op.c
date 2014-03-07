@@ -151,12 +151,13 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_all(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*js = PG_GETARG_JSONB(0);
-	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
-	JsonbValue		*v = arrayToJsonbSortedArray(keys);
+	Jsonb		   *js = PG_GETARG_JSONB(0);
+	ArrayType	   *keys = PG_GETARG_ARRAYTYPE_P(1);
+	JsonbValue	   *v = arrayToJsonbSortedArray(keys);
+	uint32		   *plowbound = NULL;
+	uint32			lowbound = 0;
+	bool			res = true;
 	int				i;
-	uint32			*plowbound = NULL, lowbound = 0;
-	bool			res = false;
 
 	if (JB_ISEMPTY(js) || v == NULL || v->array.nelems == 0)
 	{
@@ -170,7 +171,7 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 		plowbound = &lowbound;
 
 	/*
-	 * we exploit the fact that the pairs list is already sorted into strictly
+	 * We exploit the fact that the pairs list is already sorted into strictly
 	 * increasing order to narrow the findUncompressedJsonbValue search; each
 	 * search can start one entry past the previous "found" entry, or at the
 	 * lower bound of the last search.
@@ -180,9 +181,9 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 		if (findUncompressedJsonbValueByValue(VARDATA(js),
 											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
 											  plowbound,
-											  v->array.elems + i) != NULL)
+											  v->array.elems + i) == NULL)
 		{
-			res = true;
+			res = false;
 			break;
 		}
 	}

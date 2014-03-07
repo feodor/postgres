@@ -306,15 +306,15 @@ compareJsonbBinaryValue(char *a, char *b)
 	return res;
 }
 
-/****************************************************************************
- * find string key in object or element by value in array			*
- ****************************************************************************/
+/*
+ * Find string key in object or element by value in array
+ */
 JsonbValue *
 findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 								  uint32 *lowbound, JsonbValue *key)
 {
-	uint32		header = *(uint32 *) buffer;
-	static JsonbValue r;
+	uint32				header = *(uint32 *) buffer;
+	static JsonbValue 	r;
 
 	Assert((header & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
 		   (JB_FLAG_ARRAY | JB_FLAG_OBJECT));
