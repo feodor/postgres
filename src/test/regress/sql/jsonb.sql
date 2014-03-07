@@ -189,6 +189,20 @@ select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['c','a'];
 select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['c','d'];
 select jsonb '{"a":null, "b":"qq"}' ?& '{}'::text[];
 
+-- typeof
+SELECT jsonb_typeof('{}') AS object;
+SELECT jsonb_typeof('{"a":"b"}') AS object;
+SELECT jsonb_typeof('[]') AS array;
+SELECT jsonb_typeof('["a", 1]') AS array;
+SELECT jsonb_typeof('null') AS "null";
+SELECT jsonb_typeof('1.0') AS number;
+SELECT jsonb_typeof('true') AS boolean;
+SELECT jsonb_typeof('false') AS boolean;
+SELECT jsonb_typeof('"hello"') AS string;
+SELECT jsonb_typeof('"true"') AS string;
+SELECT jsonb_typeof('"1.0"') AS string;
+
+
 -- extract_path, extract_path_as_text
 
 select jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');

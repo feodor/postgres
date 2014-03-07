@@ -817,6 +817,73 @@ select jsonb '{"a":null, "b":"qq"}' ?& '{}'::text[];
  t
 (1 row)
 
+-- typeof
+SELECT jsonb_typeof('{}') AS object;
+ object 
+--------
+ object
+(1 row)
+
+SELECT jsonb_typeof('{"a":"b"}') AS object;
+ object 
+--------
+ object
+(1 row)
+
+SELECT jsonb_typeof('[]') AS array;
+ array 
+-------
+ array
+(1 row)
+
+SELECT jsonb_typeof('["a", 1]') AS array;
+ array 
+-------
+ array
+(1 row)
+
+SELECT jsonb_typeof('null') AS "null";
+ null 
+------
+ null
+(1 row)
+
+SELECT jsonb_typeof('1.0') AS number;
+ number 
+--------
+ number
+(1 row)
+
+SELECT jsonb_typeof('true') AS boolean;
+ boolean 
+---------
+ boolean
+(1 row)
+
+SELECT jsonb_typeof('false') AS boolean;
+ boolean 
+---------
+ boolean
+(1 row)
+
+SELECT jsonb_typeof('"hello"') AS string;
+ string 
+--------
+ string
+(1 row)
+
+SELECT jsonb_typeof('"true"') AS string;
+ string 
+--------
+ string
+(1 row)
+
+SELECT jsonb_typeof('"1.0"') AS string;
+ string 
+--------
+ string
+(1 row)
+
 -- extract_path, extract_path_as_text
 select jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
  jsonb_extract_path 
