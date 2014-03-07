@@ -19,59 +19,18 @@
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
 
-/* Build an indexable text value */
-static text *
-makeitem(char *str, int len, char flag)
+#define PATH_SEPARATOR ("\0")
+
+typedef struct PathHashStack
 {
-	text	   *item;
+	pg_crc32	hash_state;
+	struct PathHashStack *next;
+}	PathHashStack;
 
-	item = (text *) palloc(VARHDRSZ + len + 1);
-	SET_VARSIZE(item, VARHDRSZ + len + 1);
+static void hash_value(JsonbValue * v, PathHashStack * stack);
+static text *makeitem(char *str, int len, char flag);
+static text *makeitemFromValue(JsonbValue * v, char flag);
 
-	*VARDATA(item) = flag;
-
-	if (str && len > 0)
-		memcpy(VARDATA(item) + 1, str, len);
-
-	return item;
-}
-
-static text *
-makeitemFromValue(JsonbValue * v, char flag)
-{
-	text	   *item;
-	char	   *cstr;
-
-	switch (v->type)
-	{
-		case jbvNull:
-			item = makeitem(NULL, 0, NULLFLAG);
-			break;
-		case jbvBool:
-			item = makeitem((v->boolean) ? " t" : " f", 2, flag);
-			break;
-		case jbvNumeric:
-
-			/*
-			 * It's needed to get some text representaion of numeric
-			 * independed from locale setting and preciosion. We use hashed
-			 * value - it's safe because recheck flag will be set anyway.
-			 */
-			cstr = palloc(8 /* hex numbers */ + 1 /* \0 */ );
-			snprintf(cstr, 9, "%08x", DatumGetInt32(DirectFunctionCall1(hash_numeric,
-											  NumericGetDatum(v->numeric))));
-			item = makeitem(cstr, 8, flag);
-			pfree(cstr);
-			break;
-		case jbvString:
-			item = makeitem(v->string.val, v->string.len, flag);
-			break;
-		default:
-			elog(ERROR, "invalid jsonb scalar type");
-	}
-
-	return item;
-}
 
 Datum
 gin_extract_jsonb(PG_FUNCTION_ARGS)
@@ -212,8 +171,8 @@ gin_consistent_jsonb(PG_FUNCTION_ARGS)
 	{
 		/*
 		 * Index doesn't have information about correspondence of keys and
-		 * values, so we need recheck.	However, if not all the keys are
-		 * present, we can fail at once.
+		 * values, so we must recheck.	However, if not all of the keys are
+		 * present, we can fail immediately.
 		 */
 		*recheck = true;
 		for (i = 0; i < nkeys; i++)
@@ -274,8 +233,8 @@ gin_consistent_jsonb_hash(PG_FUNCTION_ARGS)
 	{
 		/*
 		 * Index doesn't have information about correspondence of keys and
-		 * values, so we need recheck.	However, if not all the keys are
-		 * present, we can fail at once.
+		 * values, so we must recheck.	However, if not all of the keys are
+		 * present, we can fail immediately.
 		 */
 		*recheck = true;
 		for (i = 0; i < nkeys; i++)
@@ -291,38 +250,6 @@ gin_consistent_jsonb_hash(PG_FUNCTION_ARGS)
 		elog(ERROR, "unrecognized strategy number: %d", strategy);
 
 	PG_RETURN_BOOL(res);
-}
-
-typedef struct PathHashStack
-{
-	pg_crc32	hash_state;
-	struct PathHashStack *next;
-}	PathHashStack;
-
-#define PATH_SEPARATOR ("\0")
-
-static void
-hash_value(JsonbValue * v, PathHashStack * stack)
-{
-	switch (v->type)
-	{
-		case jbvNull:
-			COMP_CRC32(stack->hash_state, "NULL", 5 /* include trailing \0 */ );
-			break;
-		case jbvBool:
-			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */ );
-			break;
-		case jbvNumeric:
-			stack->hash_state ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
-											   NumericGetDatum(v->numeric)));
-			break;
-		case jbvString:
-			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
-			break;
-		default:
-			elog(ERROR, "invalid jsonb scalar type");
-			break;
-	}
 }
 
 Datum
@@ -358,7 +285,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 	/*
 	 * Calculate hashes of all key_1.key_2. ... .key_n.value paths as entries.
 	 * Order of array elements doesn't matter so array keys are empty in path.
-	 * For faster calculation of hashes use stack for precalculated hashes of
+	 * For faster calculation of hashes, use a stack of precalculated hashes of
 	 * prefixes.
 	 */
 	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
@@ -440,4 +367,82 @@ gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_POINTER(entries);
+}
+
+static void
+hash_value(JsonbValue * v, PathHashStack * stack)
+{
+	switch (v->type)
+	{
+		case jbvNull:
+			COMP_CRC32(stack->hash_state, "NULL", 5 /* include trailing \0 */ );
+			break;
+		case jbvBool:
+			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */ );
+			break;
+		case jbvNumeric:
+			stack->hash_state ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
+											   NumericGetDatum(v->numeric)));
+			break;
+		case jbvString:
+			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
+			break;
+		default:
+			elog(ERROR, "invalid jsonb scalar type");
+			break;
+	}
+}
+
+/* Build an indexable text value */
+static text *
+makeitem(char *str, int len, char flag)
+{
+	text	   *item;
+
+	item = (text *) palloc(VARHDRSZ + len + 1);
+	SET_VARSIZE(item, VARHDRSZ + len + 1);
+
+	*VARDATA(item) = flag;
+
+	if (str && len > 0)
+		memcpy(VARDATA(item) + 1, str, len);
+
+	return item;
+}
+
+static text *
+makeitemFromValue(JsonbValue * v, char flag)
+{
+	text	   *item;
+	char	   *cstr;
+
+	switch (v->type)
+	{
+		case jbvNull:
+			item = makeitem(NULL, 0, NULLFLAG);
+			break;
+		case jbvBool:
+			item = makeitem((v->boolean) ? " t" : " f", 2, flag);
+			break;
+		case jbvNumeric:
+
+			/*
+			 * A textual locale and precision independent representation of
+			 * numeric is required.  Use the standard hash_numeric for this.
+			 * This is sufficient because the recheck flag will be set anyway.
+			 */
+			cstr = palloc(8 /* hex numbers */ + 1 /* \0 */ );
+			snprintf(cstr, 9, "%08x", DatumGetInt32(DirectFunctionCall1(hash_numeric,
+											  NumericGetDatum(v->numeric))));
+			item = makeitem(cstr, 8, flag);
+			pfree(cstr);
+			break;
+		case jbvString:
+			item = makeitem(v->string.val, v->string.len, flag);
+			break;
+		default:
+			elog(ERROR, "invalid jsonb scalar type");
+	}
+
+	return item;
 }
