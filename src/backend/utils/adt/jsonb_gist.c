@@ -417,9 +417,9 @@ gjsonb_compress(PG_FUNCTION_ARGS)
 
 		if (!JB_ISEMPTY(val))
 		{
-			int				r;
-			JsonbIterator	*it = JsonbIteratorInit(VARDATA(val));
+			JsonbIterator  *it = JsonbIteratorInit(VARDATA(val));
 			JsonbValue		v;
+			int				r;
 
 			while((r = JsonbIteratorGet(&it, &v, false)) != 0)
 			{

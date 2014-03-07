@@ -757,11 +757,10 @@ JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested)
 	check_stack_depth();
 
 	/*
-	 * Encode all possible states by one integer. That's possible because enum
-	 * members of JsonbIterator->state uses different bits than
-	 * JB_FLAG_ARRAY/JB_FLAG_OBJECT. See definition of JsonbIterator
+	 * Encode all possible states by one integer.  This is possible because
+	 * enum members of JsonbIterator->state use different bits than
+	 * JB_FLAG_ARRAY/JB_FLAG_OBJECT.  See definition of JsonbIterator
 	 */
-
 	switch ((*it)->type | (*it)->state)
 	{
 		case JB_FLAG_ARRAY | jbi_start:
