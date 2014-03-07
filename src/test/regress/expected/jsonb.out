@@ -1559,3 +1559,357 @@ select count(*) from testjsonb where j @> '{"age":25.0}';
 
 RESET enable_seqscan;
 drop index jidx;
+-- nested tests
+SELECT '{"ff":{"a":12,"b":16}}'::jsonb;
+           jsonb            
+----------------------------
+ {"ff": {"a": 12, "b": 16}}
+(1 row)
+
+SELECT '{"ff":{"a":12,"b":16},"qq":123}'::jsonb;
+                 jsonb                 
+---------------------------------------
+ {"ff": {"a": 12, "b": 16}, "qq": 123}
+(1 row)
+
+SELECT '{"aa":["a","aaa"],"qq":{"a":12,"b":16,"c":["c1","c2"],"d":{"d1":"d1","d2":"d2","d1":"d3"}}}'::jsonb;
+                                              jsonb                                               
+--------------------------------------------------------------------------------------------------
+ {"aa": ["a", "aaa"], "qq": {"a": 12, "b": 16, "c": ["c1", "c2"], "d": {"d1": "d3", "d2": "d2"}}}
+(1 row)
+
+SELECT '{"aa":["a","aaa"],"qq":{"a":"12","b":"16","c":["c1","c2"],"d":{"d1":"d1","d2":"d2"}}}'::jsonb;
+                                                jsonb                                                 
+------------------------------------------------------------------------------------------------------
+ {"aa": ["a", "aaa"], "qq": {"a": "12", "b": "16", "c": ["c1", "c2"], "d": {"d1": "d1", "d2": "d2"}}}
+(1 row)
+
+SELECT '{"aa":["a","aaa"],"qq":{"a":"12","b":"16","c":["c1","c2",["c3"],{"c4":4}],"d":{"d1":"d1","d2":"d2"}}}'::jsonb;
+                                                          jsonb                                                          
+-------------------------------------------------------------------------------------------------------------------------
+ {"aa": ["a", "aaa"], "qq": {"a": "12", "b": "16", "c": ["c1", "c2", ["c3"], {"c4": 4}], "d": {"d1": "d1", "d2": "d2"}}}
+(1 row)
+
+SELECT '{"ff":["a","aaa"]}'::jsonb;
+        jsonb         
+----------------------
+ {"ff": ["a", "aaa"]}
+(1 row)
+
+SELECT
+  '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'ff',
+  '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'qq',
+  ('{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'Y') IS NULL AS f,
+  ('{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb ->> 'Y') IS NULL AS t,
+   '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'x';
+      ?column?      | ?column? | f | t | ?column? 
+--------------------+----------+---+---+----------
+ {"a": 12, "b": 16} | 123      | f | t | [1, 2]
+(1 row)
+
+-- nested containment
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[1,2]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[2,1],"c":"b"}'::jsonb @> '{"a":[1,2]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":{"1":2},"c":"b"}'::jsonb @> '{"a":[1,2]}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":{"2":1},"c":"b"}'::jsonb @> '{"a":[1,2]}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":{"1":2},"c":"b"}'::jsonb @> '{"a":{"1":2}}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":{"2":1},"c":"b"}'::jsonb @> '{"a":{"1":2}}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '["a","b"]'::jsonb @> '["a","b","c","b"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '["a","b","c","b"]'::jsonb @> '["a","b"]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '["a","b","c",[1,2]]'::jsonb @> '["a",[1,2]]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '["a","b","c",[1,2]]'::jsonb @> '["b",[1,2]]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[1]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[2]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[3]}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"c":3}]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4}]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4},3]}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4},1]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+-- nested object field / array index lookup
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'n';
+ ?column? 
+----------
+ null
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'a';
+ ?column? 
+----------
+ 1
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'b';
+ ?column? 
+----------
+ [1, 2]
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'c';
+ ?column? 
+----------
+ {"1": 2}
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'd';
+   ?column?    
+---------------
+ {"1": [2, 3]}
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'd' -> '1';
+ ?column? 
+----------
+ [2, 3]
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 'e';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb -> 0; --expecting error
+ERROR:  cannot call jsonb_array_element on an object
+SELECT '["a","b","c",[1,2],null]'::jsonb -> 0;
+ ?column? 
+----------
+ "a"
+(1 row)
+
+SELECT '["a","b","c",[1,2],null]'::jsonb -> 1;
+ ?column? 
+----------
+ "b"
+(1 row)
+
+SELECT '["a","b","c",[1,2],null]'::jsonb -> 2;
+ ?column? 
+----------
+ "c"
+(1 row)
+
+SELECT '["a","b","c",[1,2],null]'::jsonb -> 3;
+ ?column? 
+----------
+ [1, 2]
+(1 row)
+
+SELECT '["a","b","c",[1,2],null]'::jsonb -> 3 -> 1;
+ ?column? 
+----------
+ 2
+(1 row)
+
+SELECT '["a","b","c",[1,2],null]'::jsonb -> 4;
+ ?column? 
+----------
+ null
+(1 row)
+
+SELECT '["a","b","c",[1,2],null]'::jsonb -> 5;
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '["a","b","c",[1,2],null]'::jsonb -> -1;
+ ?column? 
+----------
+ 
+(1 row)
+
+--nested path extraction
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{0}';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{a}';
+ ?column? 
+----------
+ "b"
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c}';
+ ?column?  
+-----------
+ [1, 2, 3]
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,0}';
+ ?column? 
+----------
+ 1
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,1}';
+ ?column? 
+----------
+ 2
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,2}';
+ ?column? 
+----------
+ 3
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,3}';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,-1}';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{0}';
+ ?column? 
+----------
+ 0
+(1 row)
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{3}';
+ ?column? 
+----------
+ [3, 4]
+(1 row)
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{4}';
+   ?column?    
+---------------
+ {"5": "five"}
+(1 row)
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{4,5}';
+ ?column? 
+----------
+ "five"
+(1 row)
+
+--nested exists
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'n';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'a';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'b';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'c';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'd';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'e';
+ ?column? 
+----------
+ f
+(1 row)
+
