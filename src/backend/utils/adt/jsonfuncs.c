@@ -229,7 +229,7 @@ typedef struct PopulateRecordsetState
 	MemoryContext fn_mcxt;		/* used to stash IO funcs */
 } PopulateRecordsetState;
 
-/* turn a jsonb object into a record */
+/* Turn a jsonb object into a record */
 static inline void make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state);
 
 /*

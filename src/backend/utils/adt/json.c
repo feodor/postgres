@@ -166,7 +166,7 @@ Datum
 json_in(PG_FUNCTION_ARGS)
 {
 	char	   *json = PG_GETARG_CSTRING(0);
-	text       *result = cstring_to_text(json);
+	text	   *result = cstring_to_text(json);
 	JsonLexContext *lex;
 
 	/* validate it */
@@ -232,7 +232,7 @@ json_recv(PG_FUNCTION_ARGS)
  * Without is better as it makes the processing faster, so only make one
  * if really required.
  *
-  * If you already have the json as a text* value, use the first of these
+ * If you already have the json as a text* value, use the first of these
  * functions, otherwise use  makeJsonLexContextCstringLen().
  */
 JsonLexContext *
