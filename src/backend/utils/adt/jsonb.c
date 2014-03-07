@@ -210,7 +210,7 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 			case jbvArray:
 				_state->res = pushJsonbValue(&_state->state, WJB_ELEM, &v);
 				break;
-			case jbvHash:
+			case jbvObject:
 				_state->res = pushJsonbValue(&_state->state, WJB_VALUE, &v);
 				break;
 			default:

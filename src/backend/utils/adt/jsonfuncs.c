@@ -1230,7 +1230,7 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 		}
 		else
 		{
-			have_object = jbvp->type == jbvHash;
+			have_object = jbvp->type == jbvObject;
 			have_array = jbvp->type == jbvArray;
 		}
 	}

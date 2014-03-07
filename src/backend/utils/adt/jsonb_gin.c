@@ -318,7 +318,7 @@ hash_value(JsonbValue *v, PathHashStack *stack)
 			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
 			break;
 		default:
-			elog(ERROR, "wrong jsonb scalar type");
+			elog(ERROR, "invalid jsonb scalar type");
 			break;
 	}
 }

@@ -101,8 +101,8 @@ struct JsonbValue
 		jbvNumeric,
 		jbvBool,
 		jbvArray,
-		jbvHash,
-		jbvBinary				/* Binary form of jbvArray/jbvHash */
+		jbvObject,
+		jbvBinary				/* Binary form of jbvArray/jbvObject */
 	}			type;
 
 	uint32		size;			/* Estimation size of node (including
@@ -130,7 +130,7 @@ struct JsonbValue
 		{
 			int			npairs;
 			JsonbPair  *pairs;
-		}			hash;
+		}			object;		/* Associative data structure */
 
 		struct
 		{

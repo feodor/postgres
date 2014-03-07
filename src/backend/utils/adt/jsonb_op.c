@@ -56,7 +56,7 @@ arrayToJsonbSortedArray(ArrayType *a)
 	v = palloc(sizeof(*v));
 	v->type = jbvArray;
 	v->array.scalar = false;
-	v->array.elems = palloc(sizeof(*v->hash.pairs) * key_count);
+	v->array.elems = palloc(sizeof(*v->object.pairs) * key_count);
 
 	for (i = 0, j = 0; i < key_count; i++)
 	{
@@ -124,7 +124,7 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	uint32			*plowbound = NULL, lowbound = 0;
 	bool			res = false;
 
-	if (JB_ISEMPTY(jb) || v == NULL || v->hash.npairs == 0)
+	if (JB_ISEMPTY(jb) || v == NULL || v->object.npairs == 0)
 		PG_RETURN_BOOL(false);
 
 	if (JB_ROOT_IS_OBJECT(jb))
@@ -158,8 +158,13 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	uint32			*plowbound = NULL, lowbound = 0;
 	bool			res = false;
 
-	if (JB_ISEMPTY(js) || v == NULL || v->hash.npairs == 0)
-		PG_RETURN_BOOL(false);
+	if (JB_ISEMPTY(js) || v == NULL || v->array.nelems == 0)
+	{
+		if (v == NULL || v->array.nelems == 0)
+			PG_RETURN_BOOL(true); /* compatibility */
+		else
+			PG_RETURN_BOOL(false);
+	}
 
 	if (JB_ROOT_IS_OBJECT(js))
 		plowbound = &lowbound;
@@ -172,8 +177,10 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedJsonbValueByValue(VARDATA(js), JB_FLAG_OBJECT | JB_FLAG_ARRAY, plowbound,
-											   v->array.elems + i) != NULL)
+		if (findUncompressedJsonbValueByValue(VARDATA(js),
+											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+											  plowbound,
+											  v->array.elems + i) != NULL)
 		{
 			res = true;
 			break;
@@ -483,7 +490,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 				break;
 			case WJB_BEGIN_OBJECT:
 				COMP_CRC32(crc, "hb", 3);
-				COMP_CRC32(crc, &v.hash.npairs, sizeof(v.hash.npairs));
+				COMP_CRC32(crc, &v.object.npairs, sizeof(v.object.npairs));
 				break;
 			case WJB_KEY:
 				COMP_CRC32(crc, "k", 2);
