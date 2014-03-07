@@ -10123,8 +10123,8 @@ table2-mapping
 
   <note>
    <para>
-    There are parallel variants of the above listed operators for both
-    the <type>json</type> type and the <type>jsonb</type> type.  In
+    There are parallel variants of these operators for both the
+    <type>json</type> type and the <type>jsonb</type> type.  In
     addition to those operators common to both types, a further set of
     operators exists for <type>jsonb</type>, listed below.  These
     additional operators are principally intended to facilitate
@@ -10133,19 +10133,17 @@ table2-mapping
   </note>
   <para>
     The <type>json</type> type is a textual representation of JSON.
-    It should be preferred only where there is a requirement to store
-    JSON as text, with permissive sanitization of user-input.  There
-    are few subtleties in using the <type>json</type> type as a
-    universal interchange format.  In contrast, the <type>jsonb</type>
-    type uses a binary data representation, with <emphasis>nested</>
-    types, and supports advanced <acronym>GiST</acronym> and
-    <acronym>GIN</acronym> indexing.  Types described by
-    <acronym>RFC</> 4627 are effectively mapped onto native
-    <productname>PostgreSQL</productname> types.  Therefore, there are
-    some minor additional constraints on what constitutes valid
-    <type>jsonb</type> that do not apply to the <type>json</type>
-    type, or to JSON in the abstract.  These implementation-defined
-    restrictions are permitted by <acronym>RFC</> 4627.
+    The <type>jsonb</type> type uses a binary data representation,
+    with <emphasis>nested</> types, and supports advanced
+    <acronym>GiST</acronym> and <acronym>GIN</acronym> indexing.
+    Types described by <acronym>RFC</> 4627 are effectively mapped
+    onto native <productname>PostgreSQL</productname> types.
+    Therefore, there are some very minor additional constraints on
+    what constitutes valid <type>jsonb</type> that do not apply to the
+    <type>json</type> type, or to JSON in the abstract, pertaining to
+    the upper limits on what can be represented by the underlying type
+    system.  These implementation-defined restrictions are permitted
+    by <acronym>RFC</> 4627.
   </para>
   <para>
     Note that currently, the <type>jsonb</type>-only operators (which
