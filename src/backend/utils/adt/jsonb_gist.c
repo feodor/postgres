@@ -411,7 +411,7 @@ gjsonb_compress(PG_FUNCTION_ARGS)
 	if (entry->leafkey)
 	{
 		GISTTYPE   		*res = (GISTTYPE *) palloc0(CALCGTSIZE(0));
-		Jsonb	   		*val = (Jsonb*) entry->key;
+		Jsonb	   		*val = (Jsonb*) PG_DETOAST_DATUM(entry->key);
 
 		SET_VARSIZE(res, CALCGTSIZE(0));
 
