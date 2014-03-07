@@ -294,7 +294,7 @@ LINE 1: SELECT '    '::jsonb;
                ^
 DETAIL:  The input string ended unexpectedly.
 CONTEXT:  JSON data, line 1:     
--- make sure jsonb is passed throught json generators without being escaped
+-- make sure jsonb is passed through json generators without being escaped
 select array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
       array_to_json       
 --------------------------
@@ -310,73 +310,63 @@ INSERT INTO test_jsonb VALUES
 ('scalar','"a scalar"'),
 ('array','["zero", "one","two",null,"four","five"]'),
 ('object','{"field1":"val1","field2":"val2","field3":null}');
-SELECT test_json -> 'x'
-FROM test_jsonb
-WHERE json_type = 'scalar';
+SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'scalar';
 ERROR:  cannot call jsonb_object_field on a scalar
-SELECT test_json -> 'x'
-FROM test_jsonb
-WHERE json_type = 'array';
+SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'array';
 ERROR:  cannot call jsonb_object_field on an array
-SELECT test_json -> 'x'
-FROM test_jsonb
-WHERE json_type = 'object';
+SELECT test_json -> 'x' FROM test_jsonb WHERE json_type = 'object';
  ?column? 
 ----------
  
 (1 row)
 
-SELECT test_json->'field2'
-FROM test_jsonb
-WHERE json_type = 'object';
+SELECT test_json -> 'field2' FROM test_jsonb WHERE json_type = 'object';
  ?column? 
 ----------
  "val2"
 (1 row)
 
-SELECT test_json->>'field2'
-FROM test_jsonb
-WHERE json_type = 'object';
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'scalar';
+ERROR:  cannot call jsonb_object_field_text on a scalar
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'array';
+ERROR:  cannot call jsonb_object_field_text on an array
+SELECT test_json ->> 'field2' FROM test_jsonb WHERE json_type = 'object';
  ?column? 
 ----------
  val2
 (1 row)
 
-SELECT test_json -> 2
-FROM test_jsonb
-WHERE json_type = 'scalar';
+SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'scalar';
 ERROR:  cannot call jsonb_array_element on a scalar
-SELECT test_json -> 2
-FROM test_jsonb
-WHERE json_type = 'array';
+SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'array';
  ?column? 
 ----------
  "two"
 (1 row)
 
-SELECT test_json -> 2
-FROM test_jsonb
-WHERE json_type = 'object';
+SELECT test_json -> 9 FROM test_jsonb WHERE json_type = 'array';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT test_json -> 2 FROM test_jsonb WHERE json_type = 'object';
 ERROR:  cannot call jsonb_array_element on an object
-SELECT test_json->>2
-FROM test_jsonb
-WHERE json_type = 'array';
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'scalar';
+ERROR:  cannot call jsonb_array_element_text on a scalar
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'array';
  ?column? 
 ----------
  two
 (1 row)
 
-SELECT jsonb_object_keys(test_json)
-FROM test_jsonb
-WHERE json_type = 'scalar';
+SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'object';
+ERROR:  cannot call jsonb_array_element_text on an object
+SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'scalar';
 ERROR:  cannot call jsonb_object_keys on a scalar
-SELECT jsonb_object_keys(test_json)
-FROM test_jsonb
-WHERE json_type = 'array';
+SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'array';
 ERROR:  cannot call jsonb_object_keys on an array
-SELECT jsonb_object_keys(test_json)
-FROM test_jsonb
-WHERE json_type = 'object';
+SELECT jsonb_object_keys(test_json) FROM test_jsonb WHERE json_type = 'object';
  jsonb_object_keys 
 -------------------
  field1
@@ -385,35 +375,52 @@ WHERE json_type = 'object';
 (3 rows)
 
 -- nulls
-select (test_json->'field3') is null as expect_false
-from test_jsonb
-where json_type = 'object';
+select (test_json->'field3') is null as expect_false from test_jsonb where json_type = 'object';
  expect_false 
 --------------
  f
 (1 row)
 
-select (test_json->>'field3') is null as expect_true
-from test_jsonb
-where json_type = 'object';
+select (test_json->>'field3') is null as expect_true from test_jsonb where json_type = 'object';
  expect_true 
 -------------
  t
 (1 row)
 
-select (test_json->3) is null as expect_false
-from test_jsonb
-where json_type = 'array';
+select (test_json->3) is null as expect_false from test_jsonb where json_type = 'array';
  expect_false 
 --------------
  f
 (1 row)
 
-select (test_json->>3) is null as expect_true
-from test_jsonb
-where json_type = 'array';
+select (test_json->>3) is null as expect_true from test_jsonb where json_type = 'array';
  expect_true 
 -------------
+ t
+(1 row)
+
+-- equality and inequality
+select '{"x":"y"}'::jsonb = '{"x":"y"}'::jsonb;
+ ?column? 
+----------
+ t
+(1 row)
+
+select '{"x":"y"}'::jsonb = '{"x":"z"}'::jsonb;
+ ?column? 
+----------
+ f
+(1 row)
+
+select '{"x":"y"}'::jsonb <> '{"x":"y"}'::jsonb;
+ ?column? 
+----------
+ f
+(1 row)
+
+select '{"x":"y"}'::jsonb <> '{"x":"z"}'::jsonb;
+ ?column? 
+----------
  t
 (1 row)
 
@@ -644,6 +651,15 @@ select '{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>>'{f2,1}';
  1
 (1 row)
 
+-- same on jsonb scalars (expecting errors)
+select '42'::jsonb#>array['f2'];
+ERROR:  cannot call extract path from a scalar
+select '42'::jsonb#>array['0'];
+ERROR:  cannot call extract path from a scalar
+select '42'::jsonb#>>array['f2'];
+ERROR:  cannot call extract path from a scalar
+select '42'::jsonb#>>array['0'];
+ERROR:  cannot call extract path from a scalar
 -- array_elements
 select jsonb_array_elements('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false]');
     jsonb_array_elements    
@@ -866,4 +882,276 @@ select value, jsonb_typeof(value)
  {}                     | object
                         | 
 (11 rows)
+
+-- indexing
+CREATE TABLE testjsonb (j jsonb);
+\copy testjsonb from 'data/jsonb.data'
+select count(*) from testjsonb where j @> '{"wait":null}';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+ count 
+-------
+    15
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25.0}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j ? 'public';
+ count 
+-------
+   194
+(1 row)
+
+select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
+ count 
+-------
+   337
+(1 row)
+
+select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
+ count 
+-------
+    42
+(1 row)
+
+create index jidx on testjsonb using gist(j);
+set enable_seqscan=off;
+select count(*) from testjsonb where j @> '{"wait":null}';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+ count 
+-------
+    15
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25.0}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j ? 'public';
+ count 
+-------
+   194
+(1 row)
+
+select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
+ count 
+-------
+   337
+(1 row)
+
+select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
+ count 
+-------
+    42
+(1 row)
+
+RESET enable_seqscan;
+drop index jidx;
+create index jidx on testjsonb using gin (j);
+set enable_seqscan=off;
+select count(*) from testjsonb where j @> '{"wait":null}';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+ count 
+-------
+    15
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25.0}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j ? 'public';
+ count 
+-------
+   194
+(1 row)
+
+select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
+ count 
+-------
+   337
+(1 row)
+
+select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
+ count 
+-------
+    42
+(1 row)
+
+RESET enable_seqscan;
+select count(*) from (select (jsonb_each(j)).key from testjsonb) as wow;
+ count 
+-------
+  4783
+(1 row)
+
+select key, count(*) from (select (jsonb_each(j)).key from testjsonb) as wow group by key order by count desc, key;
+    key    | count 
+-----------+-------
+ line      |   884
+ query     |   207
+ pos       |   203
+ node      |   202
+ space     |   197
+ status    |   195
+ public    |   194
+ title     |   190
+ wait      |   190
+ org       |   189
+ user      |   189
+ coauthors |   188
+ disabled  |   185
+ indexed   |   184
+ cleaned   |   180
+ bad       |   179
+ date      |   179
+ world     |   176
+ state     |   172
+ subtitle  |   169
+ auth      |   168
+ abstract  |   161
+ age       |     2
+(23 rows)
+
+-- sort/hash
+select count(distinct j) from testjsonb;
+ count 
+-------
+   886
+(1 row)
+
+set enable_hashagg = false;
+select count(*) from (select j from (select * from testjsonb union all select * from testjsonb) js group by j) js2;
+ count 
+-------
+   886
+(1 row)
+
+set enable_hashagg = true;
+set enable_sort = false;
+select count(*) from (select j from (select * from testjsonb union all select * from testjsonb) js group by j) js2;
+ count 
+-------
+   886
+(1 row)
+
+select distinct * from (values (jsonb '{}' || ''),('{}')) v(j);
+ j  
+----
+ {}
+(1 row)
+
+set enable_sort = true;
+RESET enable_hashagg;
+RESET enable_sort;
+-- btree
+drop index jidx;
+create index jidx on testjsonb using btree (j);
+set enable_seqscan=off;
+select count(*) from testjsonb where j > '{"p":1}';
+ count 
+-------
+   886
+(1 row)
+
+select count(*) from testjsonb where j = '{"pos":98, "line":371, "node":"CBA", "indexed":true}';
+ count 
+-------
+     1
+(1 row)
+
+--gin hash
+drop index jidx;
+create index jidx on testjsonb using gin (j gin_jsonb_hash_ops);
+set enable_seqscan=off;
+select count(*) from testjsonb where j @> '{"wait":null}';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+ count 
+-------
+    15
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25.0}';
+ count 
+-------
+     2
+(1 row)
+
+RESET enable_seqscan;
+drop index jidx;
 
