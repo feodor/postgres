@@ -1913,3 +1913,24 @@ SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'e';
  f
 (1 row)
 
+--nested each
+SELECT * FROM jsonb_each('{"a":{"b":"c","c":"b","1":"first"},"b":[1,2],"c":"cc","1":"first","n":null}'::jsonb) AS q;
+ key |               value                
+-----+------------------------------------
+ 1   | "first"
+ a   | {"1": "first", "b": "c", "c": "b"}
+ b   | [1, 2]
+ c   | "cc"
+ n   | null
+(5 rows)
+
+SELECT * FROM jsonb_each_text('{"a":{"b":"c","c":"b","1":"first"},"b":[1,2],"c":"cc","1":"first","n":null}'::jsonb) AS q;
+ key |               value                
+-----+------------------------------------
+ 1   | first
+ a   | {"1": "first", "b": "c", "c": "b"}
+ b   | [1, 2]
+ c   | cc
+ n   | 
+(5 rows)
+
