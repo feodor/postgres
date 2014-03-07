@@ -31,7 +31,6 @@ static void hash_value(JsonbValue * v, PathHashStack * stack);
 static text *makeitem(char *str, int len, char flag);
 static text *makeitemFromValue(JsonbValue * v, char flag);
 
-
 Datum
 gin_extract_jsonb(PG_FUNCTION_ARGS)
 {

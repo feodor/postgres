@@ -11,7 +11,6 @@
  *
  *-------------------------------------------------------------------------
  */
-
 #include "postgres.h"
 
 #include "access/gist.h"
@@ -22,16 +21,15 @@
 #include "utils/pg_crc.h"
 
 /* bigint defines */
-#define BITBYTE 8
-#define SIGLENINT  4			/* >122 => key will toast, so very slow!!! */
-#define SIGLEN	( sizeof(int)*SIGLENINT )
-#define SIGLENBIT (SIGLEN*BITBYTE)
+#define BITBYTE			8
+#define SIGLENINT  		4			/* >122 => key will toast, so very slow! */
+#define SIGLEN			(sizeof(int)*SIGLENINT)
+#define SIGLENBIT		(SIGLEN*BITBYTE)
 
 typedef char BITVEC[SIGLEN];
 typedef char *BITVECP;
 
 #define SIGPTR(x)  ( (BITVECP) ARR_DATA_PTR(x) )
-
 
 #define LOOPBYTE \
 			for(i=0;i<SIGLEN;i++)
@@ -39,7 +37,7 @@ typedef char *BITVECP;
 #define LOOPBIT \
 			for(i=0;i<SIGLENBIT;i++)
 
-/* beware of multiple evaluation of arguments to these macros! */
+/* Beware of multiple evaluation of arguments to these macros! */
 #define GETBYTE(x,i) ( *( (BITVECP)(x) + (int)( (i) / BITBYTE ) ) )
 #define GETBITBYTE(x,i) ( (*((char*)(x)) >> (i)) & 0x01 )
 #define CLRBIT(x,i)   GETBYTE(x,i) &= ~( 0x01 << ( (i) % BITBYTE ) )
@@ -48,20 +46,10 @@ typedef char *BITVECP;
 #define HASHVAL(val) (((unsigned int)(val)) % SIGLENBIT)
 #define HASH(sign, val) SETBIT((sign), HASHVAL(val))
 
-typedef struct
-{
-	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	int32		flag;
-	char		data[1];
-} GISTTYPE;
-
 #define ALLISTRUE		0x04
-
 #define ISALLTRUE(x)	( ((GISTTYPE*)x)->flag & ALLISTRUE )
-
 #define GTHDRSIZE		(VARHDRSZ + sizeof(int32))
 #define CALCGTSIZE(flag) ( GTHDRSIZE+(((flag) & ALLISTRUE) ? 0 : SIGLEN) )
-
 #define GETSIGN(x)		( (BITVECP)( (char*)x+GTHDRSIZE ) )
 
 #define SUMBIT(val) (		\
@@ -76,126 +64,14 @@ typedef struct
 )
 
 #define GETENTRY(vec,pos) ((GISTTYPE *) DatumGetPointer((vec)->vector[(pos)].key))
-
 #define WISH_F(a,b,c) (double)( -(double)(((a)-(b))*((a)-(b))*((a)-(b)))*(c) )
 
-static int
-crc32_JsonbValue(JsonbValue * v, uint32 r)
+typedef struct
 {
-	int			crc;
-	char		flag = '\0';
-
-	INIT_CRC32(crc);
-
-	switch (r)
-	{
-		case WJB_KEY:
-			flag = KEYFLAG;
-			break;
-		case WJB_VALUE:
-			flag = VALFLAG;
-			break;
-		case WJB_ELEM:
-			flag = ELEMFLAG;
-			break;
-		default:
-			break;
-	}
-
-	COMP_CRC32(crc, &flag, 1);
-
-	switch (v->type)
-	{
-		case jbvString:
-			COMP_CRC32(crc, v->string.val, v->string.len);
-			break;
-		case jbvBool:
-			flag = (v->boolean) ? 't' : 'f';
-			COMP_CRC32(crc, &flag, 1);
-			break;
-		case jbvNumeric:
-			crc = DatumGetInt32(DirectFunctionCall1(hash_numeric,
-											   NumericGetDatum(v->numeric)));
-			break;
-		default:
-			elog(ERROR, "invalid jsonb scalar type");
-	}
-
-	FIN_CRC32(crc);
-	return crc;
-}
-
-static int
-crc32_Key(char *buf, int sz)
-{
-	int			crc;
-	char		flag = KEYFLAG;
-
-	INIT_CRC32(crc);
-
-	COMP_CRC32(crc, &flag, 1);
-	COMP_CRC32(crc, buf, sz);
-
-	FIN_CRC32(crc);
-	return crc;
-}
-
-static int32
-sizebitvec(BITVECP sign)
-{
-	int32		size = 0,
-				i;
-
-	LOOPBYTE
-	{
-		size += SUMBIT(sign);
-		sign = (BITVECP) (((char *) sign) + 1);
-	}
-	return size;
-}
-
-static int
-hemdistsign(BITVECP a, BITVECP b)
-{
-	int			i,
-				dist = 0;
-
-	LOOPBIT
-	{
-		if (GETBIT(a, i) != GETBIT(b, i))
-			dist++;
-	}
-	return dist;
-}
-
-static int
-hemdist(GISTTYPE *a, GISTTYPE *b)
-{
-	if (ISALLTRUE(a))
-	{
-		if (ISALLTRUE(b))
-			return 0;
-		else
-			return SIGLENBIT - sizebitvec(GETSIGN(b));
-	}
-	else if (ISALLTRUE(b))
-		return SIGLENBIT - sizebitvec(GETSIGN(a));
-
-	return hemdistsign(GETSIGN(a), GETSIGN(b));
-}
-
-static int32
-unionkey(BITVECP sbase, GISTTYPE *add)
-{
-	int32		i;
-	BITVECP		sadd = GETSIGN(add);
-
-	if (ISALLTRUE(add))
-		return 1;
-	LOOPBYTE
-		sbase[i] |= sadd[i];
-	return 0;
-}
+	int32		vl_len_;		/* varlena header (do not touch directly!) */
+	int32		flag;
+	char		data[1];
+} GISTTYPE;
 
 typedef struct
 {
@@ -203,11 +79,13 @@ typedef struct
 	int32		cost;
 } SPLITCOST;
 
-static int
-comparecost(const void *a, const void *b)
-{
-	return ((const SPLITCOST *) a)->cost - ((const SPLITCOST *) b)->cost;
-}
+static int crc32_JsonbValue(JsonbValue * v, uint32 r);
+static int crc32_Key(char *buf, int sz);
+static int32 sizebitvec(BITVECP sign);
+static int hemdistsign(BITVECP a, BITVECP b);
+static int hemdist(GISTTYPE *a, GISTTYPE *b);
+static int32 unionkey(BITVECP sbase, GISTTYPE *add);
+static int comparecost(const void *a, const void *b);
 
 Datum
 gjsonb_in(PG_FUNCTION_ARGS)
@@ -300,7 +178,7 @@ gjsonb_consistent(PG_FUNCTION_ARGS)
 			fcinfo->flinfo->fn_extra = qval;
 		}
 
-		res = (GETBIT(sign, *qval)) ? true : false;
+		res = (GETBIT(sign, *qval)) != 0;
 	}
 	else if (strategy == JsonbExistsAllStrategyNumber ||
 			 strategy == JsonbExistsAnyStrategyNumber)
@@ -683,4 +561,134 @@ gjsonb_same(PG_FUNCTION_ARGS)
 		}
 	}
 	PG_RETURN_POINTER(result);
+}
+
+static int
+crc32_JsonbValue(JsonbValue * v, uint32 r)
+{
+	int			crc;
+	char		flag = '\0';
+
+	INIT_CRC32(crc);
+
+	switch (r)
+	{
+		case WJB_KEY:
+			flag = KEYFLAG;
+			break;
+		case WJB_VALUE:
+			flag = VALFLAG;
+			break;
+		case WJB_ELEM:
+			flag = ELEMFLAG;
+			break;
+		default:
+			break;
+	}
+
+	COMP_CRC32(crc, &flag, 1);
+
+	switch (v->type)
+	{
+		case jbvString:
+			COMP_CRC32(crc, v->string.val, v->string.len);
+			break;
+		case jbvBool:
+			flag = v->boolean ? 't' : 'f';
+			COMP_CRC32(crc, &flag, 1);
+			break;
+		case jbvNumeric:
+			crc = DatumGetInt32(DirectFunctionCall1(hash_numeric,
+											   NumericGetDatum(v->numeric)));
+			break;
+		default:
+			elog(ERROR, "invalid jsonb scalar type");
+	}
+
+	FIN_CRC32(crc);
+	return crc;
+}
+
+static int
+crc32_Key(char *buf, int sz)
+{
+	int			crc;
+	char		flag = KEYFLAG;
+
+	INIT_CRC32(crc);
+
+	COMP_CRC32(crc, &flag, 1);
+	COMP_CRC32(crc, buf, sz);
+
+	FIN_CRC32(crc);
+	return crc;
+}
+
+static int32
+sizebitvec(BITVECP sign)
+{
+	int32		size = 0,
+				i;
+
+	LOOPBYTE
+	{
+		size += SUMBIT(sign);
+		sign = (BITVECP) (((char *) sign) + 1);
+	}
+
+	return size;
+}
+
+static int
+hemdistsign(BITVECP a, BITVECP b)
+{
+	int			i,
+				dist = 0;
+
+	LOOPBIT
+	{
+		if (GETBIT(a, i) != GETBIT(b, i))
+			dist++;
+	}
+
+	return dist;
+}
+
+static int
+hemdist(GISTTYPE *a, GISTTYPE *b)
+{
+	if (ISALLTRUE(a))
+	{
+		if (ISALLTRUE(b))
+			return 0;
+		else
+			return SIGLENBIT - sizebitvec(GETSIGN(b));
+	}
+	else if (ISALLTRUE(b))
+	{
+		return SIGLENBIT - sizebitvec(GETSIGN(a));
+	}
+
+	return hemdistsign(GETSIGN(a), GETSIGN(b));
+}
+
+static int32
+unionkey(BITVECP sbase, GISTTYPE *add)
+{
+	int32		i;
+	BITVECP		sadd = GETSIGN(add);
+
+	if (ISALLTRUE(add))
+		return 1;
+
+	LOOPBYTE
+		sbase[i] |= sadd[i];
+
+	return 0;
+}
+
+static int
+comparecost(const void *a, const void *b)
+{
+	return ((const SPLITCOST *) a)->cost - ((const SPLITCOST *) b)->cost;
 }
