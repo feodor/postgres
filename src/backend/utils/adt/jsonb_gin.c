@@ -67,7 +67,7 @@ makeitemFromValue(JsonbValue * v, char flag)
 			item = makeitem(v->string.val, v->string.len, flag);
 			break;
 		default:
-			elog(ERROR, "wrong jsonb scalar type");
+			elog(ERROR, "invalid jsonb scalar type");
 	}
 
 	return item;

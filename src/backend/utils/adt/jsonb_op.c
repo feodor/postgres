@@ -338,7 +338,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 	}
 	else
 	{
-		elog(ERROR, "wrong jsonb container type");
+		elog(ERROR, "invalid jsonb container type");
 	}
 
 	return res;

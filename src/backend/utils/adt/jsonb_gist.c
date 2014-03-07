@@ -118,7 +118,7 @@ crc32_JsonbValue(JsonbValue * v, uint32 r)
 											   NumericGetDatum(v->numeric)));
 			break;
 		default:
-			elog(ERROR, "wrong jsonb scalar type");
+			elog(ERROR, "invalid jsonb scalar type");
 	}
 
 	FIN_CRC32(crc);

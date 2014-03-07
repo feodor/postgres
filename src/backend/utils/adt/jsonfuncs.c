@@ -2290,8 +2290,7 @@ populate_record_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 				else if (v->type == jbvBinary)
 					s = JsonbToCString(NULL, v->binary.data, v->binary.len);
 				else
-					/* not expected to happen */
-					elog(ERROR, "Wrong jsonb");
+					elog(ERROR, "invalid jsonb type");
 			}
 
 			values[i] = InputFunctionCall(&column_info->proc, s,
@@ -2574,8 +2573,7 @@ make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state)
 			else if (v->type == jbvBinary)
 				s = JsonbToCString(NULL, v->binary.data, v->binary.len);
 			else
-				/* not expected to happen */
-				elog(ERROR, "Wrong jsonb");
+				elog(ERROR, "invalid jsonb type");
 
 			values[i] = InputFunctionCall(&column_info->proc, s,
 										  column_info->typioparam,
