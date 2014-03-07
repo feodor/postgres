@@ -19,10 +19,6 @@ SELECT	'{a}'::hstore;
 SELECT	''::hstore;
 SELECT	'{}'::hstore;
 
-SELECT 'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'ff',
-	   'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'qq',
-	   ('ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'Y') IS NULL AS t,
-	   'ff => {a=>12, b=>16}, qq=> 123, x=>{1,2}, Y=>NULL'::hstore -> 'x';
 
 SELECT '[ a, b, c, d]'::hstore -> 'a';
 --
@@ -83,29 +79,6 @@ SELECT %% 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL';
 SELECT %% '{aa,1, cq,l, b,g, fg,NULL}';
 SELECT hstore_to_matrix( 'aa=>1, cq=>l, b=>{a,n}, fg=>NULL');
 SELECT hstore_to_matrix( '{aa,1, cq,l, b,g, fg,NULL}');
-
-
---contains
-SELECT 'a=>b'::hstore @> 'a=>b, c=>b';
-SELECT 'a=>b, c=>b'::hstore @> 'a=>b';
-SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{1,2}';
-SELECT 'a=>{2,1}, c=>b'::hstore @> 'a=>{1,2}';
-SELECT 'a=>{1=>2}, c=>b'::hstore @> 'a=>{1,2}';
-SELECT 'a=>{2=>1}, c=>b'::hstore @> 'a=>{1,2}';
-SELECT 'a=>{1=>2}, c=>b'::hstore @> 'a=>{1=>2}';
-SELECT 'a=>{2=>1}, c=>b'::hstore @> 'a=>{1=>2}';
-SELECT '{a,b}'::hstore @> '{a,b, c,b}';
-SELECT '{a,b, c,b}'::hstore @> '{a,b}';
-SELECT '{a,b, c,{1,2}}'::hstore @> '{a,{1,2}}';
-SELECT '{a,b, c,{1,2}}'::hstore @> '{b,{1,2}}';
-
-SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{1}';
-SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{2}';
-SELECT 'a=>{1,2}, c=>b'::hstore @> 'a=>{3}';
-SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{c=>3}}';
-SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4}}';
-SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4},3}';
-SELECT 'a=>{1,2,{c=>3, x=>4}}, c=>b'::hstore @> 'a=>{{x=>4},1}';
 
 -- %>
 

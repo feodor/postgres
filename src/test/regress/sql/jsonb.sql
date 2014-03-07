@@ -405,3 +405,31 @@ SELECT '{"aa":["a","aaa"],"qq":{"a":12,"b":16,"c":["c1","c2"],"d":{"d1":"d1","d2
 SELECT '{"aa":["a","aaa"],"qq":{"a":"12","b":"16","c":["c1","c2"],"d":{"d1":"d1","d2":"d2"}}}'::jsonb;
 SELECT '{"aa":["a","aaa"],"qq":{"a":"12","b":"16","c":["c1","c2",["c3"],{"c4":4}],"d":{"d1":"d1","d2":"d2"}}}'::jsonb;
 SELECT '{"ff":["a","aaa"]}'::jsonb;
+
+SELECT
+  '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'ff',
+  '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'qq',
+  ('{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'Y') IS NULL AS f,
+  ('{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb ->> 'Y') IS NULL AS t,
+   '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'x';
+
+-- nested containment
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[1,2]}';
+SELECT '{"a":[2,1],"c":"b"}'::jsonb @> '{"a":[1,2]}';
+SELECT '{"a":{"1":2},"c":"b"}'::jsonb @> '{"a":[1,2]}';
+SELECT '{"a":{"2":1},"c":"b"}'::jsonb @> '{"a":[1,2]}';
+SELECT '{"a":{"1":2},"c":"b"}'::jsonb @> '{"a":{"1":2}}';
+SELECT '{"a":{"2":1},"c":"b"}'::jsonb @> '{"a":{"1":2}}';
+SELECT '["a","b"]'::jsonb @> '["a","b","c","b"]';
+SELECT '["a","b","c","b"]'::jsonb @> '["a","b"]';
+SELECT '["a","b","c",[1,2]]'::jsonb @> '["a",[1,2]]';
+SELECT '["a","b","c",[1,2]]'::jsonb @> '["b",[1,2]]';
+
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[1]}';
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[2]}';
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[3]}';
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"c":3}]}';
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4}]}';
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4},3]}';
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4},1]}';

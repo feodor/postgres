@@ -1596,3 +1596,117 @@ SELECT '{"ff":["a","aaa"]}'::jsonb;
  {"ff": ["a", "aaa"]}
 (1 row)
 
+SELECT
+  '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'ff',
+  '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'qq',
+  ('{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'Y') IS NULL AS f,
+  ('{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb ->> 'Y') IS NULL AS t,
+   '{"ff":{"a":12,"b":16},"qq":123,"x":[1,2],"Y":null}'::jsonb -> 'x';
+      ?column?      | ?column? | f | t | ?column? 
+--------------------+----------+---+---+----------
+ {"a": 12, "b": 16} | 123      | f | t | [1, 2]
+(1 row)
+
+-- nested containment
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[1,2]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[2,1],"c":"b"}'::jsonb @> '{"a":[1,2]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":{"1":2},"c":"b"}'::jsonb @> '{"a":[1,2]}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":{"2":1},"c":"b"}'::jsonb @> '{"a":[1,2]}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":{"1":2},"c":"b"}'::jsonb @> '{"a":{"1":2}}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":{"2":1},"c":"b"}'::jsonb @> '{"a":{"1":2}}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '["a","b"]'::jsonb @> '["a","b","c","b"]';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '["a","b","c","b"]'::jsonb @> '["a","b"]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '["a","b","c",[1,2]]'::jsonb @> '["a",[1,2]]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '["a","b","c",[1,2]]'::jsonb @> '["b",[1,2]]';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[1]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[2]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2],"c":"b"}'::jsonb @> '{"a":[3]}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"c":3}]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4}]}';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4},3]}';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT '{"a":[1,2,{"c":3,"x":4}],"c":"b"}'::jsonb @> '{"a":[{"x":4},1]}';
+ ?column? 
+----------
+ t
+(1 row)
+
