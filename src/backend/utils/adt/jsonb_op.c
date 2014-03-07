@@ -11,7 +11,6 @@
  *
  *-------------------------------------------------------------------------
  */
-
 #include "postgres.h"
 
 #include "access/hash.h"
@@ -22,80 +21,8 @@
 #include "utils/memutils.h"
 #include "utils/pg_crc.h"
 
-static JsonbValue *
-arrayToJsonbSortedArray(ArrayType *a)
-{
-	Datum	   *key_datums;
-	bool	   *key_nulls;
-	int			key_count;
-	JsonbValue *v;
-	int			i,
-				j;
-	bool		hasNonUniq = false;
-
-	deconstruct_array(a,
-					  TEXTOID, -1, false, 'i',
-					  &key_datums, &key_nulls, &key_count);
-
-	if (key_count == 0)
-		return NULL;
-
-	/*
-	 * A text array uses at least eight bytes per element, so any overflow in
-	 * "key_count * sizeof(JsonbPair)" is small enough for palloc() to catch.
-	 * However, credible improvements to the array format could invalidate
-	 * that assumption.  Therefore, use an explicit check rather than relying
-	 * on palloc() to complain.
-	 */
-	if (key_count > MaxAllocSize / sizeof(JsonbPair))
-		ereport(ERROR,
-				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-			  errmsg("number of pairs (%d) exceeds the maximum allowed (%d)",
-					 key_count, (int) (MaxAllocSize / sizeof(JsonbPair)))));
-
-	v = palloc(sizeof(*v));
-	v->type = jbvArray;
-	v->array.scalar = false;
-	v->array.elems = palloc(sizeof(*v->object.pairs) * key_count);
-
-	for (i = 0, j = 0; i < key_count; i++)
-	{
-		if (!key_nulls[i])
-		{
-			v->array.elems[j].type = jbvString;
-			v->array.elems[j].string.val = VARDATA(key_datums[i]);
-			v->array.elems[j].string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
-			j++;
-		}
-	}
-	v->array.nelems = j;
-
-	if (v->array.nelems > 1)
-		qsort_arg(v->array.elems, v->array.nelems, sizeof(*v->array.elems),
-		compareJsonbStringValue /* compareJsonbStringValue */ , &hasNonUniq);
-
-	if (hasNonUniq)
-	{
-		JsonbValue *ptr = v->array.elems + 1,
-				   *res = v->array.elems;
-
-		while (ptr - v->array.elems < v->array.nelems)
-		{
-			if (!(ptr->string.len == res->string.len &&
-			 memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
-			{
-				res++;
-				*res = *ptr;
-			}
-
-			ptr++;
-		}
-
-		v->array.nelems = res + 1 - v->array.elems;
-	}
-
-	return v;
-}
+static bool deepContains(JsonbIterator ** it1, JsonbIterator ** it2);
+static JsonbValue *arrayToJsonbSortedArray(ArrayType *a);
 
 Datum
 jsonb_exists(PG_FUNCTION_ARGS)
@@ -191,157 +118,6 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_BOOL(res);
-}
-
-static bool
-deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
-{
-	uint32		r1,
-				r2;
-	JsonbValue	v1,
-				v2;
-	bool		res = true;
-
-	r1 = JsonbIteratorGet(it1, &v1, false);
-	r2 = JsonbIteratorGet(it2, &v2, false);
-
-	if (r1 != r2)
-	{
-		res = false;
-	}
-	else if (r1 == WJB_BEGIN_OBJECT)
-	{
-		uint32		lowbound = 0;
-		JsonbValue *v;
-
-		for (;;)
-		{
-			r2 = JsonbIteratorGet(it2, &v2, false);
-			if (r2 == WJB_END_OBJECT)
-				break;
-
-			Assert(r2 == WJB_KEY);
-
-			v = findUncompressedJsonbValueByValue((*it1)->buffer,
-												  JB_FLAG_OBJECT,
-												  &lowbound, &v2);
-
-			if (v == NULL)
-			{
-				res = false;
-				break;
-			}
-
-			r2 = JsonbIteratorGet(it2, &v2, true);
-			Assert(r2 == WJB_VALUE);
-
-			if (v->type != v2.type)
-			{
-				res = false;
-				break;
-			}
-			else if (v->type == jbvString || v->type == jbvNull ||
-					 v->type == jbvBool || v->type == jbvNumeric)
-			{
-				if (compareJsonbValue(v, &v2) != 0)
-				{
-					res = false;
-					break;
-				}
-			}
-			else
-			{
-				JsonbIterator *it1a,
-						   *it2a;
-
-				Assert(v2.type == jbvBinary);
-				Assert(v->type == jbvBinary);
-
-				it1a = JsonbIteratorInit(v->binary.data);
-				it2a = JsonbIteratorInit(v2.binary.data);
-
-				if ((res = deepContains(&it1a, &it2a)) == false)
-					break;
-			}
-		}
-	}
-	else if (r1 == WJB_BEGIN_ARRAY)
-	{
-		JsonbValue *v;
-		JsonbValue *av = NULL;
-		uint32		nelems = v1.array.nelems;
-
-		for (;;)
-		{
-			r2 = JsonbIteratorGet(it2, &v2, true);
-			if (r2 == WJB_END_ARRAY)
-				break;
-
-			Assert(r2 == WJB_ELEM);
-
-			if (v2.type == jbvString || v2.type == jbvNull ||
-				v2.type == jbvBool || v2.type == jbvNumeric)
-			{
-				v = findUncompressedJsonbValueByValue((*it1)->buffer,
-													  JB_FLAG_ARRAY, NULL,
-													  &v2);
-				if (v == NULL)
-				{
-					res = false;
-					break;
-				}
-			}
-			else
-			{
-				uint32		i;
-
-				if (av == NULL)
-				{
-					uint32		j = 0;
-
-					av = palloc(sizeof(*av) * nelems);
-
-					for (i = 0; i < nelems; i++)
-					{
-						r2 = JsonbIteratorGet(it1, &v1, true);
-						Assert(r2 == WJB_ELEM);
-
-						if (v1.type == jbvBinary)
-							av[j++] = v1;
-					}
-
-					if (j == 0)
-					{
-						res = false;
-						break;
-					}
-
-					nelems = j;
-				}
-
-				res = false;
-				for (i = 0; res == false && i < nelems; i++)
-				{
-					JsonbIterator *it1a,
-							   *it2a;
-
-					it1a = JsonbIteratorInit(av[i].binary.data);
-					it2a = JsonbIteratorInit(v2.binary.data);
-
-					res = deepContains(&it1a, &it2a);
-				}
-
-				if (res == false)
-					break;
-			}
-		}
-	}
-	else
-	{
-		elog(ERROR, "invalid jsonb container type");
-	}
-
-	return res;
 }
 
 Datum
@@ -540,4 +316,230 @@ jsonb_hash(PG_FUNCTION_ARGS)
 
 	PG_FREE_IF_COPY(jb, 0);
 	PG_RETURN_INT32(crc);
+}
+
+static bool
+deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
+{
+	uint32		r1,
+				r2;
+	JsonbValue	v1,
+				v2;
+	bool		res = true;
+
+	r1 = JsonbIteratorGet(it1, &v1, false);
+	r2 = JsonbIteratorGet(it2, &v2, false);
+
+	if (r1 != r2)
+	{
+		res = false;
+	}
+	else if (r1 == WJB_BEGIN_OBJECT)
+	{
+		uint32		lowbound = 0;
+		JsonbValue *v;
+
+		for (;;)
+		{
+			r2 = JsonbIteratorGet(it2, &v2, false);
+			if (r2 == WJB_END_OBJECT)
+				break;
+
+			Assert(r2 == WJB_KEY);
+
+			v = findUncompressedJsonbValueByValue((*it1)->buffer,
+												  JB_FLAG_OBJECT,
+												  &lowbound, &v2);
+
+			if (v == NULL)
+			{
+				res = false;
+				break;
+			}
+
+			r2 = JsonbIteratorGet(it2, &v2, true);
+			Assert(r2 == WJB_VALUE);
+
+			if (v->type != v2.type)
+			{
+				res = false;
+				break;
+			}
+			else if (v->type == jbvString || v->type == jbvNull ||
+					 v->type == jbvBool || v->type == jbvNumeric)
+			{
+				if (compareJsonbValue(v, &v2) != 0)
+				{
+					res = false;
+					break;
+				}
+			}
+			else
+			{
+				JsonbIterator *it1a,
+						   *it2a;
+
+				Assert(v2.type == jbvBinary);
+				Assert(v->type == jbvBinary);
+
+				it1a = JsonbIteratorInit(v->binary.data);
+				it2a = JsonbIteratorInit(v2.binary.data);
+
+				if ((res = deepContains(&it1a, &it2a)) == false)
+					break;
+			}
+		}
+	}
+	else if (r1 == WJB_BEGIN_ARRAY)
+	{
+		JsonbValue *v;
+		JsonbValue *av = NULL;
+		uint32		nelems = v1.array.nelems;
+
+		for (;;)
+		{
+			r2 = JsonbIteratorGet(it2, &v2, true);
+			if (r2 == WJB_END_ARRAY)
+				break;
+
+			Assert(r2 == WJB_ELEM);
+
+			if (v2.type == jbvString || v2.type == jbvNull ||
+				v2.type == jbvBool || v2.type == jbvNumeric)
+			{
+				v = findUncompressedJsonbValueByValue((*it1)->buffer,
+													  JB_FLAG_ARRAY, NULL,
+													  &v2);
+				if (v == NULL)
+				{
+					res = false;
+					break;
+				}
+			}
+			else
+			{
+				uint32		i;
+
+				if (av == NULL)
+				{
+					uint32		j = 0;
+
+					av = palloc(sizeof(*av) * nelems);
+
+					for (i = 0; i < nelems; i++)
+					{
+						r2 = JsonbIteratorGet(it1, &v1, true);
+						Assert(r2 == WJB_ELEM);
+
+						if (v1.type == jbvBinary)
+							av[j++] = v1;
+					}
+
+					if (j == 0)
+					{
+						res = false;
+						break;
+					}
+
+					nelems = j;
+				}
+
+				res = false;
+				for (i = 0; res == false && i < nelems; i++)
+				{
+					JsonbIterator *it1a,
+							   *it2a;
+
+					it1a = JsonbIteratorInit(av[i].binary.data);
+					it2a = JsonbIteratorInit(v2.binary.data);
+
+					res = deepContains(&it1a, &it2a);
+				}
+
+				if (res == false)
+					break;
+			}
+		}
+	}
+	else
+	{
+		elog(ERROR, "invalid jsonb container type");
+	}
+
+	return res;
+}
+
+static JsonbValue *
+arrayToJsonbSortedArray(ArrayType *a)
+{
+	Datum	   *key_datums;
+	bool	   *key_nulls;
+	int			key_count;
+	JsonbValue *v;
+	int			i,
+				j;
+	bool		hasNonUniq = false;
+
+	deconstruct_array(a,
+					  TEXTOID, -1, false, 'i',
+					  &key_datums, &key_nulls, &key_count);
+
+	if (key_count == 0)
+		return NULL;
+
+	/*
+	 * A text array uses at least eight bytes per element, so any overflow in
+	 * "key_count * sizeof(JsonbPair)" is small enough for palloc() to catch.
+	 * However, credible improvements to the array format could invalidate
+	 * that assumption.  Therefore, use an explicit check rather than relying
+	 * on palloc() to complain.
+	 */
+	if (key_count > MaxAllocSize / sizeof(JsonbPair))
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+			  errmsg("number of pairs (%d) exceeds the maximum allowed (%d)",
+					 key_count, (int) (MaxAllocSize / sizeof(JsonbPair)))));
+
+	v = palloc(sizeof(*v));
+	v->type = jbvArray;
+	v->array.scalar = false;
+	v->array.elems = palloc(sizeof(*v->object.pairs) * key_count);
+
+	for (i = 0, j = 0; i < key_count; i++)
+	{
+		if (!key_nulls[i])
+		{
+			v->array.elems[j].type = jbvString;
+			v->array.elems[j].string.val = VARDATA(key_datums[i]);
+			v->array.elems[j].string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+			j++;
+		}
+	}
+	v->array.nelems = j;
+
+	if (v->array.nelems > 1)
+		qsort_arg(v->array.elems, v->array.nelems, sizeof(*v->array.elems),
+		compareJsonbStringValue /* compareJsonbStringValue */ , &hasNonUniq);
+
+	if (hasNonUniq)
+	{
+		JsonbValue *ptr = v->array.elems + 1,
+				   *res = v->array.elems;
+
+		while (ptr - v->array.elems < v->array.nelems)
+		{
+			if (!(ptr->string.len == res->string.len &&
+			 memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
+			{
+				res++;
+				*res = *ptr;
+			}
+
+			ptr++;
+		}
+
+		v->array.nelems = res + 1 - v->array.elems;
+	}
+
+	return v;
 }
