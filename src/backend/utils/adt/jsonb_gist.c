@@ -559,8 +559,7 @@ gjsonb_picksplit(PG_FUNCTION_ARGS)
 		SET_VARSIZE(datum_l, GTHDRSIZE + SIGLEN);
 		datum_l->flag = 0;
 		memcpy((void *) GETSIGN(datum_l),
-			   (void *) GETSIGN(GETENTRY(entryvec, seed_1)), sizeof(BITVEC))
-			;
+			   (void *) GETSIGN(GETENTRY(entryvec, seed_1)), sizeof(BITVEC));
 	}
 	if (ISALLTRUE(GETENTRY(entryvec, seed_2)))
 	{
