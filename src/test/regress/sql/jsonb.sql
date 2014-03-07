@@ -136,6 +136,39 @@ select * from jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"st
 select jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":"null"}');
 select * from jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q;
 
+-- exists
+
+select jsonb_exists('{"a":null, "b":"qq"}', 'a');
+select jsonb_exists('{"a":null, "b":"qq"}', 'b');
+select jsonb_exists('{"a":null, "b":"qq"}', 'c');
+select jsonb_exists('{"a":"null", "b":"qq"}', 'a');
+select jsonb '{"a":null, "b":"qq"}' ? 'a';
+select jsonb '{"a":null, "b":"qq"}' ? 'b';
+select jsonb '{"a":null, "b":"qq"}' ? 'c';
+select jsonb '{"a":"null", "b":"qq"}' ? 'a';
+
+select jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['a','b']);
+select jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['b','a']);
+select jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['c','a']);
+select jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['c','d']);
+select jsonb_exists_any('{"a":null, "b":"qq"}', '{}'::text[]);
+select jsonb '{"a":null, "b":"qq"}' ?| ARRAY['a','b'];
+select jsonb '{"a":null, "b":"qq"}' ?| ARRAY['b','a'];
+select jsonb '{"a":null, "b":"qq"}' ?| ARRAY['c','a'];
+select jsonb '{"a":null, "b":"qq"}' ?| ARRAY['c','d'];
+select jsonb '{"a":null, "b":"qq"}' ?| '{}'::text[];
+
+select jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['a','b']);
+select jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['b','a']);
+select jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['c','a']);
+select jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['c','d']);
+select jsonb_exists_all('{"a":null, "b":"qq"}', '{}'::text[]);
+select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['a','b'];
+select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['b','a'];
+select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['c','a'];
+select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['c','d'];
+select jsonb '{"a":null, "b":"qq"}' ?& '{}'::text[];
+
 -- extract_path, extract_path_as_text
 
 select jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
