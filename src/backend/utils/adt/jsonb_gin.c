@@ -170,7 +170,7 @@ gin_consistent_jsonb(PG_FUNCTION_ARGS)
 	{
 		/*
 		 * Index doesn't have information about correspondence of keys and
-		 * values, so we must recheck.	However, if not all of the keys are
+		 * values, so we must recheck.	However, if all of the keys are not
 		 * present, we can fail immediately.
 		 */
 		*recheck = true;
@@ -185,19 +185,19 @@ gin_consistent_jsonb(PG_FUNCTION_ARGS)
 	}
 	else if (strategy == JsonbExistsStrategyNumber)
 	{
-		/* Existence of key is guaranteed in default search mode */
+		/* Existence of key guaranteed in default search mode */
 		*recheck = false;
 		res = true;
 	}
 	else if (strategy == JsonbExistsAnyStrategyNumber)
 	{
-		/* Existence of key is guaranteed in default search mode */
+		/* Existence of key guaranteed in default search mode */
 		*recheck = false;
 		res = true;
 	}
 	else if (strategy == JsonbExistsAllStrategyNumber)
 	{
-		/* Testing for all the keys being present gives an exact result */
+		/* Testing for the presence of all keys gives an exact result */
 		*recheck = false;
 		for (i = 0; i < nkeys; i++)
 		{
@@ -355,7 +355,7 @@ gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS)
 			DatumGetPointer(DirectFunctionCall2(gin_extract_jsonb_hash,
 												PG_GETARG_DATUM(0),
 												PointerGetDatum(nentries)));
-		/* ... except that "contains {}" requires a full index scan */
+		/* ... although "contains {}" requires a full index scan */
 		if (entries == NULL)
 			*searchMode = GIN_SEARCH_MODE_ALL;
 	}
@@ -426,7 +426,7 @@ makeitemFromValue(JsonbValue * v, char flag)
 		case jbvNumeric:
 
 			/*
-			 * A textual locale and precision independent representation of
+			 * A textual, locale and precision independent representation of
 			 * numeric is required.  Use the standard hash_numeric for this.
 			 * This is sufficient because the recheck flag will be set anyway.
 			 */
