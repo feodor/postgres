@@ -1154,4 +1154,3 @@ select count(*) from testjsonb where j @> '{"age":25.0}';
 
 RESET enable_seqscan;
 drop index jidx;
-
