@@ -1876,3 +1876,40 @@ SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{4,5}';
  "five"
 (1 row)
 
+--nested exists
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'n';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'a';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'b';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'c';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'd';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'e';
+ ?column? 
+----------
+ f
+(1 row)
+
