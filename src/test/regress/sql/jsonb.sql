@@ -252,7 +252,7 @@ select count(*) from testjsonb where j ? 'public';
 select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
 select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
 
-create index hidx on testhstore using gist(h);
+create index jidx on testjsonb using gist(j);
 set enable_seqscan=off;
 
 select count(*) from testjsonb where j @> '{"wait":null}';
@@ -263,3 +263,19 @@ select count(*) from testjsonb where j @> '{"age":25.0}';
 select count(*) from testjsonb where j ? 'public';
 select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
 select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
+
+RESET enable_seqscan;
+
+drop index jidx;
+create index jidx on testjsonb using gin (j);
+set enable_seqscan=off;
+
+select count(*) from testjsonb where j @> '{"wait":null}';
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+select count(*) from testjsonb where j @> '{"age":25}';
+select count(*) from testjsonb where j @> '{"age":25.0}';
+select count(*) from testjsonb where j ? 'public';
+select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
+select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
+
