@@ -308,7 +308,7 @@ select count(*) from testjsonb where j = '{"pos":98, "line":371, "node":"CBA", "
 
 --gin hash
 drop index jidx;
-create index jidx on testjsonb using gin (j gin_jsonb_hash_ops);
+create index jidx on testjsonb using gin (j jsonb_hash_ops);
 set enable_seqscan=off;
 
 select count(*) from testjsonb where j @> '{"wait":null}';

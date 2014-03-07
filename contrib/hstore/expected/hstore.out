@@ -1532,7 +1532,7 @@ select count(*) from testhstore where h = 'pos=>98, line=>371, node=>CBA, indexe
 
 --gin hash
 drop index hidx;
-create index hidx on testhstore using gin (h gin_hstore_hash_ops);
+create index hidx on testhstore using gin (h jsonb_hash_ops);
 set enable_seqscan=off;
 select count(*) from testhstore where h @> 'wait=>NULL';
  count 

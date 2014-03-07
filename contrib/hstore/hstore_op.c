@@ -1254,7 +1254,7 @@ hstore_le(PG_FUNCTION_ARGS)
 }
 
 
-PG_FUNCTION_INFO_V1(hstore_hash); Datum		hstore_hash(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(hstore_hash);
 Datum		hstore_hash(PG_FUNCTION_ARGS);
 Datum
 hstore_hash(PG_FUNCTION_ARGS)
