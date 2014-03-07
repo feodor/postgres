@@ -301,6 +301,50 @@ select array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
  [{"a": 1},{"b": [2, 3]}]
 (1 row)
 
+-- operators
+-- @>
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
+ ?column? 
+----------
+ t
+(1 row)
+
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":null}';
+ ?column? 
+----------
+ t
+(1 row)
+
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "g":null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"g":null}';
+ ?column? 
+----------
+ f
+(1 row)
+
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"c"}';
+ ?column? 
+----------
+ f
+(1 row)
+
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
+ ?column? 
+----------
+ t
+(1 row)
+
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":"q"}';
+ ?column? 
+----------
+ f
+(1 row)
+
 -- jsonb extraction functions
 CREATE TEMP TABLE test_jsonb (
        json_type text,

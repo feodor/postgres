@@ -273,15 +273,6 @@ select * from svals('');
 
 select * from each('aaa=>bq, b=>NULL, ""=>1 ');
 
--- @>
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, c=>NULL';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, g=>NULL';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'g=>NULL';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>c';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, c=>q';
-
 -- json
 select hstore_to_json('"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4');
 select cast( hstore  '"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4' as json);
