@@ -126,6 +126,21 @@ select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"c"}';
 select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
 select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":"q"}';
 
+select jsonb_contained('{"a":"b"}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"b", "c":null}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"b", "g":null}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"g":null}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"c"}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"b"}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"b", "c":"q"}', '{"a":"b", "b":1, "c":null}');
+select '{"a":"b"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"b", "c":null}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"b", "g":null}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"g":null}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"c"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"b"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"b", "c":"q"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+
 -- array length
 
 SELECT jsonb_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]');
