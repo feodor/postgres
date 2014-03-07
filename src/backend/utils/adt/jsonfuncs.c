@@ -230,10 +230,11 @@ typedef struct PopulateRecordsetState
 } PopulateRecordsetState;
 
 /* Turn a jsonb object into a record */
-static inline void make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state);
+static void make_row_from_rec_and_jsonb(Jsonb * element,
+										PopulateRecordsetState *state);
 
 /*
- * SQL function json_object-keys
+ * SQL function json_object_keys
  *
  * Returns the set of keys for the object argument.
  *
@@ -244,7 +245,6 @@ static inline void make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordse
  * limited in size to NAMEDATALEN and the number of keys is unlikely to
  * be so huge that it has major memory implications.
  */
-
 Datum
 jsonb_object_keys(PG_FUNCTION_ARGS)
 {
@@ -2267,7 +2267,6 @@ populate_record_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 		}
 		else
 		{
-
 			char	   *s = NULL;
 
 			if (jtype == JSONOID)
@@ -2466,7 +2465,7 @@ jsonb_populate_recordset(PG_FUNCTION_ARGS)
 	return populate_recordset_worker(fcinfo, true);
 }
 
-static inline void
+static void
 make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state)
 {
 	Datum	   *values;
@@ -2794,6 +2793,7 @@ populate_recordset_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 	rsi->setDesc = state->ret_tdesc;
 
 	PG_RETURN_NULL();
+
 }
 
 static void
