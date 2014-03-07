@@ -62,17 +62,6 @@ SELECT '    '::jsonb;			-- ERROR, no value
 -- make sure jsonb is passed through json generators without being escaped
 select array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
 
--- operators
-
--- @>
-select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
-select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":null}';
-select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "g":null}';
-select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"g":null}';
-select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"c"}';
-select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
-select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":"q"}';
-
 -- jsonb extraction functions
 
 CREATE TEMP TABLE test_jsonb (
@@ -120,6 +109,15 @@ select '{"x":"y"}'::jsonb = '{"x":"z"}'::jsonb;
 
 select '{"x":"y"}'::jsonb <> '{"x":"y"}'::jsonb;
 select '{"x":"y"}'::jsonb <> '{"x":"z"}'::jsonb;
+
+-- containment
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":null}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "g":null}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"g":null}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"c"}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":"q"}';
 
 -- array length
 
