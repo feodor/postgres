@@ -10140,64 +10140,100 @@ table2-mapping
     types, and supports advanced <acronym>GiST</acronym> and
     <acronym>GIN</acronym> indexing.  Types described by
     <acronym>RFC</> 4627 are effectively mapped onto native
-    <productname>PostgreSQL</productname> types.
+    <productname>PostgreSQL</productname> types.  Therefore, there are
+    some minor additional constraints on what constitutes valid
+    <type>jsonb</type> that do not apply to the <type>json</type>
+    type, or to JSON in the abstract.  These implementation-defined
+    restrictions are permitted by <acronym>RFC</> 4627.
+   </para>
+   <para>
+    Note that currently, the <acronym>GiST</acronym> and
+    <acronym>GIN</acronym> operator classes for <type>jsonb</type>
+    that are comprised of the operators described in the following
+    table do not permit searching for keys that are not at the
+    least-nested level.  However, they can be used to efficiently
+    search among more than one possible key, or more than one possible
+    key/value pair within a single <type>jsonb</type> datum/document,
+    among a large number of such <quote>documents</> within a column
+    in a table (i.e. among many rows).
+   </para>
+   <para>
+    Comparisons and related operations are <emphasis>type-wise</>, in
+    that the underlying <productname>PostgreSQL</productname> datatype
+    comparators are invoked recursively, much like a traditional
+    composite type.
    </para>
   </note>
 
+  <table id="functions-jsonb-type-mapping-table">
+     <title>RFC-4627/JSON type to PostgreSQL type mapping</title>
+     <tgroup cols="2">
+      <thead>
+       <row>
+        <entry>RFC-4627/JSON type</entry>
+        <entry>PostgreSQL type</entry>
+       </row>
+      </thead>
+      <tbody>
+       <row>
+        <entry><literal>String</literal></entry>
+        <entry><literal>text</literal></entry>
+       </row>
+       <row>
+        <entry><literal>Number</literal></entry>
+        <entry><literal>numeric</literal></entry>
+       </row>
+      </tbody>
+     </tgroup>
+   </table>
+
   <table id="functions-jsonb-op-table">
      <title>Additonal JSONB Operators</title>
-     <tgroup cols="5">
+     <tgroup cols="4">
       <thead>
        <row>
         <entry>Operator</entry>
         <entry>Right Operand Type</entry>
         <entry>Description</entry>
         <entry>Example</entry>
-        <entry>Notes</entry>
        </row>
       </thead>
       <tbody>
        <row>
         <entry><literal>&#61;</literal></entry>
         <entry>jsonb</entry>
-        <entry>JSONB equality</entry>
+        <entry>Is the jsonb equal to this jsonb?</entry>
         <entry><literal>'[1,2,3]'::jsonb &#61; '[1,2,3]'::jsonb</literal></entry>
-        <entry>Part of default B-Tree operator class, which also includes complementary operators not listed here</entry>
        </row>
        <row>
         <entry><literal>&#64;&gt;</literal></entry>
         <entry>jsonb</entry>
-        <entry>JSONB contains</entry>
-        <entry><literal>select '{"a":1, "b":2}'::jsonb &#64;&gt; '{"b":2}'::jsonb</literal></entry>
-        <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
+        <entry>Does the jsonb contain within it this jsonb?</entry>
+        <entry><literal>'{"a":1, "b":2}'::jsonb &#64;&gt; '{"b":2}'::jsonb</literal></entry>
        </row>
        <row>
         <entry><literal>&lt;&#64;</literal></entry>
         <entry>jsonb</entry>
-        <entry>JSONB contained</entry>
-        <entry><literal>select '{"b":2}'::jsonb &lt;&#64; '{"a":1, "b":2}'::jsonb</literal></entry>
-        <entry>Checks least-nested layer only.  Unused by any operator class</entry>
+        <entry>Does the jsonb have contained within it this jsonb object?</entry>
+        <entry><literal>'{"b":2}'::jsonb &lt;&#64; '{"a":1, "b":2}'::jsonb</literal></entry>
        </row>
        <row>
         <entry><literal>&#63;</literal></entry>
         <entry>text</entry>
-        <entry>JSONB exists</entry>
+        <entry>Does this key exist?</entry>
         <entry><literal>'{"a":1, "b":2}'::jsonb &#63; 'b'</literal></entry>
-        <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
        </row>
        <row>
         <entry><literal>&#63;&#124;</literal></entry>
         <entry>text[]</entry>
         <entry>Do any of these keys exist?</entry>
-        <entry><literal>select '{"a":1, "b":2}'::jsonb &#63;&#124; array['b', 'c'];</literal></entry>
-        <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
+        <entry><literal>'{"a":1, "b":2}'::jsonb &#63;&#124; array['b', 'c']</literal></entry>
        </row>
        <row>
         <entry><literal>&#63;&amp;</literal></entry>
         <entry>text[]</entry>
-        <entry>Do all keys exist?</entry>
-        <entry><literal>select '{"a":1, "b":2}'::jsonb &#63;&amp; array['a', 'b'];</literal></entry>
-        <entry>Checks least-nested layer only.  Used by GiST and GIN operator classes</entry>
+        <entry>Do all of these keys exist?</entry>
+        <entry><literal>'{"a":1, "b":2}'::jsonb &#63;&amp; array['a', 'b']</literal></entry>
        </row>
       </tbody>
      </tgroup>
