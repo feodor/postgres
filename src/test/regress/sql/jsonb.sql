@@ -111,6 +111,13 @@ select '{"x":"y"}'::jsonb <> '{"x":"y"}'::jsonb;
 select '{"x":"y"}'::jsonb <> '{"x":"z"}'::jsonb;
 
 -- containment
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":null}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "g":null}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"g":null}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"c"}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":"q"}');
 select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
 select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":null}';
 select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "g":null}';

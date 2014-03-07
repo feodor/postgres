@@ -425,6 +425,48 @@ select '{"x":"y"}'::jsonb <> '{"x":"z"}'::jsonb;
 (1 row)
 
 -- containment
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
+ jsonb_contains 
+----------------
+ t
+(1 row)
+
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":null}');
+ jsonb_contains 
+----------------
+ t
+(1 row)
+
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "g":null}');
+ jsonb_contains 
+----------------
+ f
+(1 row)
+
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"g":null}');
+ jsonb_contains 
+----------------
+ f
+(1 row)
+
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"c"}');
+ jsonb_contains 
+----------------
+ f
+(1 row)
+
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
+ jsonb_contains 
+----------------
+ t
+(1 row)
+
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":"q"}');
+ jsonb_contains 
+----------------
+ f
+(1 row)
+
 select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
  ?column? 
 ----------
