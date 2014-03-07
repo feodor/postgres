@@ -1036,3 +1036,69 @@ select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
     42
 (1 row)
 
+RESET enable_seqscan;
+select count(*) from (select (jsonb_each(j)).key from testjsonb) as wow;
+ count 
+-------
+  4783
+(1 row)
+
+select key, count(*) from (select (jsonb_each(j)).key from testjsonb) as wow group by key order by count desc, key;
+    key    | count 
+-----------+-------
+ line      |   884
+ query     |   207
+ pos       |   203
+ node      |   202
+ space     |   197
+ status    |   195
+ public    |   194
+ title     |   190
+ wait      |   190
+ org       |   189
+ user      |   189
+ coauthors |   188
+ disabled  |   185
+ indexed   |   184
+ cleaned   |   180
+ bad       |   179
+ date      |   179
+ world     |   176
+ state     |   172
+ subtitle  |   169
+ auth      |   168
+ abstract  |   161
+ age       |     2
+(23 rows)
+
+-- sort/hash
+select count(distinct j) from testjsonb;
+ count 
+-------
+   886
+(1 row)
+
+set enable_hashagg = false;
+select count(*) from (select j from (select * from testjsonb union all select * from testjsonb) js group by j) js2;
+ count 
+-------
+   886
+(1 row)
+
+set enable_hashagg = true;
+set enable_sort = false;
+select count(*) from (select j from (select * from testjsonb union all select * from testjsonb) js group by j) js2;
+ count 
+-------
+   886
+(1 row)
+
+select distinct * from (values (jsonb '{}' || ''),('{}')) v(j);
+ j  
+----
+ {}
+(1 row)
+
+set enable_sort = true;
+RESET enable_hashagg;
+RESET enable_sort;

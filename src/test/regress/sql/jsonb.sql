@@ -279,3 +279,21 @@ select count(*) from testjsonb where j ? 'public';
 select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
 select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
 
+
+RESET enable_seqscan;
+
+select count(*) from (select (jsonb_each(j)).key from testjsonb) as wow;
+select key, count(*) from (select (jsonb_each(j)).key from testjsonb) as wow group by key order by count desc, key;
+
+-- sort/hash
+select count(distinct j) from testjsonb;
+set enable_hashagg = false;
+select count(*) from (select j from (select * from testjsonb union all select * from testjsonb) js group by j) js2;
+set enable_hashagg = true;
+set enable_sort = false;
+select count(*) from (select j from (select * from testjsonb union all select * from testjsonb) js group by j) js2;
+select distinct * from (values (jsonb '{}' || ''),('{}')) v(j);
+set enable_sort = true;
+
+RESET enable_hashagg;
+RESET enable_sort;
