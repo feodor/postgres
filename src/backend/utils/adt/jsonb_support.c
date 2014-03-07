@@ -9,8 +9,8 @@
  *
  *-------------------------------------------------------------------------
  */
-
 #include "postgres.h"
+
 #include "miscadmin.h"
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
@@ -43,8 +43,41 @@
 typedef void (*walk_jsonb_cb) (void * /* arg */ , JsonbValue * /* value */ ,
 								   uint32 /* flags */ , uint32 /* level */ );
 
-static void walkUncompressedJsonb(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg);
+typedef struct CompressState
+{
+	char	   *begin;
+	char	   *ptr;
+
+	struct
+	{
+		uint32		i;
+		uint32	   *header;
+		JEntry	   *array;
+		char	   *begin;
+	}		   *levelstate, *lptr, *pptr;
+
+	uint32		maxlevel;
+
+}	CompressState;
+
+static int compareJsonbPair(const void *a, const void *b, void *arg);
+static void walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb,
+									void *cb_arg, uint32 level);
+static void walkUncompressedJsonb(JsonbValue * v, walk_jsonb_cb cb,
+								  void *cb_arg);
+static void parseBuffer(JsonbIterator * it, char *buffer);
+static bool formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e,
+					   bool skipNested);
+static JsonbIterator *up(JsonbIterator * it);
+static void putJEntryString(CompressState * state, JsonbValue * value,
+							uint32 level, uint32 i);
+static void compressCallback(void *arg, JsonbValue * value, uint32 flags,
+							 uint32 level);
 static uint32 compressJsonb(JsonbValue * v, char *buffer);
+static ToJsonbState *pushState(ToJsonbState ** state);
+static void appendArray(ToJsonbState * state, JsonbValue * v);
+static void appendKey(ToJsonbState * state, JsonbValue * v);
+static void appendValue(ToJsonbState * state, JsonbValue * v);
 static void uniqueJsonbValue(JsonbValue * v);
 
 /*
@@ -62,8 +95,7 @@ JsonbValueToJsonb(JsonbValue * v)
 	else if (v->type == jbvString || v->type == jbvBool ||
 			 v->type == jbvNumeric || v->type == jbvNull)
 	{
-		/* scalar value */
-
+		/* Scalar value */
 		ToJsonbState *state = NULL;
 		JsonbValue *res;
 		uint32		sz;
@@ -104,14 +136,14 @@ JsonbValueToJsonb(JsonbValue * v)
 }
 
 /****************************************************************************
- *						   Compare Functions								*
+ *				     Internal comparison functions							*
  ****************************************************************************/
 
 /*
- * Compare two jbvString JsonbValue values, third argument
- * 'arg', if it's not null, should be a pointer to bool
- * value which will be set to true if strings are equal and
- * untouched otherwise.
+ * Compare two jbvString JsonbValue values.
+ *
+ * Third argument 'arg', when set, should point to bool value which will be set
+ * to true if strings are equal and untouched otherwise.
  */
 int
 compareJsonbStringValue(const void *a, const void *b, void *arg)
@@ -138,33 +170,7 @@ compareJsonbStringValue(const void *a, const void *b, void *arg)
 }
 
 /*
- * qsort helper to compare JsonbPair values, third argument
- * arg will be transferred as is to subsequent
- * compareJsonbStringValue() call. Pairs with equals keys are
- * ordered with respect of order field.
- */
-int
-compareJsonbPair(const void *a, const void *b, void *arg)
-{
-	const JsonbPair *pa = a;
-	const JsonbPair *pb = b;
-	int			res;
-
-	res = compareJsonbStringValue(&pa->key, &pb->key, arg);
-
-	/*
-	 * guarantee keeping order of equal pair. Unique algorithm will prefer
-	 * first element as value
-	 */
-
-	if (res == 0)
-		res = (pa->order > pb->order) ? -1 : 1;
-
-	return res;
-}
-
-/*
- * some constant order of JsonbValue
+ * Give consistent ordering of JsonbValues
  */
 int
 compareJsonbValue(JsonbValue * a, JsonbValue * b)
@@ -234,7 +240,7 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 }
 
 /*
- * Some order for Jsonb values
+ * Gives consistent ordering of Jsonb values
  */
 int
 compareJsonbBinaryValue(char *a, char *b)
@@ -575,8 +581,215 @@ getJsonbValue(char *buffer, uint32 flags, int32 i)
 	return &r;
 }
 
+/*
+ * Pushes the value into state.  With r = WJB_END_OBJECT and v = NULL, it will
+ * order and unique hash's keys otherwise we believe that pushed keys was
+ * ordered and unique.
+ *
+ * Initial state of ToJsonbState is NULL.
+ */
+JsonbValue *
+pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue * v)
+{
+	JsonbValue *h = NULL;
+
+	switch (r)
+	{
+		case WJB_BEGIN_ARRAY:
+			*state = pushState(state);
+			h = &(*state)->v;
+			(*state)->v.type = jbvArray;
+			(*state)->v.size = 3 * sizeof(JEntry);
+			(*state)->v.array.nelems = 0;
+			(*state)->v.array.scalar = (v && v->array.scalar) ? true : false;
+			(*state)->size = (v && v->type == jbvArray && v->array.nelems > 0)
+				? v->array.nelems : 4;
+			(*state)->v.array.elems = palloc(sizeof(*(*state)->v.array.elems) *
+											 (*state)->size);
+			break;
+		case WJB_BEGIN_OBJECT:
+			*state = pushState(state);
+			h = &(*state)->v;
+			(*state)->v.type = jbvObject;
+			(*state)->v.size = 3 * sizeof(JEntry);
+			(*state)->v.object.npairs = 0;
+			(*state)->size = (v && v->type == jbvObject && v->object.npairs > 0) ?
+				v->object.npairs : 4;
+			(*state)->v.object.pairs = palloc(sizeof(*(*state)->v.object.pairs) *
+											  (*state)->size);
+			break;
+		case WJB_ELEM:
+			Assert(v->type == jbvNull || v->type == jbvString ||
+				   v->type == jbvBool || v->type == jbvNumeric ||
+				   v->type == jbvBinary);
+			appendArray(*state, v);
+			break;
+		case WJB_KEY:
+			Assert(v->type == jbvString);
+			appendKey(*state, v);
+			break;
+		case WJB_VALUE:
+			Assert(v->type == jbvNull || v->type == jbvString ||
+				   v->type == jbvBool || v->type == jbvNumeric ||
+				   v->type == jbvBinary);
+			appendValue(*state, v);
+			break;
+		case WJB_END_OBJECT:
+			h = &(*state)->v;
+			/* v != NULL => we believe that keys were already sorted */
+			if (v == NULL)
+				uniqueJsonbValue(h);
+
+			/*
+			 * No break here - end of "object" associative data structure
+			 * requires some extra work but the rest is the same as it is for
+			 * arrays.
+			 */
+		case WJB_END_ARRAY:
+			h = &(*state)->v;
+
+			/*
+			 * Pop stack and push current array/"object" as value in parent
+			 * array/"object"
+			 */
+			*state = (*state)->next;
+			if (*state)
+			{
+				switch ((*state)->v.type)
+				{
+					case jbvArray:
+						appendArray(*state, h);
+						break;
+					case jbvObject:
+						appendValue(*state, h);
+						break;
+					default:
+						elog(ERROR, "invalid jsonb container type");
+				}
+			}
+			break;
+		default:
+			elog(ERROR, "invalid jsonb container type");
+	}
+
+	return h;
+}
+
+int
+JsonbIteratorGet(JsonbIterator ** it, JsonbValue * v, bool skipNested)
+{
+	int			res;
+
+	if (*it == NULL)
+		return 0;
+
+	check_stack_depth();
+
+	/*
+	 * Encode all possible states by one integer.  This is possible because
+	 * enum members of JsonbIterator->state use different bits than
+	 * JB_FLAG_ARRAY/JB_FLAG_OBJECT.  See definition of JsonbIterator
+	 */
+	switch ((*it)->type | (*it)->state)
+	{
+		case JB_FLAG_ARRAY | jbi_start:
+			(*it)->state = jbi_elem;
+			(*it)->i = 0;
+			v->type = jbvArray;
+			v->array.nelems = (*it)->nelems;
+			res = WJB_BEGIN_ARRAY;
+			v->array.scalar = (*it)->isScalar;
+			break;
+		case JB_FLAG_ARRAY | jbi_elem:
+			if ((*it)->i >= (*it)->nelems)
+			{
+				*it = up(*it);
+				res = WJB_END_ARRAY;
+			}
+			else if (formAnswer(it, v, &(*it)->array[(*it)->i++], skipNested))
+			{
+				res = JsonbIteratorGet(it, v, skipNested);
+			}
+			else
+			{
+				res = WJB_ELEM;
+			}
+			break;
+		case JB_FLAG_OBJECT | jbi_start:
+			(*it)->state = jbi_key;
+			(*it)->i = 0;
+			v->type = jbvObject;
+			v->object.npairs = (*it)->nelems;
+			res = WJB_BEGIN_OBJECT;
+			break;
+		case JB_FLAG_OBJECT | jbi_key:
+			if ((*it)->i >= (*it)->nelems)
+			{
+				*it = up(*it);
+				res = WJB_END_OBJECT;
+			}
+			else
+			{
+				formAnswer(it, v, &(*it)->array[(*it)->i * 2], false);
+				(*it)->state = jbi_value;
+				res = WJB_KEY;
+			}
+			break;
+		case JB_FLAG_OBJECT | jbi_value:
+			(*it)->state = jbi_key;
+			if (formAnswer(it, v, &(*it)->array[((*it)->i++) * 2 + 1], skipNested))
+				res = JsonbIteratorGet(it, v, skipNested);
+			else
+				res = WJB_VALUE;
+			break;
+		default:
+			elog(ERROR, "unexpected jsonb iterator's state");
+	}
+
+	return res;
+}
+
+JsonbIterator *
+JsonbIteratorInit(char *buffer)
+{
+	JsonbIterator *it = palloc(sizeof(*it));
+
+	parseBuffer(it, buffer);
+	it->next = NULL;
+
+	return it;
+}
+
+/*
+ * qsort comparator to compare JsonbPair values.
+ *
+ * Function implemented in terms of compareJsonbStringValue(), and thus the
+ * same "arg setting" hack will be applied here in respect of the pair's key
+ * values.
+ *
+ * Pairs with equals keys are ordered such that the order field is respected.
+ */
+static int
+compareJsonbPair(const void *a, const void *b, void *arg)
+{
+	const JsonbPair *pa = a;
+	const JsonbPair *pb = b;
+	int			res;
+
+	res = compareJsonbStringValue(&pa->key, &pb->key, arg);
+
+	/*
+	 * Guarantee keeping order of equal pair. Unique algorithm will prefer
+	 * first element as value.
+	 */
+	if (res == 0)
+		res = (pa->order > pb->order) ? -1 : 1;
+
+	return res;
+}
+
 /****************************************************************************
- *					  Walk on tree representation of jsonb					*
+ *					  Walk the tree representation of jsonb					*
  ****************************************************************************/
 static void
 walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg, uint32 level)
@@ -666,17 +879,6 @@ parseBuffer(JsonbIterator * it, char *buffer)
 	}
 }
 
-JsonbIterator *
-JsonbIteratorInit(char *buffer)
-{
-	JsonbIterator *it = palloc(sizeof(*it));
-
-	parseBuffer(it, buffer);
-	it->next = NULL;
-
-	return it;
-}
-
 static bool
 formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 {
@@ -744,99 +946,9 @@ up(JsonbIterator * it)
 	return v;
 }
 
-int
-JsonbIteratorGet(JsonbIterator ** it, JsonbValue * v, bool skipNested)
-{
-	int			res;
-
-	if (*it == NULL)
-		return 0;
-
-	check_stack_depth();
-
-	/*
-	 * Encode all possible states by one integer.  This is possible because
-	 * enum members of JsonbIterator->state use different bits than
-	 * JB_FLAG_ARRAY/JB_FLAG_OBJECT.  See definition of JsonbIterator
-	 */
-	switch ((*it)->type | (*it)->state)
-	{
-		case JB_FLAG_ARRAY | jbi_start:
-			(*it)->state = jbi_elem;
-			(*it)->i = 0;
-			v->type = jbvArray;
-			v->array.nelems = (*it)->nelems;
-			res = WJB_BEGIN_ARRAY;
-			v->array.scalar = (*it)->isScalar;
-			break;
-		case JB_FLAG_ARRAY | jbi_elem:
-			if ((*it)->i >= (*it)->nelems)
-			{
-				*it = up(*it);
-				res = WJB_END_ARRAY;
-			}
-			else if (formAnswer(it, v, &(*it)->array[(*it)->i++], skipNested))
-			{
-				res = JsonbIteratorGet(it, v, skipNested);
-			}
-			else
-			{
-				res = WJB_ELEM;
-			}
-			break;
-		case JB_FLAG_OBJECT | jbi_start:
-			(*it)->state = jbi_key;
-			(*it)->i = 0;
-			v->type = jbvObject;
-			v->object.npairs = (*it)->nelems;
-			res = WJB_BEGIN_OBJECT;
-			break;
-		case JB_FLAG_OBJECT | jbi_key:
-			if ((*it)->i >= (*it)->nelems)
-			{
-				*it = up(*it);
-				res = WJB_END_OBJECT;
-			}
-			else
-			{
-				formAnswer(it, v, &(*it)->array[(*it)->i * 2], false);
-				(*it)->state = jbi_value;
-				res = WJB_KEY;
-			}
-			break;
-		case JB_FLAG_OBJECT | jbi_value:
-			(*it)->state = jbi_key;
-			if (formAnswer(it, v, &(*it)->array[((*it)->i++) * 2 + 1], skipNested))
-				res = JsonbIteratorGet(it, v, skipNested);
-			else
-				res = WJB_VALUE;
-			break;
-		default:
-			elog(ERROR, "unexpected jsonb iterator's state");
-	}
-
-	return res;
-}
-
 /****************************************************************************
  *		  Transformation from tree to binary representation of jsonb		*
  ****************************************************************************/
-typedef struct CompressState
-{
-	char	   *begin;
-	char	   *ptr;
-
-	struct
-	{
-		uint32		i;
-		uint32	   *header;
-		JEntry	   *array;
-		char	   *begin;
-	}		   *levelstate, *lptr, *pptr;
-
-	uint32		maxlevel;
-
-}	CompressState;
 
 #define curLevelState	state->lptr
 #define prevLevelState	state->pptr
@@ -1067,7 +1179,7 @@ compressCallback(void *arg, JsonbValue * value, uint32 flags, uint32 level)
 		}
 		else
 		{
-			elog(ERROR, "unknown type of jsonb container");
+			elog(ERROR, "invalid jsonb container type");
 		}
 
 		Assert(state->ptr - curLevelState->begin <= value->size);
@@ -1164,7 +1276,8 @@ appendValue(ToJsonbState * state, JsonbValue * v)
 }
 
 /*
- * Sort and unique pairs in JsonbValue (associative data structure)
+ * Sort and unique-ify pairs in JsonbValue (associative "object" data
+ * structure)
  */
 static void
 uniqueJsonbValue(JsonbValue * v)
@@ -1201,97 +1314,4 @@ uniqueJsonbValue(JsonbValue * v)
 
 		v->object.npairs = res + 1 - v->object.pairs;
 	}
-}
-
-/*
- * Pushes the value into state.  With r = WJB_END_OBJECT and v = NULL it will
- * order and unique hash's keys otherwise we believe that pushed keys was
- * ordered and unique.
- *
- * Initial state of ToJsonbState is NULL.
- */
-JsonbValue *
-pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue * v)
-{
-	JsonbValue *h = NULL;
-
-	switch (r)
-	{
-		case WJB_BEGIN_ARRAY:
-			*state = pushState(state);
-			h = &(*state)->v;
-			(*state)->v.type = jbvArray;
-			(*state)->v.size = 3 * sizeof(JEntry);
-			(*state)->v.array.nelems = 0;
-			(*state)->v.array.scalar = (v && v->array.scalar) ? true : false;
-			(*state)->size = (v && v->type == jbvArray && v->array.nelems > 0)
-				? v->array.nelems : 4;
-			(*state)->v.array.elems = palloc(sizeof(*(*state)->v.array.elems) *
-											 (*state)->size);
-			break;
-		case WJB_BEGIN_OBJECT:
-			*state = pushState(state);
-			h = &(*state)->v;
-			(*state)->v.type = jbvObject;
-			(*state)->v.size = 3 * sizeof(JEntry);
-			(*state)->v.object.npairs = 0;
-			(*state)->size = (v && v->type == jbvObject && v->object.npairs > 0) ?
-				v->object.npairs : 4;
-			(*state)->v.object.pairs = palloc(sizeof(*(*state)->v.object.pairs) *
-											  (*state)->size);
-			break;
-		case WJB_ELEM:
-			Assert(v->type == jbvNull || v->type == jbvString ||
-				   v->type == jbvBool || v->type == jbvNumeric ||
-				   v->type == jbvBinary);
-			appendArray(*state, v);
-			break;
-		case WJB_KEY:
-			Assert(v->type == jbvString);
-			appendKey(*state, v);
-			break;
-		case WJB_VALUE:
-			Assert(v->type == jbvNull || v->type == jbvString ||
-				   v->type == jbvBool || v->type == jbvNumeric ||
-				   v->type == jbvBinary);
-			appendValue(*state, v);
-			break;
-		case WJB_END_OBJECT:
-			h = &(*state)->v;
-			/* v != NULL => we believe that keys was already sorted */
-			if (v == NULL)
-				uniqueJsonbValue(h);
-
-			/*
-			 * No break here - end of "object" associative data structure
-			 * requires some extra work but rest is the same as for array
-			 */
-		case WJB_END_ARRAY:
-			h = &(*state)->v;
-
-			/*
-			 * Pop stack and push current array/"object" as value in parent
-			 * array/"object"
-			 */
-			*state = (*state)->next;
-			if (*state)
-			{
-				switch ((*state)->v.type)
-				{
-					case jbvArray:
-						appendArray(*state, h);
-						break;
-					case jbvObject:
-						appendValue(*state, h);
-						break;
-					default:
-						elog(ERROR, "invalid jsonb container type");
-				}
-			}
-			break;
-		default:
-			elog(ERROR, "invalid jsonb container type");
-	}
-
-	return h;
 }

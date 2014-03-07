@@ -226,7 +226,6 @@ extern Datum gjsonb_out(PG_FUNCTION_ARGS);
 
 /* Support functions */
 extern int	compareJsonbStringValue(const void *a, const void *b, void *arg);
-extern int	compareJsonbPair(const void *a, const void *b, void *arg);
 extern int	compareJsonbBinaryValue(char *a, char *b);
 extern int	compareJsonbValue(JsonbValue *a, JsonbValue *b);
 extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
