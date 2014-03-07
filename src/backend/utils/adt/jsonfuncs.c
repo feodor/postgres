@@ -806,7 +806,7 @@ get_path_all(FunctionCallInfo fcinfo, bool as_text)
 	}
 	else
 	{
-		/* null is null regardless */
+		/* null is NULL, regardless */
 		PG_RETURN_NULL();
 	}
 }
@@ -1449,7 +1449,7 @@ each_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 			Datum		values[2];
 			bool		nulls[2] = {false, false};
 
-			/* use the tmp context so we can clean up after each tuple is done */
+			/* Use the tmp context so we can clean up after each tuple is done */
 			old_cxt = MemoryContextSwitchTo(tmp_cxt);
 
 			key = cstring_to_text_with_len(v.string.val, v.string.len);
@@ -1476,12 +1476,12 @@ each_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 
 					if (v.type == jbvString)
 					{
-						/* in text mode scalar strings should be dequoted */
+						/* In text mode, scalar strings should be dequoted */
 						sv = cstring_to_text_with_len(v.string.val, v.string.len);
 					}
 					else
 					{
-						/* turn anything else into a json string */
+						/* Turn anything else into a json string */
 						StringInfo	jtext = makeStringInfo();
 						Jsonb	   *jb = JsonbValueToJsonb(&v);
 
@@ -1494,7 +1494,7 @@ each_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 			}
 			else
 			{
-				/* not in text mode, just return the Jsonb */
+				/* Not in text mode, just return the Jsonb */
 				Jsonb	   *val = JsonbValueToJsonb(&v);
 
 				values[1] = PointerGetDatum(val);
@@ -1941,7 +1941,7 @@ elements_array_element_end(void *state, bool isnull)
 	text	   *val;
 	HeapTuple	tuple;
 	Datum		values[1];
-	bool		nulls[1] = {false};
+	bool nulls[1] = {false};
 
 	/* skip over nested objects */
 	if (_state->lex->lex_level != 1)
@@ -2137,7 +2137,6 @@ populate_record_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 		/* same logic as for json */
 		if (JB_ISEMPTY(jb) && rec)
 			PG_RETURN_POINTER(rec);
-
 	}
 
 	ncolumns = tupdesc->natts;
@@ -2263,7 +2262,6 @@ populate_record_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 										  column_info->typioparam,
 										  tupdesc->attrs[i]->atttypmod);
 			nulls[i] = true;
-
 		}
 		else
 		{
@@ -2522,7 +2520,7 @@ make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state)
 		}
 
 		/*
-		 * we can't just skip here if the key wasn't found since we might have
+		 * We can't just skip here if the key wasn't found since we might have
 		 * a domain to deal with. If we were passed in a non-null record
 		 * datum, we assume that the existing values are valid (if they're
 		 * not, then it's not our fault), but if we were passed in a null,
@@ -2547,7 +2545,7 @@ make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state)
 		if (v == NULL || v->type == jbvNull)
 		{
 			/*
-			 * need InputFunctionCall to happen even for nulls, so that domain
+			 * Need InputFunctionCall to happen even for nulls, so that domain
 			 * checks are done
 			 */
 			values[i] = InputFunctionCall(&column_info->proc, NULL,
@@ -2726,7 +2724,6 @@ populate_recordset_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 	state->rec = rec;
 	state->use_json_as_text = use_json_as_text;
 	state->fn_mcxt = fcinfo->flinfo->fn_mcxt;
-
 
 	if (jtype == JSONOID)
 	{
