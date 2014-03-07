@@ -452,3 +452,18 @@ SELECT '["a","b","c",[1,2],null]'::jsonb -> 3 -> 1;
 SELECT '["a","b","c",[1,2],null]'::jsonb -> 4;
 SELECT '["a","b","c",[1,2],null]'::jsonb -> 5;
 SELECT '["a","b","c",[1,2],null]'::jsonb -> -1;
+
+--nested path extraction
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{0}';
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{a}';
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c}';
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,0}';
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,1}';
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,2}';
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,3}';
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,-1}';
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{0}';
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{3}';
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{4}';
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{4,5}';

@@ -1803,3 +1803,76 @@ SELECT '["a","b","c",[1,2],null]'::jsonb -> -1;
  
 (1 row)
 
+--nested path extraction
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{0}';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{a}';
+ ?column? 
+----------
+ "b"
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c}';
+ ?column?  
+-----------
+ [1, 2, 3]
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,0}';
+ ?column? 
+----------
+ 1
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,1}';
+ ?column? 
+----------
+ 2
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,2}';
+ ?column? 
+----------
+ 3
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,3}';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '{"a":"b","c":[1,2,3]}'::jsonb #> '{c,-1}';
+ ?column? 
+----------
+ 
+(1 row)
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{0}';
+ ?column? 
+----------
+ 0
+(1 row)
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{3}';
+ ?column? 
+----------
+ [3, 4]
+(1 row)
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{4}';
+   ?column?    
+---------------
+ {"5": "five"}
+(1 row)
+
+SELECT '[0,1,2,[3,4],{"5":"five"}]'::jsonb #> '{4,5}';
+ ?column? 
+----------
+ "five"
+(1 row)
+
