@@ -297,3 +297,25 @@ set enable_sort = true;
 
 RESET enable_hashagg;
 RESET enable_sort;
+
+-- btree
+drop index jidx;
+create index jidx on testjsonb using btree (j);
+set enable_seqscan=off;
+
+select count(*) from testjsonb where j > '{"p":1}';
+select count(*) from testjsonb where j = '{"pos":98, "line":371, "node":"CBA", "indexed":true}';
+
+--gin hash
+drop index jidx;
+create index jidx on testjsonb using gin (j gin_jsonb_hash_ops);
+set enable_seqscan=off;
+
+select count(*) from testjsonb where j @> '{"wait":null}';
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+select count(*) from testjsonb where j @> '{"age":25}';
+select count(*) from testjsonb where j @> '{"age":25.0}';
+
+RESET enable_seqscan;
+drop index jidx;

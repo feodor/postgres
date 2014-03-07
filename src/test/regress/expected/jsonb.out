@@ -1102,3 +1102,56 @@ select distinct * from (values (jsonb '{}' || ''),('{}')) v(j);
 set enable_sort = true;
 RESET enable_hashagg;
 RESET enable_sort;
+-- btree
+drop index jidx;
+create index jidx on testjsonb using btree (j);
+set enable_seqscan=off;
+select count(*) from testjsonb where j > '{"p":1}';
+ count 
+-------
+   886
+(1 row)
+
+select count(*) from testjsonb where j = '{"pos":98, "line":371, "node":"CBA", "indexed":true}';
+ count 
+-------
+     1
+(1 row)
+
+--gin hash
+drop index jidx;
+create index jidx on testjsonb using gin (j gin_jsonb_hash_ops);
+set enable_seqscan=off;
+select count(*) from testjsonb where j @> '{"wait":null}';
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC"}';
+ count 
+-------
+    15
+(1 row)
+
+select count(*) from testjsonb where j @> '{"wait":"CC", "public":true}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25}';
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from testjsonb where j @> '{"age":25.0}';
+ count 
+-------
+     2
+(1 row)
+
+RESET enable_seqscan;
+drop index jidx;
+

@@ -282,32 +282,6 @@ select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>c';
 select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b';
 select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, c=>q';
 
-CREATE TABLE testhstore (h hstore);
-\copy testhstore from 'data/hstore.data'
-
--- btree
-drop index hidx;
-create index hidx on testhstore using btree (h);
-set enable_seqscan=off;
-
-select count(*) from testhstore where h #># 'p=>1';
-select count(*) from testhstore where h = 'pos=>98, line=>371, node=>CBA, indexed=>t';
-
---gin hash
-drop index hidx;
-create index hidx on testhstore using gin (h gin_hstore_hash_ops);
-set enable_seqscan=off;
-
-select count(*) from testhstore where h @> 'wait=>NULL';
-select count(*) from testhstore where h @> 'wait=>CC';
-select count(*) from testhstore where h @> 'wait=>CC, public=>t';
-select count(*) from testhstore where h @> 'age=>25';
-select count(*) from testhstore where h @> 'age=>25.0';
-select count(*) from testhstore where h @> 'age=>+25.00';
-
-RESET enable_seqscan;
-drop index hidx;
-
 -- json
 select hstore_to_json('"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4');
 select cast( hstore  '"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4' as json);
