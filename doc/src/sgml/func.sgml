@@ -10126,11 +10126,12 @@ table2-mapping
     There are parallel variants of the above listed operators for both
     the <type>json</type> type and the <type>jsonb</type> type.  In
     addition to those operators common to both types, a further set of
-    operators exists for <type>jsonb</type>.  These additional
-    operators are principally intended to facilitate advanced
-    indexing, but have independent value.
+    operators exists for <type>jsonb</type>, listed below.  These
+    additional operators are principally intended to facilitate
+    advanced indexing, but have independent value.
    </para>
-   <para>
+  </note>
+  <para>
     The <type>json</type> type is a textual representation of JSON.
     It should be preferred only where there is a requirement to store
     JSON as text, with permissive sanitization of user-input.  There
@@ -10145,8 +10146,8 @@ table2-mapping
     <type>jsonb</type> that do not apply to the <type>json</type>
     type, or to JSON in the abstract.  These implementation-defined
     restrictions are permitted by <acronym>RFC</> 4627.
-   </para>
-   <para>
+  </para>
+  <para>
     Note that currently, the <type>jsonb</type>-only operators (which
     comprise various <acronym>GiST</acronym> and
     <acronym>GIN</acronym> operator classes for indexing) do not
@@ -10156,32 +10157,34 @@ table2-mapping
     a single <type>jsonb</type> datum/document, among a large number
     of such <quote>documents</> within a column in a table (i.e. among
     many rows).
-   </para>
-   <para>
+  </para>
+  <para>
     Comparisons and related operations are <emphasis>type-wise</>, in
     that the underlying <productname>PostgreSQL</productname> datatype
     comparators are invoked recursively, much like a traditional
     composite type.
-   </para>
-  </note>
+  </para>
 
   <table id="functions-jsonb-type-mapping-table">
      <title>RFC-4627/JSON type to PostgreSQL type mapping</title>
-     <tgroup cols="2">
+     <tgroup cols="3">
       <thead>
        <row>
-        <entry>RFC-4627/JSON type</entry>
         <entry>PostgreSQL type</entry>
+        <entry>RFC-4627/JSON type</entry>
+        <entry>Notes</entry>
        </row>
       </thead>
       <tbody>
        <row>
-        <entry><literal>String</literal></entry>
         <entry><literal>text</literal></entry>
+        <entry><literal>String</literal></entry>
+        <entry>See general notes on encoding and JSON below</entry>
        </row>
        <row>
-        <entry><literal>Number</literal></entry>
         <entry><literal>numeric</literal></entry>
+        <entry><literal>Number</literal></entry>
+        <entry><literal>NaN</literal> and <literal>infinity</literal> values are specially disallowed</entry>
        </row>
       </tbody>
      </tgroup>
