@@ -193,8 +193,6 @@ extern Datum jsonb_exists(PG_FUNCTION_ARGS);
 extern Datum jsonb_exists_any(PG_FUNCTION_ARGS);
 extern Datum jsonb_exists_all(PG_FUNCTION_ARGS);
 extern Datum jsonb_contains(PG_FUNCTION_ARGS);
-extern Datum jsonb_contained_alt(PG_FUNCTION_ARGS);
-extern Datum jsonb_contains_alt(PG_FUNCTION_ARGS);
 extern Datum jsonb_contained(PG_FUNCTION_ARGS);
 extern Datum jsonb_cmp(PG_FUNCTION_ARGS);
 extern Datum jsonb_eq(PG_FUNCTION_ARGS);
