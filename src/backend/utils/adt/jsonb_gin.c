@@ -37,12 +37,12 @@ makeitem(char *str, int len, char flag)
 }
 
 static text *
-makeitemFromValue(JsonbValue *v, char flag)
+makeitemFromValue(JsonbValue * v, char flag)
 {
-	text		*item;
-	char		*cstr;
+	text	   *item;
+	char	   *cstr;
 
-	switch(v->type)
+	switch (v->type)
 	{
 		case jbvNull:
 			item = makeitem(NULL, 0, NULLFLAG);
@@ -51,14 +51,15 @@ makeitemFromValue(JsonbValue *v, char flag)
 			item = makeitem((v->boolean) ? " t" : " f", 2, flag);
 			break;
 		case jbvNumeric:
+
 			/*
-			 * It's needed to get some text representaion of numeric independed
-			 * from locale setting and preciosion. We use hashed value - it's
-			 * safe because recheck flag will be set anyway.
+			 * It's needed to get some text representaion of numeric
+			 * independed from locale setting and preciosion. We use hashed
+			 * value - it's safe because recheck flag will be set anyway.
 			 */
-			cstr = palloc(8 /* hex numbers */ + 1 /* \0 */);
-			snprintf(cstr, 9, "%08x",  DatumGetInt32(DirectFunctionCall1(hash_numeric,
-													NumericGetDatum(v->numeric))));
+			cstr = palloc(8 /* hex numbers */ + 1 /* \0 */ );
+			snprintf(cstr, 9, "%08x", DatumGetInt32(DirectFunctionCall1(hash_numeric,
+											  NumericGetDatum(v->numeric))));
 			item = makeitem(cstr, 8, flag);
 			pfree(cstr);
 			break;
@@ -75,13 +76,14 @@ makeitemFromValue(JsonbValue *v, char flag)
 Datum
 gin_extract_jsonb(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*jb = (Jsonb*) PG_GETARG_JSONB(0);
-	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
-	Datum	   		*entries = NULL;
-	int				total = 2 * JB_ROOT_COUNT(jb);
-	int				i = 0, r;
-	JsonbIterator	*it;
-	JsonbValue		v;
+	Jsonb	   *jb = (Jsonb *) PG_GETARG_JSONB(0);
+	int32	   *nentries = (int32 *) PG_GETARG_POINTER(1);
+	Datum	   *entries = NULL;
+	int			total = 2 * JB_ROOT_COUNT(jb);
+	int			i = 0,
+				r;
+	JsonbIterator *it;
+	JsonbValue	v;
 
 	if (total == 0)
 	{
@@ -93,7 +95,7 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 
 	it = JsonbIteratorInit(VARDATA(jb));
 
-	while((r = JsonbIteratorGet(&it, &v, false)) != 0)
+	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
 	{
 		if (i >= total)
 		{
@@ -101,7 +103,7 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 			entries = (Datum *) repalloc(entries, sizeof(Datum) * total);
 		}
 
-		switch(r)
+		switch (r)
 		{
 			case WJB_KEY:
 				entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYFLAG));
@@ -293,26 +295,26 @@ gin_consistent_jsonb_hash(PG_FUNCTION_ARGS)
 
 typedef struct PathHashStack
 {
-	pg_crc32			  hash_state;
+	pg_crc32	hash_state;
 	struct PathHashStack *next;
-} PathHashStack;
+}	PathHashStack;
 
 #define PATH_SEPARATOR ("\0")
 
 static void
-hash_value(JsonbValue *v, PathHashStack *stack)
+hash_value(JsonbValue * v, PathHashStack * stack)
 {
-	switch(v->type)
+	switch (v->type)
 	{
 		case jbvNull:
-			COMP_CRC32(stack->hash_state, "NULL", 5 /* include trailing \0 */);
+			COMP_CRC32(stack->hash_state, "NULL", 5 /* include trailing \0 */ );
 			break;
 		case jbvBool:
-			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */);
+			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */ );
 			break;
 		case jbvNumeric:
 			stack->hash_state ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
-												NumericGetDatum(v->numeric)));
+											   NumericGetDatum(v->numeric)));
 			break;
 		case jbvString:
 			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
@@ -326,16 +328,18 @@ hash_value(JsonbValue *v, PathHashStack *stack)
 Datum
 gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*jb = PG_GETARG_JSONB(0);
-	int32	   		*nentries = (int32 *) PG_GETARG_POINTER(1);
-	Datum	   		*entries = NULL;
-	int				total = 2 * JB_ROOT_COUNT(jb);
-	int				i = 0, r;
-	JsonbIterator	*it;
-	JsonbValue		v;
-	PathHashStack	tail;
-	PathHashStack 	*stack, *tmp;
-	pg_crc32		path_crc32;
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	int32	   *nentries = (int32 *) PG_GETARG_POINTER(1);
+	Datum	   *entries = NULL;
+	int			total = 2 * JB_ROOT_COUNT(jb);
+	int			i = 0,
+				r;
+	JsonbIterator *it;
+	JsonbValue	v;
+	PathHashStack tail;
+	PathHashStack *stack,
+			   *tmp;
+	pg_crc32	path_crc32;
 
 	if (total == 0)
 	{
@@ -354,10 +358,10 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 	/*
 	 * Calculate hashes of all key_1.key_2. ... .key_n.value paths as entries.
 	 * Order of array elements doesn't matter so array keys are empty in path.
-	 * For faster calculation of hashes use stack for precalculated hashes
-	 * of prefixes.
+	 * For faster calculation of hashes use stack for precalculated hashes of
+	 * prefixes.
 	 */
-	while((r = JsonbIteratorGet(&it, &v, false)) != 0)
+	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
 	{
 		if (i >= total)
 		{
@@ -365,11 +369,11 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 			entries = (Datum *) repalloc(entries, sizeof(Datum) * total);
 		}
 
-		switch(r)
+		switch (r)
 		{
 			case WJB_BEGIN_ARRAY:
 				tmp = stack;
-				stack = (PathHashStack *)palloc(sizeof(PathHashStack));
+				stack = (PathHashStack *) palloc(sizeof(PathHashStack));
 				stack->next = tmp;
 				stack->hash_state = tmp->hash_state;
 				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
@@ -377,7 +381,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 			case WJB_BEGIN_OBJECT:
 				/* Preserve stack item for key */
 				tmp = stack;
-				stack = (PathHashStack *)palloc(sizeof(PathHashStack));
+				stack = (PathHashStack *) palloc(sizeof(PathHashStack));
 				stack->next = tmp;
 				break;
 			case WJB_KEY:

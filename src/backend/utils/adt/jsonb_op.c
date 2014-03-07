@@ -22,16 +22,16 @@
 #include "utils/memutils.h"
 #include "utils/pg_crc.h"
 
-static JsonbValue*
+static JsonbValue *
 arrayToJsonbSortedArray(ArrayType *a)
 {
-	Datum	 		*key_datums;
-	bool	 		*key_nulls;
-	int				key_count;
-	JsonbValue		*v;
-	int				i,
-					j;
-	bool			hasNonUniq = false;
+	Datum	   *key_datums;
+	bool	   *key_nulls;
+	int			key_count;
+	JsonbValue *v;
+	int			i,
+				j;
+	bool		hasNonUniq = false;
 
 	deconstruct_array(a,
 					  TEXTOID, -1, false, 'i',
@@ -72,17 +72,17 @@ arrayToJsonbSortedArray(ArrayType *a)
 
 	if (v->array.nelems > 1)
 		qsort_arg(v->array.elems, v->array.nelems, sizeof(*v->array.elems),
-				  compareJsonbStringValue /* compareJsonbStringValue */, &hasNonUniq);
+		compareJsonbStringValue /* compareJsonbStringValue */ , &hasNonUniq);
 
 	if (hasNonUniq)
 	{
-		JsonbValue	*ptr = v->array.elems + 1,
-					*res = v->array.elems;
+		JsonbValue *ptr = v->array.elems + 1,
+				   *res = v->array.elems;
 
 		while (ptr - v->array.elems < v->array.nelems)
 		{
 			if (!(ptr->string.len == res->string.len &&
-				  memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
+			 memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
 			{
 				res++;
 				*res = *ptr;
@@ -100,16 +100,16 @@ arrayToJsonbSortedArray(ArrayType *a)
 Datum
 jsonb_exists(PG_FUNCTION_ARGS)
 {
-	Jsonb	   	*jb = PG_GETARG_JSONB(0);
-	text		*key = PG_GETARG_TEXT_PP(1);
-	JsonbValue	*v = NULL;
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	text	   *key = PG_GETARG_TEXT_PP(1);
+	JsonbValue *v = NULL;
 
 	if (!JB_ISEMPTY(jb))
 		v = findUncompressedJsonbValue(VARDATA(jb),
-										JB_FLAG_OBJECT | JB_FLAG_ARRAY,
-										NULL,
-										VARDATA_ANY(key),
-										VARSIZE_ANY_EXHDR(key));
+									   JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+									   NULL,
+									   VARDATA_ANY(key),
+									   VARSIZE_ANY_EXHDR(key));
 
 	PG_RETURN_BOOL(v != NULL);
 }
@@ -117,28 +117,30 @@ jsonb_exists(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_any(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*jb = PG_GETARG_JSONB(0);
-	ArrayType	  	*keys = PG_GETARG_ARRAYTYPE_P(1);
-	JsonbValue		*v = arrayToJsonbSortedArray(keys);
-	int				i;
-	uint32			*plowbound = NULL, lowbound = 0;
-	bool			res = false;
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	ArrayType  *keys = PG_GETARG_ARRAYTYPE_P(1);
+	JsonbValue *v = arrayToJsonbSortedArray(keys);
+	int			i;
+	uint32	   *plowbound = NULL,
+				lowbound = 0;
+	bool		res = false;
 
 	if (JB_ISEMPTY(jb) || v == NULL || v->object.npairs == 0)
 		PG_RETURN_BOOL(false);
 
 	if (JB_ROOT_IS_OBJECT(jb))
 		plowbound = &lowbound;
+
 	/*
 	 * we exploit the fact that the pairs list is already sorted into strictly
-	 * increasing order to narrow the findUncompressedJsonbValue search; each search can
-	 * start one entry past the previous "found" entry, or at the lower bound
-	 * of the last search.
+	 * increasing order to narrow the findUncompressedJsonbValue search; each
+	 * search can start one entry past the previous "found" entry, or at the
+	 * lower bound of the last search.
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
 		if (findUncompressedJsonbValueByValue(VARDATA(jb), JB_FLAG_OBJECT | JB_FLAG_ARRAY, plowbound,
-											   v->array.elems + i) != NULL)
+											  v->array.elems + i) != NULL)
 		{
 			res = true;
 			break;
@@ -151,18 +153,18 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_all(PG_FUNCTION_ARGS)
 {
-	Jsonb		   *js = PG_GETARG_JSONB(0);
-	ArrayType	   *keys = PG_GETARG_ARRAYTYPE_P(1);
-	JsonbValue	   *v = arrayToJsonbSortedArray(keys);
-	uint32		   *plowbound = NULL;
-	uint32			lowbound = 0;
-	bool			res = true;
-	int				i;
+	Jsonb	   *js = PG_GETARG_JSONB(0);
+	ArrayType  *keys = PG_GETARG_ARRAYTYPE_P(1);
+	JsonbValue *v = arrayToJsonbSortedArray(keys);
+	uint32	   *plowbound = NULL;
+	uint32		lowbound = 0;
+	bool		res = true;
+	int			i;
 
 	if (JB_ISEMPTY(js) || v == NULL || v->array.nelems == 0)
 	{
 		if (v == NULL || v->array.nelems == 0)
-			PG_RETURN_BOOL(true); /* compatibility */
+			PG_RETURN_BOOL(true);		/* compatibility */
 		else
 			PG_RETURN_BOOL(false);
 	}
@@ -192,11 +194,13 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 }
 
 static bool
-deepContains(JsonbIterator **it1, JsonbIterator **it2)
+deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 {
-	uint32			r1, r2;
-	JsonbValue		v1, v2;
-	bool			res = true;
+	uint32		r1,
+				r2;
+	JsonbValue	v1,
+				v2;
+	bool		res = true;
 
 	r1 = JsonbIteratorGet(it1, &v1, false);
 	r2 = JsonbIteratorGet(it2, &v2, false);
@@ -208,9 +212,10 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 	else if (r1 == WJB_BEGIN_OBJECT)
 	{
 		uint32		lowbound = 0;
-		JsonbValue	*v;
+		JsonbValue *v;
 
-		for(;;) {
+		for (;;)
+		{
 			r2 = JsonbIteratorGet(it2, &v2, false);
 			if (r2 == WJB_END_OBJECT)
 				break;
@@ -218,8 +223,8 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 			Assert(r2 == WJB_KEY);
 
 			v = findUncompressedJsonbValueByValue((*it1)->buffer,
-												   JB_FLAG_OBJECT,
-												   &lowbound, &v2);
+												  JB_FLAG_OBJECT,
+												  &lowbound, &v2);
 
 			if (v == NULL)
 			{
@@ -246,7 +251,8 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 			}
 			else
 			{
-				JsonbIterator	*it1a, *it2a;
+				JsonbIterator *it1a,
+						   *it2a;
 
 				Assert(v2.type == jbvBinary);
 				Assert(v->type == jbvBinary);
@@ -261,11 +267,12 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 	}
 	else if (r1 == WJB_BEGIN_ARRAY)
 	{
-		JsonbValue		*v;
-		JsonbValue		*av = NULL;
-		uint32			nelems = v1.array.nelems;
+		JsonbValue *v;
+		JsonbValue *av = NULL;
+		uint32		nelems = v1.array.nelems;
 
-		for(;;) {
+		for (;;)
+		{
 			r2 = JsonbIteratorGet(it2, &v2, true);
 			if (r2 == WJB_END_ARRAY)
 				break;
@@ -276,8 +283,8 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 				v2.type == jbvBool || v2.type == jbvNumeric)
 			{
 				v = findUncompressedJsonbValueByValue((*it1)->buffer,
-													   JB_FLAG_ARRAY, NULL,
-													   &v2);
+													  JB_FLAG_ARRAY, NULL,
+													  &v2);
 				if (v == NULL)
 				{
 					res = false;
@@ -286,15 +293,15 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 			}
 			else
 			{
-				uint32 			i;
+				uint32		i;
 
 				if (av == NULL)
 				{
-					uint32 			j = 0;
+					uint32		j = 0;
 
 					av = palloc(sizeof(*av) * nelems);
 
-					for(i=0; i<nelems; i++)
+					for (i = 0; i < nelems; i++)
 					{
 						r2 = JsonbIteratorGet(it1, &v1, true);
 						Assert(r2 == WJB_ELEM);
@@ -313,9 +320,10 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 				}
 
 				res = false;
-				for(i = 0; res == false && i<nelems; i++)
+				for (i = 0; res == false && i < nelems; i++)
 				{
-					JsonbIterator	*it1a, *it2a;
+					JsonbIterator *it1a,
+							   *it2a;
 
 					it1a = JsonbIteratorInit(av[i].binary.data);
 					it2a = JsonbIteratorInit(v2.binary.data);
@@ -339,11 +347,12 @@ deepContains(JsonbIterator **it1, JsonbIterator **it2)
 Datum
 jsonb_contains(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*val = PG_GETARG_JSONB(0);
-	Jsonb	   		*tmpl = PG_GETARG_JSONB(1);
+	Jsonb	   *val = PG_GETARG_JSONB(0);
+	Jsonb	   *tmpl = PG_GETARG_JSONB(1);
 
-	bool			res = true;
-	JsonbIterator	*it1, *it2;
+	bool		res = true;
+	JsonbIterator *it1,
+			   *it2;
 
 	if (JB_ROOT_COUNT(val) < JB_ROOT_COUNT(tmpl) ||
 		JB_ROOT_IS_OBJECT(val) != JB_ROOT_IS_OBJECT(tmpl))
@@ -371,10 +380,10 @@ jsonb_contained(PG_FUNCTION_ARGS)
 Datum
 jsonb_cmp(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*jb1 = PG_GETARG_JSONB(0);
-	Jsonb	   		*jb2 = PG_GETARG_JSONB(1);
+	Jsonb	   *jb1 = PG_GETARG_JSONB(0);
+	Jsonb	   *jb2 = PG_GETARG_JSONB(1);
 
-	int				res;
+	int			res;
 
 	if (JB_ISEMPTY(jb1) || JB_ISEMPTY(jb2))
 	{
@@ -468,11 +477,11 @@ jsonb_le(PG_FUNCTION_ARGS)
 Datum
 jsonb_hash(PG_FUNCTION_ARGS)
 {
-	Jsonb	   		*jb = PG_GETARG_JSONB(0);
-	JsonbIterator	*it;
-	int32			r;
-	JsonbValue		v;
-	int				crc;
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	JsonbIterator *it;
+	int32		r;
+	JsonbValue	v;
+	int			crc;
 
 	if (JB_ROOT_COUNT(jb) == 0)
 		PG_RETURN_INT32(0x1EEE);
@@ -480,9 +489,9 @@ jsonb_hash(PG_FUNCTION_ARGS)
 	it = JsonbIteratorInit(VARDATA(jb));
 	INIT_CRC32(crc);
 
-	while((r = JsonbIteratorGet(&it, &v, false)) != 0)
+	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
 	{
-		switch(r)
+		switch (r)
 		{
 			case WJB_BEGIN_ARRAY:
 				COMP_CRC32(crc, "ab", 3);
@@ -497,7 +506,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 				COMP_CRC32(crc, "k", 2);
 			case WJB_VALUE:
 			case WJB_ELEM:
-				switch(v.type)
+				switch (v.type)
 				{
 					case jbvString:
 						COMP_CRC32(crc, v.string.val, v.string.len);
@@ -510,7 +519,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 						break;
 					case jbvNumeric:
 						crc ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
-																 NumericGetDatum(v.numeric)));
+												NumericGetDatum(v.numeric)));
 						break;
 					default:
 						elog(ERROR, "unexpected state of jsonb iterator");

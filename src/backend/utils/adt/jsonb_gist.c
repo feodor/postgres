@@ -80,14 +80,14 @@ typedef struct
 #define WISH_F(a,b,c) (double)( -(double)(((a)-(b))*((a)-(b))*((a)-(b)))*(c) )
 
 static int
-crc32_JsonbValue(JsonbValue *v, uint32 r)
+crc32_JsonbValue(JsonbValue * v, uint32 r)
 {
-	int		crc;
-	char	flag = '\0';
+	int			crc;
+	char		flag = '\0';
 
 	INIT_CRC32(crc);
 
-	switch(r)
+	switch (r)
 	{
 		case WJB_KEY:
 			flag = KEYFLAG;
@@ -104,7 +104,7 @@ crc32_JsonbValue(JsonbValue *v, uint32 r)
 
 	COMP_CRC32(crc, &flag, 1);
 
-	switch(v->type)
+	switch (v->type)
 	{
 		case jbvString:
 			COMP_CRC32(crc, v->string.val, v->string.len);
@@ -115,7 +115,7 @@ crc32_JsonbValue(JsonbValue *v, uint32 r)
 			break;
 		case jbvNumeric:
 			crc = DatumGetInt32(DirectFunctionCall1(hash_numeric,
-								NumericGetDatum(v->numeric)));
+											   NumericGetDatum(v->numeric)));
 			break;
 		default:
 			elog(ERROR, "wrong jsonb scalar type");
@@ -128,8 +128,8 @@ crc32_JsonbValue(JsonbValue *v, uint32 r)
 static int
 crc32_Key(char *buf, int sz)
 {
-	int     crc;
-	char	flag = KEYFLAG;
+	int			crc;
+	char		flag = KEYFLAG;
 
 	INIT_CRC32(crc);
 
@@ -250,22 +250,22 @@ gjsonb_consistent(PG_FUNCTION_ARGS)
 		qe = fcinfo->flinfo->fn_extra;
 		if (qe == NULL)
 		{
-			Jsonb	   		*query = PG_GETARG_JSONB(1);
+			Jsonb	   *query = PG_GETARG_JSONB(1);
 
 			qe = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(BITVEC));
 			memset(qe, 0, sizeof(BITVEC));
 
 			if (!JB_ISEMPTY(query))
 			{
-				int				r;
-				JsonbIterator	*it = JsonbIteratorInit(VARDATA(query));
-				JsonbValue		v;
+				int			r;
+				JsonbIterator *it = JsonbIteratorInit(VARDATA(query));
+				JsonbValue	v;
 
-				while((r = JsonbIteratorGet(&it, &v, false)) != 0)
+				while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
 				{
 					if ((r == WJB_ELEM || r == WJB_KEY || r == WJB_VALUE) && v.type != jbvNull)
 					{
-						int   crc = crc32_JsonbValue(&v, r);
+						int			crc = crc32_JsonbValue(&v, r);
 
 						HASH(qe, crc);
 					}
@@ -286,7 +286,7 @@ gjsonb_consistent(PG_FUNCTION_ARGS)
 	}
 	else if (strategy == JsonbExistsStrategyNumber)
 	{
-		int 	*qval;
+		int		   *qval;
 
 		qval = fcinfo->flinfo->fn_extra;
 		if (qval == NULL)
@@ -305,8 +305,8 @@ gjsonb_consistent(PG_FUNCTION_ARGS)
 	else if (strategy == JsonbExistsAllStrategyNumber ||
 			 strategy == JsonbExistsAnyStrategyNumber)
 	{
-		BITVECP	arrentry;
-		int		i;
+		BITVECP		arrentry;
+		int			i;
 
 		arrentry = fcinfo->flinfo->fn_extra;
 		if (arrentry == NULL)
@@ -349,7 +349,7 @@ gjsonb_consistent(PG_FUNCTION_ARGS)
 				}
 			}
 		}
-		else /* JsonbExistsAnyStrategyNumber */
+		else	/* JsonbExistsAnyStrategyNumber */
 		{
 			res = false;
 
@@ -410,23 +410,23 @@ gjsonb_compress(PG_FUNCTION_ARGS)
 
 	if (entry->leafkey)
 	{
-		GISTTYPE   		*res = (GISTTYPE *) palloc0(CALCGTSIZE(0));
-		Jsonb	   		*val = (Jsonb*) PG_DETOAST_DATUM(entry->key);
+		GISTTYPE   *res = (GISTTYPE *) palloc0(CALCGTSIZE(0));
+		Jsonb	   *val = (Jsonb *) PG_DETOAST_DATUM(entry->key);
 
 		SET_VARSIZE(res, CALCGTSIZE(0));
 
 		if (!JB_ISEMPTY(val))
 		{
-			JsonbIterator  *it = JsonbIteratorInit(VARDATA(val));
-			JsonbValue		v;
-			int				r;
+			JsonbIterator *it = JsonbIteratorInit(VARDATA(val));
+			JsonbValue	v;
+			int			r;
 
-			while((r = JsonbIteratorGet(&it, &v, false)) != 0)
+			while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
 			{
 				if ((r == WJB_ELEM || r == WJB_KEY || r == WJB_VALUE) &&
 					v.type != jbvNull)
 				{
-					int   h = crc32_JsonbValue(&v, r);
+					int			h = crc32_JsonbValue(&v, r);
 
 					HASH(GETSIGN(res), h);
 				}

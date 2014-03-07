@@ -19,7 +19,7 @@
 #include "utils/jsonb.h"
 
 static inline Datum deserialize_json_text(char *json, int len);
-static void jsonb_put_escaped_value(StringInfo out, JsonbValue *v);
+static void jsonb_put_escaped_value(StringInfo out, JsonbValue * v);
 static void jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype);
 
 typedef struct JsonbInState
@@ -85,7 +85,7 @@ jsonb_in_object_field_start(void *state, char *fname, bool isnull)
 }
 
 static void
-jsonb_put_escaped_value(StringInfo out, JsonbValue *v)
+jsonb_put_escaped_value(StringInfo out, JsonbValue * v)
 {
 	switch (v->type)
 	{
@@ -133,14 +133,14 @@ Datum
 jsonb_recv(PG_FUNCTION_ARGS)
 {
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
-	int         version = pq_getmsgint(buf, 1);
-	char 	   *str;
-	int         nbytes;
+	int			version = pq_getmsgint(buf, 1);
+	char	   *str;
+	int			nbytes;
 
 	if (version == 1)
 		str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
 	else
-		elog(ERROR,"Unsupported jsonb version number %d",version);
+		elog(ERROR, "Unsupported jsonb version number %d", version);
 
 	return deserialize_json_text(str, nbytes);
 }
@@ -169,7 +169,7 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 			v.type = jbvNumeric;
 			v.numeric = DatumGetNumeric(DirectFunctionCall3(numeric_in, CStringGetDatum(token), 0, -1));
 
-			v.size += VARSIZE_ANY(v.numeric) + sizeof(JEntry) /* alignment */ ;
+			v.size += VARSIZE_ANY(v.numeric) +sizeof(JEntry) /* alignment */ ;
 			break;
 		case JSON_TOKEN_TRUE:
 			v.type = jbvBool;
@@ -254,7 +254,7 @@ deserialize_json_text(char *json, int len)
 
 /*
  * JsonbToCString
- *     Converts jsonb value in C-string. If out argument is not null
+ *	   Converts jsonb value in C-string. If out argument is not null
  * then resulting C-string is placed in it. Return pointer to string.
  * A typical case for passing the StringInfo in rather than NULL is where
  * the caller wants access to the len attribute without having to call
@@ -268,7 +268,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 	int			type = 0;
 	JsonbValue	v;
 	int			level = 0;
-	bool        redo_switch = false;
+	bool		redo_switch = false;
 
 	if (out == NULL)
 		out = makeStringInfo();
@@ -323,6 +323,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				else
 				{
 					Assert(type == WJB_BEGIN_OBJECT || type == WJB_BEGIN_ARRAY);
+
 					/*
 					 * We need to rerun the current switch() since we need to
 					 * output the object which we just got from the iterator
@@ -386,7 +387,7 @@ jsonb_send(PG_FUNCTION_ARGS)
 	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	StringInfoData buf;
 	StringInfo	jtext = makeStringInfo();
-	int         version = 1;
+	int			version = 1;
 
 	(void) JsonbToCString(jtext, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb),
 						  VARSIZE(jb));

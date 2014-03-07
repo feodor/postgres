@@ -43,15 +43,15 @@
 typedef void (*walk_jsonb_cb) (void * /* arg */ , JsonbValue * /* value */ ,
 								   uint32 /* flags */ , uint32 /* level */ );
 
-static void walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg);
-static uint32 compressJsonb(JsonbValue *v, char *buffer);
-static void uniqueJsonbValue(JsonbValue *v);
+static void walkUncompressedJsonb(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg);
+static uint32 compressJsonb(JsonbValue * v, char *buffer);
+static void uniqueJsonbValue(JsonbValue * v);
 
 /*
  * Turn a JsonbValue into a Jsonb
  */
 Jsonb *
-JsonbValueToJsonb(JsonbValue *v)
+JsonbValueToJsonb(JsonbValue * v)
 {
 	Jsonb	   *out;
 
@@ -167,9 +167,8 @@ compareJsonbPair(const void *a, const void *b, void *arg)
  * some constant order of JsonbValue
  */
 int
-compareJsonbValue(JsonbValue *a, JsonbValue *b)
+compareJsonbValue(JsonbValue * a, JsonbValue * b)
 {
-
 	check_stack_depth();
 
 	if (a->type == b->type)
@@ -212,11 +211,11 @@ compareJsonbValue(JsonbValue *a, JsonbValue *b)
 					for (i = 0; i < a->object.npairs; i++)
 					{
 						if ((r = compareJsonbStringValue(&a->object.pairs[i].key,
-													   &b->object.pairs[i].key,
+													 &b->object.pairs[i].key,
 														 NULL)) != 0)
 							return r;
 						if ((r = compareJsonbValue(&a->object.pairs[i].value,
-											  &b->object.pairs[i].value)) != 0)
+											&b->object.pairs[i].value)) != 0)
 							return r;
 					}
 
@@ -311,10 +310,10 @@ compareJsonbBinaryValue(char *a, char *b)
  */
 JsonbValue *
 findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
-								  uint32 *lowbound, JsonbValue *key)
+								  uint32 *lowbound, JsonbValue * key)
 {
-	uint32				header = *(uint32 *) buffer;
-	static JsonbValue 	r;
+	uint32		header = *(uint32 *) buffer;
+	static JsonbValue r;
 
 	Assert((header & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
 		   (JB_FLAG_ARRAY | JB_FLAG_OBJECT));
@@ -580,7 +579,7 @@ getJsonbValue(char *buffer, uint32 flags, int32 i)
  *					  Walk on tree representation of jsonb					*
  ****************************************************************************/
 static void
-walkUncompressedJsonbDo(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg, uint32 level)
+walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg, uint32 level)
 {
 	int			i;
 
@@ -628,7 +627,7 @@ walkUncompressedJsonbDo(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg, uint32 le
 }
 
 static void
-walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg)
+walkUncompressedJsonb(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg)
 {
 	if (v)
 		walkUncompressedJsonbDo(v, cb, cb_arg, 0);
@@ -638,7 +637,7 @@ walkUncompressedJsonb(JsonbValue *v, walk_jsonb_cb cb, void *cb_arg)
  *						   Iteration over binary jsonb						*
  ****************************************************************************/
 static void
-parseBuffer(JsonbIterator *it, char *buffer)
+parseBuffer(JsonbIterator * it, char *buffer)
 {
 	uint32		header = *(uint32 *) buffer;
 
@@ -679,7 +678,7 @@ JsonbIteratorInit(char *buffer)
 }
 
 static bool
-formAnswer(JsonbIterator **it, JsonbValue *v, JEntry * e, bool skipNested)
+formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 {
 	if (JBE_ISSTRING(*e))
 	{
@@ -736,7 +735,7 @@ formAnswer(JsonbIterator **it, JsonbValue *v, JEntry * e, bool skipNested)
 }
 
 static JsonbIterator *
-up(JsonbIterator *it)
+up(JsonbIterator * it)
 {
 	JsonbIterator *v = it->next;
 
@@ -746,7 +745,7 @@ up(JsonbIterator *it)
 }
 
 int
-JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested)
+JsonbIteratorGet(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 {
 	int			res;
 
@@ -843,7 +842,7 @@ typedef struct CompressState
 #define prevLevelState	state->pptr
 
 static void
-putJEntryString(CompressState * state, JsonbValue *value, uint32 level, uint32 i)
+putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 i)
 {
 	curLevelState = state->levelstate + level;
 
@@ -954,7 +953,7 @@ putJEntryString(CompressState * state, JsonbValue *value, uint32 level, uint32 i
 }
 
 static void
-compressCallback(void *arg, JsonbValue *value, uint32 flags, uint32 level)
+compressCallback(void *arg, JsonbValue * value, uint32 flags, uint32 level)
 {
 	CompressState *state = arg;
 
@@ -1084,7 +1083,7 @@ compressCallback(void *arg, JsonbValue *value, uint32 flags, uint32 level)
  * puts JsonbValue tree into preallocated buffer
  */
 static uint32
-compressJsonb(JsonbValue *v, char *buffer)
+compressJsonb(JsonbValue * v, char *buffer)
 {
 	uint32		l = 0;
 	CompressState state;
@@ -1114,7 +1113,7 @@ pushState(ToJsonbState ** state)
 }
 
 static void
-appendArray(ToJsonbState * state, JsonbValue *v)
+appendArray(ToJsonbState * state, JsonbValue * v)
 {
 	JsonbValue *a = &state->v;
 
@@ -1133,7 +1132,7 @@ appendArray(ToJsonbState * state, JsonbValue *v)
 }
 
 static void
-appendKey(ToJsonbState * state, JsonbValue *v)
+appendKey(ToJsonbState * state, JsonbValue * v)
 {
 	JsonbValue *h = &state->v;
 
@@ -1143,7 +1142,7 @@ appendKey(ToJsonbState * state, JsonbValue *v)
 	{
 		state->size *= 2;
 		h->object.pairs = repalloc(h->object.pairs,
-								 sizeof(*h->object.pairs) * state->size);
+								   sizeof(*h->object.pairs) * state->size);
 	}
 
 	h->object.pairs[h->object.npairs].key = *v;
@@ -1153,7 +1152,7 @@ appendKey(ToJsonbState * state, JsonbValue *v)
 }
 
 static void
-appendValue(ToJsonbState * state, JsonbValue *v)
+appendValue(ToJsonbState * state, JsonbValue * v)
 {
 	JsonbValue *h = &state->v;
 
@@ -1168,7 +1167,7 @@ appendValue(ToJsonbState * state, JsonbValue *v)
  * Sort and unique pairs in JsonbValue (associative data structure)
  */
 static void
-uniqueJsonbValue(JsonbValue *v)
+uniqueJsonbValue(JsonbValue * v)
 {
 	bool		hasNonUniq = false;
 
@@ -1212,9 +1211,9 @@ uniqueJsonbValue(JsonbValue *v)
  * Initial state of ToJsonbState is NULL.
  */
 JsonbValue *
-pushJsonbValue(ToJsonbState **state, int r /* WJB_* */, JsonbValue *v)
+pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue * v)
 {
-	JsonbValue 		*h = NULL;
+	JsonbValue *h = NULL;
 
 	switch (r)
 	{
@@ -1239,7 +1238,7 @@ pushJsonbValue(ToJsonbState **state, int r /* WJB_* */, JsonbValue *v)
 			(*state)->size = (v && v->type == jbvObject && v->object.npairs > 0) ?
 				v->object.npairs : 4;
 			(*state)->v.object.pairs = palloc(sizeof(*(*state)->v.object.pairs) *
-											(*state)->size);
+											  (*state)->size);
 			break;
 		case WJB_ELEM:
 			Assert(v->type == jbvNull || v->type == jbvString ||

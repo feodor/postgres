@@ -230,7 +230,7 @@ typedef struct PopulateRecordsetState
 } PopulateRecordsetState;
 
 /* turn a jsonb object into a record */
-static inline void make_row_from_rec_and_jsonb(Jsonb *element, PopulateRecordsetState *state);
+static inline void make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state);
 
 /*
  * SQL function json_object-keys
@@ -1776,9 +1776,10 @@ elements_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 			/* use the tmp context so we can clean up after each tuple is done */
 			old_cxt = MemoryContextSwitchTo(tmp_cxt);
 
-			if (! as_text)
+			if (!as_text)
 			{
-				Jsonb *val = JsonbValueToJsonb(&v);
+				Jsonb	   *val = JsonbValueToJsonb(&v);
+
 				values[0] = PointerGetDatum(val);
 			}
 			else
@@ -2466,7 +2467,7 @@ jsonb_populate_recordset(PG_FUNCTION_ARGS)
 }
 
 static inline void
-make_row_from_rec_and_jsonb(Jsonb *element, PopulateRecordsetState *state)
+make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state)
 {
 	Datum	   *values;
 	bool	   *nulls;
