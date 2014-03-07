@@ -194,13 +194,13 @@ extern Datum jsonb_exists_any(PG_FUNCTION_ARGS);
 extern Datum jsonb_exists_all(PG_FUNCTION_ARGS);
 extern Datum jsonb_contains(PG_FUNCTION_ARGS);
 extern Datum jsonb_contained(PG_FUNCTION_ARGS);
-extern Datum jsonb_cmp(PG_FUNCTION_ARGS);
-extern Datum jsonb_eq(PG_FUNCTION_ARGS);
 extern Datum jsonb_ne(PG_FUNCTION_ARGS);
-extern Datum jsonb_gt(PG_FUNCTION_ARGS);
-extern Datum jsonb_ge(PG_FUNCTION_ARGS);
 extern Datum jsonb_lt(PG_FUNCTION_ARGS);
+extern Datum jsonb_gt(PG_FUNCTION_ARGS);
 extern Datum jsonb_le(PG_FUNCTION_ARGS);
+extern Datum jsonb_ge(PG_FUNCTION_ARGS);
+extern Datum jsonb_eq(PG_FUNCTION_ARGS);
+extern Datum jsonb_cmp(PG_FUNCTION_ARGS);
 extern Datum jsonb_hash(PG_FUNCTION_ARGS);
 
 /* GIN support functions */

@@ -1,7 +1,7 @@
 /*-------------------------------------------------------------------------
  *
  * jsonb_op.c
- *	 Operators for jsonb common to multiple access methods
+ *	 Special operators for jsonb only, used by various index access methods
  *
  * Copyright (c) 2014, PostgreSQL Global Development Group
  *
@@ -150,9 +150,69 @@ jsonb_contained(PG_FUNCTION_ARGS)
 										));
 }
 
+Datum
+jsonb_ne(PG_FUNCTION_ARGS)
+{
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
+														PG_GETARG_DATUM(0),
+														PG_GETARG_DATUM(1)));
+
+	PG_RETURN_BOOL(res != 0);
+}
+
 /*
- * B-Tree operator class procedures
+ * B-Tree operator class operators, support function
  */
+Datum
+jsonb_lt(PG_FUNCTION_ARGS)
+{
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
+														PG_GETARG_DATUM(0),
+														PG_GETARG_DATUM(1)));
+
+	PG_RETURN_BOOL(res < 0);
+}
+
+Datum
+jsonb_gt(PG_FUNCTION_ARGS)
+{
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
+														PG_GETARG_DATUM(0),
+														PG_GETARG_DATUM(1)));
+
+	PG_RETURN_BOOL(res > 0);
+}
+
+Datum
+jsonb_le(PG_FUNCTION_ARGS)
+{
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
+														PG_GETARG_DATUM(0),
+														PG_GETARG_DATUM(1)));
+
+	PG_RETURN_BOOL(res <= 0);
+}
+
+Datum
+jsonb_ge(PG_FUNCTION_ARGS)
+{
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
+														PG_GETARG_DATUM(0),
+														PG_GETARG_DATUM(1)));
+
+	PG_RETURN_BOOL(res >= 0);
+}
+
+Datum
+jsonb_eq(PG_FUNCTION_ARGS)
+{
+	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
+														PG_GETARG_DATUM(0),
+														PG_GETARG_DATUM(1)));
+
+	PG_RETURN_BOOL(res == 0);
+}
+
 Datum
 jsonb_cmp(PG_FUNCTION_ARGS)
 {
@@ -189,67 +249,7 @@ jsonb_cmp(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(res);
 }
 
-Datum
-jsonb_eq(PG_FUNCTION_ARGS)
-{
-	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
-														PG_GETARG_DATUM(0),
-														PG_GETARG_DATUM(1)));
-
-	PG_RETURN_BOOL(res == 0);
-}
-
-Datum
-jsonb_ne(PG_FUNCTION_ARGS)
-{
-	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
-														PG_GETARG_DATUM(0),
-														PG_GETARG_DATUM(1)));
-
-	PG_RETURN_BOOL(res != 0);
-}
-
-Datum
-jsonb_gt(PG_FUNCTION_ARGS)
-{
-	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
-														PG_GETARG_DATUM(0),
-														PG_GETARG_DATUM(1)));
-
-	PG_RETURN_BOOL(res > 0);
-}
-
-Datum
-jsonb_ge(PG_FUNCTION_ARGS)
-{
-	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
-														PG_GETARG_DATUM(0),
-														PG_GETARG_DATUM(1)));
-
-	PG_RETURN_BOOL(res >= 0);
-}
-
-Datum
-jsonb_lt(PG_FUNCTION_ARGS)
-{
-	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
-														PG_GETARG_DATUM(0),
-														PG_GETARG_DATUM(1)));
-
-	PG_RETURN_BOOL(res < 0);
-}
-
-Datum
-jsonb_le(PG_FUNCTION_ARGS)
-{
-	int			res = DatumGetInt32(DirectFunctionCall2(jsonb_cmp,
-														PG_GETARG_DATUM(0),
-														PG_GETARG_DATUM(1)));
-
-	PG_RETURN_BOOL(res <= 0);
-}
-
-/* Hash operator class hashing function */
+/* Hash operator class jsonb hashing function */
 Datum
 jsonb_hash(PG_FUNCTION_ARGS)
 {
@@ -298,7 +298,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 												NumericGetDatum(v.numeric)));
 						break;
 					default:
-						elog(ERROR, "unexpected state of jsonb iterator");
+						elog(ERROR, "invalid jsonb iterator type");
 				}
 				break;
 			case WJB_END_ARRAY:
@@ -308,7 +308,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 				COMP_CRC32(crc, "he", 3);
 				break;
 			default:
-				elog(ERROR, "unexpected state of jsonb iterator");
+				elog(ERROR, "invalid jsonb iterator type");
 		}
 	}
 
