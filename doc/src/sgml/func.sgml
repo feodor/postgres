@@ -10262,11 +10262,20 @@ CREATE INDEX hidx ON testhstore USING GIN (h);
   </programlisting>
   <para>
     The non-default GIN operator class <literal>jsonb_hash_ops</>
-    supports indexing the <literal>@&gt;</> operator:
+    supports indexing the <literal>@&gt;</> operator only:
   </para>
   <programlisting>
 CREATE INDEX hidx ON testhstore USING GIN (h jsonb_hash_ops);
   </programlisting>
+  <para>
+    Although only the <literal>@&gt;</> operator is made indexable, a
+    <literal>jsonb_hash_ops</literal> operator class GIN index has
+    some notable advantages over an equivalent GIN index of the
+    default GIN operator class for <type>jsonb</type>.  Search
+    operations typically perform appreciably better, and the on-disk
+    size of a <literal>jsonb_hash_ops</literal> operator class GIN
+    index can be much smaller.
+  </para>
   <para>
     <type>jsonb</> also supports <type>btree</> and <type>hash</>
     indexes.
