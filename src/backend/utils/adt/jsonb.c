@@ -9,24 +9,190 @@
  *
  *-------------------------------------------------------------------------
  */
-
 #include "postgres.h"
-#include "miscadmin.h"
+
 #include "libpq/pqformat.h"
+#include "miscadmin.h"
 #include "utils/builtins.h"
 #include "utils/json.h"
 #include "utils/jsonapi.h"
 #include "utils/jsonb.h"
-
-static inline Datum deserialize_json_text(char *json, int len);
-static void jsonb_put_escaped_value(StringInfo out, JsonbValue * v);
-static void jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype);
 
 typedef struct JsonbInState
 {
 	ToJsonbState *state;
 	JsonbValue *res;
 }	JsonbInState;
+
+static inline Datum deserialize_json_text(char *json, int len);
+static size_t checkStringLen(size_t len);
+static void jsonb_in_object_start(void *state);
+static void jsonb_in_object_end(void *state);
+static void jsonb_in_array_start(void *state);
+static void jsonb_in_array_end(void *state);
+static void jsonb_in_object_field_start(void *state, char *fname, bool isnull);
+static void jsonb_put_escaped_value(StringInfo out, JsonbValue * v);
+static void jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype);
+char *JsonbToCString(StringInfo out, char *in, int estimated_len);
+
+/*
+ * jsonb type input function
+ */
+Datum
+jsonb_in(PG_FUNCTION_ARGS)
+{
+	char	   *json = PG_GETARG_CSTRING(0);
+
+	return deserialize_json_text(json, strlen(json));
+}
+
+/*
+ * jsonb type recv function
+ *
+ * the type is sent as text in binary mode, so this is almost the same
+ * as the input function, but it's prefixed with a version number so we
+ * can change the binary format sent in future if necessary. For now,
+ * only version 1 is supported.
+ */
+Datum
+jsonb_recv(PG_FUNCTION_ARGS)
+{
+	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
+	int			version = pq_getmsgint(buf, 1);
+	char	   *str;
+	int			nbytes;
+
+	if (version == 1)
+		str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
+	else
+		elog(ERROR, "Unsupported jsonb version number %d", version);
+
+	return deserialize_json_text(str, nbytes);
+}
+
+/*
+ * jsonb type output function
+ */
+Datum
+jsonb_out(PG_FUNCTION_ARGS)
+{
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	char	   *out;
+
+	out = JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb));
+
+	PG_RETURN_CSTRING(out);
+}
+
+/*
+ * jsonb type send function
+ *
+ * Just send jsonb as a string of text
+ */
+Datum
+jsonb_send(PG_FUNCTION_ARGS)
+{
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
+	StringInfoData buf;
+	StringInfo	jtext = makeStringInfo();
+	int			version = 1;
+
+	(void) JsonbToCString(jtext, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb),
+						  VARSIZE(jb));
+
+	pq_begintypsend(&buf);
+	pq_sendint(&buf, version, 1);
+	pq_sendtext(&buf, jtext->data, jtext->len);
+	pfree(jtext->data);
+	pfree(jtext);
+
+	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+}
+
+/*
+ * SQL function jsonb_typeof(jsonb) -> text
+ *
+ * This function is here because the analog json function is in json.c, since
+ * it uses the json parser internals not exposed elsewhere.
+ */
+Datum
+jsonb_typeof(PG_FUNCTION_ARGS)
+{
+	Jsonb	   *in = PG_GETARG_JSONB(0);
+	JsonbIterator *it;
+	JsonbValue	v;
+	char	   *result;
+
+	if (JB_ROOT_IS_OBJECT(in))
+		result = "object";
+	else if (JB_ROOT_IS_ARRAY(in) && !JB_ROOT_IS_SCALAR(in))
+		result = "array";
+	else
+	{
+		Assert(JB_ROOT_IS_SCALAR(in));
+
+		it = JsonbIteratorInit(VARDATA_ANY(in));
+
+		/*
+		 * A root scalar is stored as an array of one element, so we get the
+		 * array and then its first (and only) member.
+		 */
+		(void) JsonbIteratorGet(&it, &v, true);
+		(void) JsonbIteratorGet(&it, &v, true);
+		switch (v.type)
+		{
+			case jbvNull:
+				result = "null";
+				break;
+			case jbvString:
+				result = "string";
+				break;
+			case jbvBool:
+				result = "boolean";
+				break;
+			case jbvNumeric:
+				result = "number";
+				break;
+			default:
+				elog(ERROR, "unknown jsonb scalar type");
+		}
+	}
+
+	PG_RETURN_TEXT_P(cstring_to_text(result));
+}
+
+/*
+ * deserialize_json_text
+ *
+ * turn json text into a jsonb Datum.
+ *
+ * uses the json parser with hooks to contruct the jsonb.
+ */
+static inline Datum
+deserialize_json_text(char *json, int len)
+{
+	JsonLexContext *lex;
+	JsonbInState state;
+	JsonSemAction sem;
+
+	memset(&state, 0, sizeof(state));
+	memset(&sem, 0, sizeof(sem));
+	lex = makeJsonLexContextCstringLen(json, len, true);
+
+	sem.semstate = (void *) &state;
+
+	sem.object_start = jsonb_in_object_start;
+	sem.array_start = jsonb_in_array_start;
+	sem.object_end = jsonb_in_object_end;
+	sem.array_end = jsonb_in_array_end;
+	sem.scalar = jsonb_in_scalar;
+	sem.object_field_start = jsonb_in_object_field_start;
+
+	pg_parse_json(lex, &sem);
+
+	/* after parsing, the item member has the composed jsonb structure */
+	PG_RETURN_POINTER(JsonbValueToJsonb(state.res));
+}
 
 static size_t
 checkStringLen(size_t len)
@@ -110,42 +276,6 @@ jsonb_put_escaped_value(StringInfo out, JsonbValue * v)
 }
 
 /*
- * jsonb type input function
- *
- */
-Datum
-jsonb_in(PG_FUNCTION_ARGS)
-{
-	char	   *json = PG_GETARG_CSTRING(0);
-
-	return deserialize_json_text(json, strlen(json));
-}
-
-/*
- * jsonb type recv function
- *
- * the type is sent as text in binary mode, so this is almost the same
- * as the input function, but it's prefixed with a version number so we
- * can change the binary format sent in future if necessary. For now,
- * only version 1 is supported.
- */
-Datum
-jsonb_recv(PG_FUNCTION_ARGS)
-{
-	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
-	int			version = pq_getmsgint(buf, 1);
-	char	   *str;
-	int			nbytes;
-
-	if (version == 1)
-		str = pq_getmsgtext(buf, buf->len - buf->cursor, &nbytes);
-	else
-		elog(ERROR, "Unsupported jsonb version number %d", version);
-
-	return deserialize_json_text(str, nbytes);
-}
-
-/*
  * For jsonb we always want the de-escaped value - that's what's in token
  */
 static void
@@ -217,39 +347,6 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 				elog(ERROR, "unexpected parent of nested structure");
 		}
 	}
-}
-
-/*
- * deserialize_json_text
- *
- * turn json text into a jsonb Datum.
- *
- * uses the json parser with hooks to contruct the jsonb.
- */
-static inline Datum
-deserialize_json_text(char *json, int len)
-{
-	JsonLexContext *lex;
-	JsonbInState state;
-	JsonSemAction sem;
-
-	memset(&state, 0, sizeof(state));
-	memset(&sem, 0, sizeof(sem));
-	lex = makeJsonLexContextCstringLen(json, len, true);
-
-	sem.semstate = (void *) &state;
-
-	sem.object_start = jsonb_in_object_start;
-	sem.array_start = jsonb_in_array_start;
-	sem.object_end = jsonb_in_object_end;
-	sem.array_end = jsonb_in_array_end;
-	sem.scalar = jsonb_in_scalar;
-	sem.object_field_start = jsonb_in_object_field_start;
-
-	pg_parse_json(lex, &sem);
-
-	/* after parsing, the item member has the composed jsonb structure */
-	PG_RETURN_POINTER(JsonbValueToJsonb(state.res));
 }
 
 /*
@@ -359,96 +456,4 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 	Assert(level == 0);
 
 	return out->data;
-}
-
-
-/*
- * jsonb type output function
- */
-Datum
-jsonb_out(PG_FUNCTION_ARGS)
-{
-	Jsonb	   *jb = PG_GETARG_JSONB(0);
-	char	   *out;
-
-	out = JsonbToCString(NULL, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb), VARSIZE(jb));
-
-	PG_RETURN_CSTRING(out);
-}
-
-/*
- * jsonb type send function
- *
- * Just send jsonb as a string of text
- */
-Datum
-jsonb_send(PG_FUNCTION_ARGS)
-{
-	Jsonb	   *jb = PG_GETARG_JSONB(0);
-	StringInfoData buf;
-	StringInfo	jtext = makeStringInfo();
-	int			version = 1;
-
-	(void) JsonbToCString(jtext, (JB_ISEMPTY(jb)) ? NULL : VARDATA(jb),
-						  VARSIZE(jb));
-
-	pq_begintypsend(&buf);
-	pq_sendint(&buf, version, 1);
-	pq_sendtext(&buf, jtext->data, jtext->len);
-	pfree(jtext->data);
-	pfree(jtext);
-
-	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
-}
-
-/*
- * SQL function jsonb_typeof(jsonb) -> text
- *
- * this function is here because the analog json function is in json.c since
- * it uses the json parser internals not exposed elsewhere.
- */
-Datum
-jsonb_typeof(PG_FUNCTION_ARGS)
-{
-	Jsonb	   *in = PG_GETARG_JSONB(0);
-	JsonbIterator *it;
-	JsonbValue	v;
-	char	   *result;
-
-	if (JB_ROOT_IS_OBJECT(in))
-		result = "object";
-	else if (JB_ROOT_IS_ARRAY(in) && !JB_ROOT_IS_SCALAR(in))
-		result = "array";
-	else
-	{
-		Assert(JB_ROOT_IS_SCALAR(in));
-
-		it = JsonbIteratorInit(VARDATA_ANY(in));
-
-		/*
-		 * a root scalar is stored as an array of one element, so we get the
-		 * array and then its first (and only) member.
-		 */
-		(void) JsonbIteratorGet(&it, &v, true);
-		(void) JsonbIteratorGet(&it, &v, true);
-		switch (v.type)
-		{
-			case jbvNull:
-				result = "null";
-				break;
-			case jbvString:
-				result = "string";
-				break;
-			case jbvBool:
-				result = "boolean";
-				break;
-			case jbvNumeric:
-				result = "number";
-				break;
-			default:
-				elog(ERROR, "unknown jsonb scalar type");
-		}
-	}
-
-	PG_RETURN_TEXT_P(cstring_to_text(result));
 }
