@@ -982,6 +982,6 @@ select count(*) from testjsonb where j ?| ARRAY['public','disabled'];
 select count(*) from testjsonb where j ?& ARRAY['public','disabled'];
  count 
 -------
-   337
+    42
 (1 row)
 
