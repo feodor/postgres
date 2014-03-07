@@ -10136,14 +10136,14 @@ table2-mapping
     The <type>jsonb</type> type uses a binary data representation,
     with <emphasis>nested</> types, and supports advanced
     <acronym>GiST</acronym> and <acronym>GIN</acronym> indexing.
-    Types described by <acronym>RFC</> 4627 are effectively mapped
-    onto native <productname>PostgreSQL</productname> types.
+    Primitive types described by <acronym>RFC</> 7159 are effectively
+    mapped onto native <productname>PostgreSQL</productname> types.
     Therefore, there are some very minor additional constraints on
     what constitutes valid <type>jsonb</type> that do not apply to the
     <type>json</type> type, or to JSON in the abstract, pertaining to
     the upper limits on what can be represented by the underlying type
     system.  These implementation-defined restrictions are permitted
-    by <acronym>RFC</> 4627.
+    by <acronym>RFC</> 7159.
   </para>
   <para>
     Note that currently, the <type>jsonb</type>-only operators (which
@@ -10164,25 +10164,35 @@ table2-mapping
   </para>
 
   <table id="functions-jsonb-type-mapping-table">
-     <title>PostgreSQL type to RFC-4627/JSON type mapping</title>
+     <title>PostgreSQL type to RFC-7159/JSON primitive type mapping</title>
      <tgroup cols="3">
       <thead>
        <row>
-        <entry>PostgreSQL type</entry>
-        <entry>RFC-4627/JSON type</entry>
+        <entry><productname>PostgreSQL</productname> type</entry>
+        <entry>RFC-7159/JSON primitive type</entry>
         <entry>Notes</entry>
        </row>
       </thead>
       <tbody>
        <row>
         <entry><literal>text</literal></entry>
-        <entry><literal>String</literal></entry>
+        <entry><literal>string</literal></entry>
         <entry>See general notes on encoding and JSON below</entry>
        </row>
        <row>
         <entry><literal>numeric</literal></entry>
-        <entry><literal>Number</literal></entry>
+        <entry><literal>number</literal></entry>
         <entry><literal>NaN</literal> and <literal>infinity</literal> values are specially disallowed</entry>
+       </row>
+       <row>
+        <entry><literal>boolean</literal></entry>
+        <entry><literal>boolean</literal></entry>
+        <entry>Only lowercase <literal>true</literal> and <literal>false</literal> values are accepted</entry>
+       </row>
+       <row>
+        <entry><literal>unknown</literal></entry>
+        <entry><literal>null</literal></entry>
+        <entry>SQL <literal>NULL</literal> is orthogonal to the <productname>PostgreSQL</productname> type system</entry>
        </row>
       </tbody>
      </tgroup>

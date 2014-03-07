@@ -4239,11 +4239,12 @@ SET xmloption TO { DOCUMENT | CONTENT };
 
    <para>
     JSON data types are for storing JSON (JavaScript Object Notation)
-    data, as specified in <ulink url="http://www.ietf.org/rfc/rfc4627.txt"
-    >RFC 4627</ulink>. Such data can also be stored as <type>text</type>,
-    but the JSON data types have the advantage of enforcing that each
-    stored value is a valid JSON value. There are also related support
-    functions available; see <xref linkend="functions-json">.
+    data, as specified in
+    <ulink url="http://rfc7159.net/rfc7159">RFC 7159</ulink>. Such
+    data can also be stored as <type>text</type>, but the JSON data
+    types have the advantage of enforcing that each stored value is a
+    valid JSON value. There are also related support functions
+    available; see <xref linkend="functions-json">.
    </para>
 
    <para>
