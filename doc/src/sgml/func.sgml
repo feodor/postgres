@@ -10127,8 +10127,8 @@ table2-mapping
     <type>json</type> type and the <type>jsonb</type> type.  In
     addition to those operators common to both types, a further set of
     operators exists for <type>jsonb</type>, listed below.  These
-    additional operators are principally intended to facilitate
-    advanced indexing, but have independent value.
+    additional operators are principally intended to enable advanced
+    indexing, but have independent value.
    </para>
   </note>
   <para>
