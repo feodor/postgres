@@ -107,18 +107,6 @@ SELECT '[foo, f, bar, x]'::hstore ?> 1;
 SELECT 'foo=>{x, f}'::hstore #?> '{foo, 0}';
 SELECT 'foo=>{x, f}'::hstore #?> '{foo, 1}';
 
-
-SELECT hstore_typeof('a=>b') AS hash;
-SELECT hstore_typeof('{a=>b}') AS hash;
-SELECT hstore_typeof('{a, b}') AS array;
-SELECT hstore_typeof('{{a=>b}}') AS array;
-SELECT hstore_typeof('[a, b]') AS array;
-SELECT hstore_typeof('') AS "NULL";
-SELECT hstore_typeof('NULL') AS "null";
-SELECT hstore_typeof('1.0') AS numeric;
-SELECT hstore_typeof('t') AS bool;
-SELECT hstore_typeof('f') AS bool;
-
 SELECT hstore('xxx', 't'::bool);
 SELECT hstore('xxx', 'f'::bool);
 

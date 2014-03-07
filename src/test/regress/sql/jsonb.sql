@@ -62,7 +62,6 @@ SELECT '    '::jsonb;			-- ERROR, no value
 -- make sure jsonb is passed through json generators without being escaped
 select array_to_json(ARRAY [jsonb '{"a":1}', jsonb '{"b":[2,3]}']);
 
-
 -- jsonb extraction functions
 
 CREATE TEMP TABLE test_jsonb (
@@ -111,6 +110,37 @@ select '{"x":"y"}'::jsonb = '{"x":"z"}'::jsonb;
 select '{"x":"y"}'::jsonb <> '{"x":"y"}'::jsonb;
 select '{"x":"y"}'::jsonb <> '{"x":"z"}'::jsonb;
 
+-- containment
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":null}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "g":null}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"g":null}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"c"}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
+select jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":"q"}');
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":null}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "g":null}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"g":null}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"c"}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b"}';
+select '{"a":"b", "b":1, "c":null}'::jsonb @> '{"a":"b", "c":"q"}';
+
+select jsonb_contained('{"a":"b"}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"b", "c":null}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"b", "g":null}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"g":null}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"c"}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"b"}', '{"a":"b", "b":1, "c":null}');
+select jsonb_contained('{"a":"b", "c":"q"}', '{"a":"b", "b":1, "c":null}');
+select '{"a":"b"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"b", "c":null}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"b", "g":null}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"g":null}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"c"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"b"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+select '{"a":"b", "c":"q"}'::jsonb <@ '{"a":"b", "b":1, "c":null}';
+
 -- array length
 
 SELECT jsonb_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]');
@@ -125,6 +155,53 @@ select * from jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"st
 
 select jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":"null"}');
 select * from jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q;
+
+-- exists
+
+select jsonb_exists('{"a":null, "b":"qq"}', 'a');
+select jsonb_exists('{"a":null, "b":"qq"}', 'b');
+select jsonb_exists('{"a":null, "b":"qq"}', 'c');
+select jsonb_exists('{"a":"null", "b":"qq"}', 'a');
+select jsonb '{"a":null, "b":"qq"}' ? 'a';
+select jsonb '{"a":null, "b":"qq"}' ? 'b';
+select jsonb '{"a":null, "b":"qq"}' ? 'c';
+select jsonb '{"a":"null", "b":"qq"}' ? 'a';
+
+select jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['a','b']);
+select jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['b','a']);
+select jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['c','a']);
+select jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['c','d']);
+select jsonb_exists_any('{"a":null, "b":"qq"}', '{}'::text[]);
+select jsonb '{"a":null, "b":"qq"}' ?| ARRAY['a','b'];
+select jsonb '{"a":null, "b":"qq"}' ?| ARRAY['b','a'];
+select jsonb '{"a":null, "b":"qq"}' ?| ARRAY['c','a'];
+select jsonb '{"a":null, "b":"qq"}' ?| ARRAY['c','d'];
+select jsonb '{"a":null, "b":"qq"}' ?| '{}'::text[];
+
+select jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['a','b']);
+select jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['b','a']);
+select jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['c','a']);
+select jsonb_exists_all('{"a":null, "b":"qq"}', ARRAY['c','d']);
+select jsonb_exists_all('{"a":null, "b":"qq"}', '{}'::text[]);
+select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['a','b'];
+select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['b','a'];
+select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['c','a'];
+select jsonb '{"a":null, "b":"qq"}' ?& ARRAY['c','d'];
+select jsonb '{"a":null, "b":"qq"}' ?& '{}'::text[];
+
+-- typeof
+SELECT jsonb_typeof('{}') AS object;
+SELECT jsonb_typeof('{"a":"b"}') AS object;
+SELECT jsonb_typeof('[]') AS array;
+SELECT jsonb_typeof('["a", 1]') AS array;
+SELECT jsonb_typeof('null') AS "null";
+SELECT jsonb_typeof('1.0') AS number;
+SELECT jsonb_typeof('true') AS boolean;
+SELECT jsonb_typeof('false') AS boolean;
+SELECT jsonb_typeof('"hello"') AS string;
+SELECT jsonb_typeof('"true"') AS string;
+SELECT jsonb_typeof('"1.0"') AS string;
+
 
 -- extract_path, extract_path_as_text
 

@@ -67,31 +67,6 @@ select 'aa=>"NULL", c=>d , b=>16'::hstore -> ARRAY['c','aa'];
 select 'aa=>NULL, c=>d , b=>16'::hstore -> ARRAY['aa','c',null];
 select 'aa=>1, c=>3, b=>2, d=>4'::hstore -> ARRAY[['b','d'],['aa','c']];
 
--- exists/defined
-
-select exist('a=>NULL, b=>qq', 'a');
-select exist('a=>NULL, b=>qq', 'b');
-select exist('a=>NULL, b=>qq', 'c');
-select exist('a=>"NULL", b=>qq', 'a');
-select defined('a=>NULL, b=>qq', 'a');
-select defined('a=>NULL, b=>qq', 'b');
-select defined('a=>NULL, b=>qq', 'c');
-select defined('a=>"NULL", b=>qq', 'a');
-select hstore 'a=>NULL, b=>qq' ? 'a';
-select hstore 'a=>NULL, b=>qq' ? 'b';
-select hstore 'a=>NULL, b=>qq' ? 'c';
-select hstore 'a=>"NULL", b=>qq' ? 'a';
-select hstore 'a=>NULL, b=>qq' ?| ARRAY['a','b'];
-select hstore 'a=>NULL, b=>qq' ?| ARRAY['b','a'];
-select hstore 'a=>NULL, b=>qq' ?| ARRAY['c','a'];
-select hstore 'a=>NULL, b=>qq' ?| ARRAY['c','d'];
-select hstore 'a=>NULL, b=>qq' ?| '{}'::text[];
-select hstore 'a=>NULL, b=>qq' ?& ARRAY['a','b'];
-select hstore 'a=>NULL, b=>qq' ?& ARRAY['b','a'];
-select hstore 'a=>NULL, b=>qq' ?& ARRAY['c','a'];
-select hstore 'a=>NULL, b=>qq' ?& ARRAY['c','d'];
-select hstore 'a=>NULL, b=>qq' ?& '{}'::text[];
-
 -- delete
 
 select delete('a=>1 , b=>2, c=>3'::hstore, 'a');
@@ -272,15 +247,6 @@ select * from svals('""=>1');
 select * from svals('');
 
 select * from each('aaa=>bq, b=>NULL, ""=>1 ');
-
--- @>
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, c=>NULL';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, g=>NULL';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'g=>NULL';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>c';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b';
-select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, c=>q';
 
 -- json
 select hstore_to_json('"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4');
