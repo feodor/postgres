@@ -10166,7 +10166,7 @@ table2-mapping
   </para>
 
   <table id="functions-jsonb-type-mapping-table">
-     <title>RFC-4627/JSON type to PostgreSQL type mapping</title>
+     <title>PostgreSQL type to RFC-4627/JSON type mapping</title>
      <tgroup cols="3">
       <thead>
        <row>
@@ -10203,44 +10203,66 @@ table2-mapping
       </thead>
       <tbody>
        <row>
-        <entry><literal>&#61;</literal></entry>
+        <entry><literal>=</literal></entry>
         <entry>jsonb</entry>
         <entry>Is the jsonb equal to this jsonb?</entry>
-        <entry><literal>'[1,2,3]'::jsonb &#61; '[1,2,3]'::jsonb</literal></entry>
+        <entry><literal>'[1,2,3]'::jsonb = '[1,2,3]'::jsonb</literal></entry>
        </row>
        <row>
-        <entry><literal>&#64;&gt;</literal></entry>
+        <entry><literal>@&gt;</literal></entry>
         <entry>jsonb</entry>
         <entry>Does the jsonb contain within it this jsonb?</entry>
         <entry><literal>'{"a":1, "b":2}'::jsonb &#64;&gt; '{"b":2}'::jsonb</literal></entry>
        </row>
        <row>
-        <entry><literal>&lt;&#64;</literal></entry>
+        <entry><literal>&lt;@</literal></entry>
         <entry>jsonb</entry>
         <entry>Does the jsonb have contained within it this jsonb object?</entry>
-        <entry><literal>'{"b":2}'::jsonb &lt;&#64; '{"a":1, "b":2}'::jsonb</literal></entry>
+        <entry><literal>'{"b":2}'::jsonb &lt;@ '{"a":1, "b":2}'::jsonb</literal></entry>
        </row>
        <row>
-        <entry><literal>&#63;</literal></entry>
+        <entry><literal>?</literal></entry>
         <entry>text</entry>
         <entry>Does this key exist?</entry>
-        <entry><literal>'{"a":1, "b":2}'::jsonb &#63; 'b'</literal></entry>
+        <entry><literal>'{"a":1, "b":2}'::jsonb ? 'b'</literal></entry>
        </row>
        <row>
-        <entry><literal>&#63;&#124;</literal></entry>
+        <entry><literal>?|</literal></entry>
         <entry>text[]</entry>
         <entry>Do any of these keys exist?</entry>
-        <entry><literal>'{"a":1, "b":2}'::jsonb &#63;&#124; array['b', 'c']</literal></entry>
+        <entry><literal>'{"a":1, "b":2}'::jsonb ?| array['b', 'c']</literal></entry>
        </row>
        <row>
-        <entry><literal>&#63;&amp;</literal></entry>
+        <entry><literal>?&amp;</literal></entry>
         <entry>text[]</entry>
         <entry>Do all of these keys exist?</entry>
-        <entry><literal>'{"a":1, "b":2}'::jsonb &#63;&amp; array['a', 'b']</literal></entry>
+        <entry><literal>'{"a":1, "b":2}'::jsonb ?&amp; array['a', 'b']</literal></entry>
        </row>
       </tbody>
      </tgroup>
    </table>
+
+  <para>
+    <type>jsonb</> has GiST and GIN index support for the
+    <literal>@&gt;</>, <literal>?</>, <literal>?&amp;</> and
+    <literal>?|</> operators. For example:
+  </para>
+  <programlisting>
+CREATE INDEX hidx ON testhstore USING GIST (h);
+
+CREATE INDEX hidx ON testhstore USING GIN (h);
+  </programlisting>
+  <para>
+    The non-default GIN operator class <literal>jsonb_hash_ops</>
+    supports indexing the <literal>@&gt;</> operator:
+  </para>
+  <programlisting>
+CREATE INDEX hidx ON testhstore USING GIN (h jsonb_hash_ops);
+  </programlisting>
+  <para>
+    <type>jsonb</> also supports <type>btree</> and <type>hash</>
+    indexes.
+  </para>
 
   <!--
      The release notes contain a reference to "functions-json-table". Since
