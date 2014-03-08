@@ -199,24 +199,6 @@ select 'aa=>"NuLl"'::hstore;
  "aa"=>"NuLl"
 (1 row)
 
-select 'aa=>nul'::hstore;
-   hstore    
--------------
- "aa"=>"nul"
-(1 row)
-
-select 'aa=>NuL'::hstore;
-   hstore    
--------------
- "aa"=>"NuL"
-(1 row)
-
-select 'aa=>"NuL"'::hstore;
-   hstore    
--------------
- "aa"=>"NuL"
-(1 row)
-
 select e'\\=a=>q=w'::hstore;
    hstore    
 -------------
@@ -1298,24 +1280,6 @@ select count(*) from testhstore where h @> 'wait=>CC, public=>t';
      2
 (1 row)
 
-select count(*) from testhstore where h @> 'age=>25';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>25.0';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>+25.00';
- count 
--------
-     2
-(1 row)
-
 select count(*) from testhstore where h ? 'public';
  count 
 -------
@@ -1354,24 +1318,6 @@ select count(*) from testhstore where h @> 'wait=>CC, public=>t';
      2
 (1 row)
 
-select count(*) from testhstore where h @> 'age=>25';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>25.0';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>+25.00';
- count 
--------
-     2
-(1 row)
-
 select count(*) from testhstore where h ? 'public';
  count 
 -------
@@ -1390,7 +1336,6 @@ select count(*) from testhstore where h ?& ARRAY['public','disabled'];
     42
 (1 row)
 
-RESET enable_seqscan;
 drop index hidx;
 create index hidx on testhstore using gin (h);
 set enable_seqscan=off;
@@ -1412,24 +1357,6 @@ select count(*) from testhstore where h @> 'wait=>CC, public=>t';
      2
 (1 row)
 
-select count(*) from testhstore where h @> 'age=>25';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>25.0';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>+25.00';
- count 
--------
-     2
-(1 row)
-
 select count(*) from testhstore where h ? 'public';
  count 
 -------
@@ -1448,11 +1375,10 @@ select count(*) from testhstore where h ?& ARRAY['public','disabled'];
     42
 (1 row)
 
-RESET enable_seqscan;
 select count(*) from (select (each(h)).key from testhstore) as wow ;
  count 
 -------
-  4783
+  4781
 (1 row)
 
 select key, count(*) from (select (each(h)).key from testhstore) as wow group by key order by count desc, key;
@@ -1480,21 +1406,20 @@ select key, count(*) from (select (each(h)).key from testhstore) as wow group by
  subtitle  |   169
  auth      |   168
  abstract  |   161
- age       |     2
-(23 rows)
+(22 rows)
 
 -- sort/hash
 select count(distinct h) from testhstore;
  count 
 -------
-   886
+   885
 (1 row)
 
 set enable_hashagg = false;
 select count(*) from (select h from (select * from testhstore union all select * from testhstore) hs group by h) hs2;
  count 
 -------
-   886
+   885
 (1 row)
 
 set enable_hashagg = true;
@@ -1502,7 +1427,7 @@ set enable_sort = false;
 select count(*) from (select h from (select * from testhstore union all select * from testhstore) hs group by h) hs2;
  count 
 -------
-   886
+   885
 (1 row)
 
 select distinct * from (values (hstore '' || ''),('')) v(h);
@@ -1512,8 +1437,6 @@ select distinct * from (values (hstore '' || ''),('')) v(h);
 (1 row)
 
 set enable_sort = true;
-RESET enable_hashagg;
-RESET enable_sort;
 -- btree
 drop index hidx;
 create index hidx on testhstore using btree (h);
@@ -1521,7 +1444,7 @@ set enable_seqscan=off;
 select count(*) from testhstore where h #># 'p=>1';
  count 
 -------
-   886
+   125
 (1 row)
 
 select count(*) from testhstore where h = 'pos=>98, line=>371, node=>CBA, indexed=>t';
@@ -1530,48 +1453,6 @@ select count(*) from testhstore where h = 'pos=>98, line=>371, node=>CBA, indexe
      1
 (1 row)
 
---gin hash
-drop index hidx;
-create index hidx on testhstore using gin (h jsonb_hash_ops);
-set enable_seqscan=off;
-select count(*) from testhstore where h @> 'wait=>NULL';
- count 
--------
-     1
-(1 row)
-
-select count(*) from testhstore where h @> 'wait=>CC';
- count 
--------
-    15
-(1 row)
-
-select count(*) from testhstore where h @> 'wait=>CC, public=>t';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>25';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>25.0';
- count 
--------
-     2
-(1 row)
-
-select count(*) from testhstore where h @> 'age=>+25.00';
- count 
--------
-     2
-(1 row)
-
-RESET enable_seqscan;
-drop index hidx;
 -- json
 select hstore_to_json('"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4');
                                          hstore_to_json                                          

@@ -39,9 +39,6 @@ select 'aa=>"bb" ,cc=>dd'::hstore;
 select 'aa=>null'::hstore;
 select 'aa=>NuLl'::hstore;
 select 'aa=>"NuLl"'::hstore;
-select 'aa=>nul'::hstore;
-select 'aa=>NuL'::hstore;
-select 'aa=>"NuL"'::hstore;
 
 select e'\\=a=>q=w'::hstore;
 select e'"=a"=>q\\=w'::hstore;
@@ -66,6 +63,31 @@ select 'aa=>"NULL", c=>d , b=>16'::hstore -> ARRAY['aa','c'];
 select 'aa=>"NULL", c=>d , b=>16'::hstore -> ARRAY['c','aa'];
 select 'aa=>NULL, c=>d , b=>16'::hstore -> ARRAY['aa','c',null];
 select 'aa=>1, c=>3, b=>2, d=>4'::hstore -> ARRAY[['b','d'],['aa','c']];
+
+-- exists/defined
+
+select exist('a=>NULL, b=>qq', 'a');
+select exist('a=>NULL, b=>qq', 'b');
+select exist('a=>NULL, b=>qq', 'c');
+select exist('a=>"NULL", b=>qq', 'a');
+select defined('a=>NULL, b=>qq', 'a');
+select defined('a=>NULL, b=>qq', 'b');
+select defined('a=>NULL, b=>qq', 'c');
+select defined('a=>"NULL", b=>qq', 'a');
+select hstore 'a=>NULL, b=>qq' ? 'a';
+select hstore 'a=>NULL, b=>qq' ? 'b';
+select hstore 'a=>NULL, b=>qq' ? 'c';
+select hstore 'a=>"NULL", b=>qq' ? 'a';
+select hstore 'a=>NULL, b=>qq' ?| ARRAY['a','b'];
+select hstore 'a=>NULL, b=>qq' ?| ARRAY['b','a'];
+select hstore 'a=>NULL, b=>qq' ?| ARRAY['c','a'];
+select hstore 'a=>NULL, b=>qq' ?| ARRAY['c','d'];
+select hstore 'a=>NULL, b=>qq' ?| '{}'::text[];
+select hstore 'a=>NULL, b=>qq' ?& ARRAY['a','b'];
+select hstore 'a=>NULL, b=>qq' ?& ARRAY['b','a'];
+select hstore 'a=>NULL, b=>qq' ?& ARRAY['c','a'];
+select hstore 'a=>NULL, b=>qq' ?& ARRAY['c','d'];
+select hstore 'a=>NULL, b=>qq' ?& '{}'::text[];
 
 -- delete
 
@@ -191,7 +213,7 @@ select hstore(v) from testhstore1 v;
 select hstore(null::testhstore0);
 select hstore(null::testhstore1);
 select pg_column_size(hstore(v))
-         = pg_column_size('a=>1, b=>"foo", c=>1.2, d=>3, e=>0'::hstore)
+         = pg_column_size('a=>1, b=>"foo", c=>"1.2", d=>"3", e=>"0"'::hstore)
   from testhstore1 v;
 select populate_record(v, hstore('c', '3.45')) from testhstore1 v;
 select populate_record(v, hstore('d', '3.45')) from testhstore1 v;
@@ -247,6 +269,67 @@ select * from svals('""=>1');
 select * from svals('');
 
 select * from each('aaa=>bq, b=>NULL, ""=>1 ');
+
+-- @>
+select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b';
+select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, c=>NULL';
+select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, g=>NULL';
+select 'a=>b, b=>1, c=>NULL'::hstore @> 'g=>NULL';
+select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>c';
+select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b';
+select 'a=>b, b=>1, c=>NULL'::hstore @> 'a=>b, c=>q';
+
+CREATE TABLE testhstore (h hstore);
+\copy testhstore from 'data/hstore.data'
+
+select count(*) from testhstore where h @> 'wait=>NULL';
+select count(*) from testhstore where h @> 'wait=>CC';
+select count(*) from testhstore where h @> 'wait=>CC, public=>t';
+select count(*) from testhstore where h ? 'public';
+select count(*) from testhstore where h ?| ARRAY['public','disabled'];
+select count(*) from testhstore where h ?& ARRAY['public','disabled'];
+
+create index hidx on testhstore using gist(h);
+set enable_seqscan=off;
+
+select count(*) from testhstore where h @> 'wait=>NULL';
+select count(*) from testhstore where h @> 'wait=>CC';
+select count(*) from testhstore where h @> 'wait=>CC, public=>t';
+select count(*) from testhstore where h ? 'public';
+select count(*) from testhstore where h ?| ARRAY['public','disabled'];
+select count(*) from testhstore where h ?& ARRAY['public','disabled'];
+
+drop index hidx;
+create index hidx on testhstore using gin (h);
+set enable_seqscan=off;
+
+select count(*) from testhstore where h @> 'wait=>NULL';
+select count(*) from testhstore where h @> 'wait=>CC';
+select count(*) from testhstore where h @> 'wait=>CC, public=>t';
+select count(*) from testhstore where h ? 'public';
+select count(*) from testhstore where h ?| ARRAY['public','disabled'];
+select count(*) from testhstore where h ?& ARRAY['public','disabled'];
+
+select count(*) from (select (each(h)).key from testhstore) as wow ;
+select key, count(*) from (select (each(h)).key from testhstore) as wow group by key order by count desc, key;
+
+-- sort/hash
+select count(distinct h) from testhstore;
+set enable_hashagg = false;
+select count(*) from (select h from (select * from testhstore union all select * from testhstore) hs group by h) hs2;
+set enable_hashagg = true;
+set enable_sort = false;
+select count(*) from (select h from (select * from testhstore union all select * from testhstore) hs group by h) hs2;
+select distinct * from (values (hstore '' || ''),('')) v(h);
+set enable_sort = true;
+
+-- btree
+drop index hidx;
+create index hidx on testhstore using btree (h);
+set enable_seqscan=off;
+
+select count(*) from testhstore where h #># 'p=>1';
+select count(*) from testhstore where h = 'pos=>98, line=>371, node=>CBA, indexed=>t';
 
 -- json
 select hstore_to_json('"a key" =>1, b => t, c => null, d=> 12345, e => 012345, f=> 1.234, g=> 2.345e+4');
