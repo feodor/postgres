@@ -108,6 +108,9 @@ SELECT '{"x":"y"}'::jsonb = '{"x":"z"}'::jsonb;
 SELECT '{"x":"y"}'::jsonb <> '{"x":"y"}'::jsonb;
 SELECT '{"x":"y"}'::jsonb <> '{"x":"z"}'::jsonb;
 
+CREATE TABLE testjsonb (j jsonb);
+\copy testjsonb FROM 'data/jsonb.data'
+
 -- containment
 SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b"}');
 SELECT jsonb_contains('{"a":"b", "b":1, "c":null}', '{"a":"b", "c":null}');
@@ -165,6 +168,8 @@ SELECT jsonb '{"a":null, "b":"qq"}' ? 'a';
 SELECT jsonb '{"a":null, "b":"qq"}' ? 'b';
 SELECT jsonb '{"a":null, "b":"qq"}' ? 'c';
 SELECT jsonb '{"a":"null", "b":"qq"}' ? 'a';
+-- array exists - array elements should behave as keys
+SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
 
 SELECT jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['a','b']);
 SELECT jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['b','a']);
@@ -294,9 +299,6 @@ SELECT jsonb '{ "a":  "dollar \u0024 character" }' ->> 'a' AS correct_everyWHERE
 SELECT jsonb '{ "a":  "null \u0000 escape" }' ->> 'a' AS not_unescaped;
 
 -- indexing
-CREATE TABLE testjsonb (j jsonb);
-\copy testjsonb FROM 'data/jsonb.data'
-
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
@@ -317,10 +319,14 @@ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
 SELECT count(*) FROM testjsonb WHERE j ? 'public';
 SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
 SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
+-- array exists - array elements should behave as keys (for index scans too)
+CREATE INDEX jidx_array ON testjsonb USING gist((j->'array'));
+SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
 
 RESET enable_seqscan;
 
 DROP INDEX jidx;
+DROP INDEX jidx_array;
 CREATE INDEX jidx ON testjsonb USING gin (j);
 SET enable_seqscan = off;
 

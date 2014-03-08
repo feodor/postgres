@@ -988,6 +988,7 @@
 {"world":"CAB", "org":21, "indexed":true, "line":988, "abstract":"ABC"}
 {"title":"CBC", "status":66, "line":989}
 {}
+{"array":["foo", "bar", "baz"]}
 {"line":991, "abstract":"BA", "node":"BBB"}
 {"line":992, "disabled":true, "pos":29, "public":false}
 {"state":53, "wait":"CB", "subtitle":"CCC", "line":993, "date":"CAC", "public":false, "coauthors":"BB"}
