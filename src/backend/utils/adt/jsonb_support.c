@@ -232,7 +232,7 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 			case jbvBinary:
 				return compareJsonbBinaryValue(a->binary.data, b->binary.data);
 			default:
-				elog(ERROR, "unknown jsonb scalar type");
+				elog(ERROR, "invalid jsonb scalar type");
 		}
 	}
 
@@ -432,7 +432,7 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 				else if (JBE_ISBOOL(*v))
 				{
 					r.type = jbvBool;
-					r.boolean = (JBE_ISBOOL_TRUE(*v)) ? true : false;
+					r.boolean = (JBE_ISBOOL_TRUE(*v)) != 0;
 					r.size = sizeof(JEntry);
 				}
 				else if (JBE_ISNUMERIC(*v))
@@ -555,7 +555,7 @@ getJsonbValue(char *buffer, uint32 flags, int32 i)
 	else if (JBE_ISBOOL(*e))
 	{
 		r.type = jbvBool;
-		r.boolean = (JBE_ISBOOL_TRUE(*e)) ? true : false;
+		r.boolean = (JBE_ISBOOL_TRUE(*e)) != 0;
 		r.size = sizeof(JEntry);
 	}
 	else if (JBE_ISNUMERIC(*e))
@@ -601,7 +601,7 @@ pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue * v)
 			(*state)->v.type = jbvArray;
 			(*state)->v.size = 3 * sizeof(JEntry);
 			(*state)->v.array.nelems = 0;
-			(*state)->v.array.scalar = (v && v->array.scalar) ? true : false;
+			(*state)->v.array.scalar = (v && v->array.scalar) != 0;
 			(*state)->size = (v && v->type == jbvArray && v->array.nelems > 0)
 				? v->array.nelems : 4;
 			(*state)->v.array.elems = palloc(sizeof(*(*state)->v.array.elems) *
@@ -868,7 +868,7 @@ parseBuffer(JsonbIterator * it, char *buffer)
 	{
 		case JB_FLAG_ARRAY:
 			it->data = buffer + it->nelems * sizeof(JEntry);
-			it->isScalar = (header & JB_FLAG_SCALAR) ? true : false;
+			it->isScalar = (header & JB_FLAG_SCALAR) != 0;
 			Assert(it->isScalar == false || it->nelems == 1);
 			break;
 		case JB_FLAG_OBJECT:
@@ -894,7 +894,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	else if (JBE_ISBOOL(*e))
 	{
 		v->type = jbvBool;
-		v->boolean = (JBE_ISBOOL_TRUE(*e)) ? true : false;
+		v->boolean = JBE_ISBOOL_TRUE(*e) != 0;
 		v->size = sizeof(JEntry);
 
 		return false;
@@ -1060,7 +1060,7 @@ putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 
 			}
 			break;
 		default:
-			elog(ERROR, "unknown jsonb scalar type");
+			elog(ERROR, "invalid jsonb scalar type");
 	}
 }
 
