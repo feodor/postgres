@@ -12,6 +12,7 @@
 #include "postgres.h"
 
 #include "miscadmin.h"
+#include "catalog/pg_collation.h"
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
 
@@ -170,6 +171,31 @@ compareJsonbStringValue(const void *a, const void *b, void *arg)
 }
 
 /*
+ * Standard lexical comparison of jsonb strings
+ *
+ * not to be used for internal operations.
+ *
+ */
+static int
+lexicalCompareJsonbStringValue(const void *a, const void *b, void *arg)
+{
+	const JsonbValue *va = a;
+	const JsonbValue *vb = b;
+	int			res;
+
+	Assert(va->type == jbvString);
+	Assert(vb->type == jbvString);
+
+	res = varstr_cmp(va->string.val, va->string.len, vb->string.val,
+					 vb->string.len, DEFAULT_COLLATION_OID);
+
+	if (arg && res == 0 && va->string.len == vb->string.len)
+		*(bool *) arg = true;
+
+	return res;
+}
+
+/*
  * Give consistent ordering of JsonbValues
  */
 int
@@ -184,7 +210,7 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 			case jbvNull:
 				return 0;
 			case jbvString:
-				return compareJsonbStringValue(a, b, NULL);
+				return lexicalCompareJsonbStringValue(a, b, NULL);
 			case jbvBool:
 				if (a->boolean == b->boolean)
 					return 0;
@@ -216,7 +242,7 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 
 					for (i = 0; i < a->object.npairs; i++)
 					{
-						if ((r = compareJsonbStringValue(&a->object.pairs[i].key,
+						if ((r = lexicalCompareJsonbStringValue(&a->object.pairs[i].key,
 													 &b->object.pairs[i].key,
 														 NULL)) != 0)
 							return r;
@@ -272,7 +298,7 @@ compareJsonbBinaryValue(char *a, char *b)
 				switch (v1.type)
 				{
 					case jbvString:
-						res = compareJsonbStringValue(&v1, &v2, NULL);
+						res = lexicalCompareJsonbStringValue(&v1, &v2, NULL);
 						break;
 					case jbvBool:
 						if (v1.boolean == v2.boolean)

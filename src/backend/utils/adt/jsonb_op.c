@@ -235,6 +235,14 @@ jsonb_cmp(PG_FUNCTION_ARGS)
 			res = 1;
 		}
 	}
+	else if (JB_ROOT_IS_SCALAR(jb1) && ! JB_ROOT_IS_SCALAR(jb2))
+	{
+		res = -1;
+	}
+	else if (JB_ROOT_IS_SCALAR(jb2) && ! JB_ROOT_IS_SCALAR(jb1))
+	{
+		res = 1;
+	}
 	else
 	{
 		res = compareJsonbBinaryValue(VARDATA(jb1), VARDATA(jb2));
