@@ -147,10 +147,14 @@ SELECT jsonb_array_length('4');
 
 -- each
 SELECT jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null}');
+SELECT jsonb_each('{"a":{"b":"c","c":"b","1":"first"},"b":[1,2],"c":"cc","1":"first","n":null}'::jsonb) AS q;
 SELECT * FROM jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q;
+SELECT * FROM jsonb_each('{"a":{"b":"c","c":"b","1":"first"},"b":[1,2],"c":"cc","1":"first","n":null}'::jsonb) AS q;
 
 SELECT jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":"null"}');
+SELECT jsonb_each_text('{"a":{"b":"c","c":"b","1":"first"},"b":[1,2],"c":"cc","1":"first","n":null}'::jsonb) AS q;
 SELECT * FROM jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q;
+SELECT * FROM jsonb_each_text('{"a":{"b":"c","c":"b","1":"first"},"b":[1,2],"c":"cc","1":"first","n":null}'::jsonb) AS q;
 
 -- exists
 SELECT jsonb_exists('{"a":null, "b":"qq"}', 'a');
@@ -186,20 +190,22 @@ SELECT jsonb '{"a":null, "b":"qq"}' ?& '{}'::text[];
 
 -- typeof
 SELECT jsonb_typeof('{}') AS object;
-SELECT jsonb_typeof('{"a":"b"}') AS object;
+SELECT jsonb_typeof('{"c":3,"p":"o"}') AS object;
 SELECT jsonb_typeof('[]') AS array;
 SELECT jsonb_typeof('["a", 1]') AS array;
 SELECT jsonb_typeof('null') AS "null";
+SELECT jsonb_typeof('1') AS number;
+SELECT jsonb_typeof('-1') AS number;
 SELECT jsonb_typeof('1.0') AS number;
+SELECT jsonb_typeof('1e2') AS number;
+SELECT jsonb_typeof('-1.0') AS number;
 SELECT jsonb_typeof('true') AS boolean;
 SELECT jsonb_typeof('false') AS boolean;
 SELECT jsonb_typeof('"hello"') AS string;
 SELECT jsonb_typeof('"true"') AS string;
 SELECT jsonb_typeof('"1.0"') AS string;
 
-
 -- extract_path, extract_path_as_text
-
 SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f4','f6');
 SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}','f2');
 SELECT jsonb_extract_path('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',0::text);
@@ -210,14 +216,12 @@ SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','
 SELECT jsonb_extract_path_text('{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}','f2',1::text);
 
 -- extract_path nulls
-
 SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_false;
 SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":{"f5":null,"f6":"stringy"}}','f4','f5') IS NULL AS expect_true;
 SELECT jsonb_extract_path('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_false;
 SELECT jsonb_extract_path_text('{"f2":{"f3":1},"f4":[0,1,2,null]}','f4','3') IS NULL AS expect_true;
 
 -- extract_path operators
-
 SELECT '{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>array['f4','f6'];
 SELECT '{"f2":{"f3":1},"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>array['f2'];
 SELECT '{"f2":["f3",1],"f4":{"f5":99,"f6":"stringy"}}'::jsonb#>array['f2','0'];
@@ -244,12 +248,10 @@ SELECT '42'::jsonb#>>array['f2'];
 SELECT '42'::jsonb#>>array['0'];
 
 -- array_elements
-
 SELECT jsonb_array_elements('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false]');
 SELECT * FROM jsonb_array_elements('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false]') q;
 SELECT jsonb_array_elements_text('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false,"stringy"]');
 SELECT * FROM jsonb_array_elements_text('[1,true,[1,[2,3]],null,{"f1":1,"f2":[7,8,9]},false,"stringy"]') q;
-
 
 -- populate_record
 CREATE TYPE jbpop AS (a text, b int, c timestamp);
@@ -265,7 +267,6 @@ SELECT * FROM jsonb_populate_record(row('x',3,'2012-12-31 15:30:56')::jbpop,'{"a
 SELECT * FROM jsonb_populate_record(row('x',3,'2012-12-31 15:30:56')::jbpop,'{"c":[100,200,false],"x":43.2}', true) q;
 
 -- populate_recordset
-
 SELECT * FROM jsonb_populate_recordset(NULL::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]',false) q;
 SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]',false) q;
 SELECT * FROM jsonb_populate_recordset(NULL::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]',true) q;
@@ -274,7 +275,6 @@ SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":[100,200
 SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"c":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]',true) q;
 
 -- using the default use_json_as_text argument
-
 SELECT * FROM jsonb_populate_recordset(NULL::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
 SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":"blurfl","x":43.2},{"b":3,"c":"2012-01-20 10:42:53"}]') q;
 SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"a":[100,200,300],"x":43.2},{"a":{"z":true},"b":3,"c":"2012-01-20 10:42:53"}]') q;
@@ -282,7 +282,6 @@ SELECT * FROM jsonb_populate_recordset(row('def',99,NULL)::jbpop,'[{"c":[100,200
 
 
 -- handling of unicode surrogate pairs
-
 SELECT octet_length((jsonb '{ "a":  "\ud83d\ude04\ud83d\udc36" }' -> 'a')::text) AS correct_in_utf8;
 SELECT jsonb '{ "a":  "\ud83d\ud83d" }' -> 'a'; -- 2 high surrogates in a row
 SELECT jsonb '{ "a":  "\ude04\ud83d" }' -> 'a'; -- surrogates in wrong order
@@ -290,28 +289,11 @@ SELECT jsonb '{ "a":  "\ud83dX" }' -> 'a'; -- orphan high surrogate
 SELECT jsonb '{ "a":  "\ude04X" }' -> 'a'; -- orphan low surrogate
 
 -- handling of simple unicode escapes
-
 SELECT jsonb '{ "a":  "the Copyright \u00a9 sign" }' ->> 'a' AS correct_in_utf8;
 SELECT jsonb '{ "a":  "dollar \u0024 character" }' ->> 'a' AS correct_everyWHERE;
 SELECT jsonb '{ "a":  "null \u0000 escape" }' ->> 'a' AS not_unescaped;
 
--- jsonb_typeof() function
-SELECT value, jsonb_typeof(value)
-  FROM (values (jsonb '123.4'),
-               (jsonb '-1'),
-               (jsonb '"foo"'),
-               (jsonb 'true'),
-               (jsonb 'false'),
-               (jsonb 'null'),
-               (jsonb '[1, 2, 3]'),
-               (jsonb '[]'),
-               (jsonb '{"x":"foo", "y":123}'),
-               (jsonb '{}'),
-               (NULL::jsonb))
-      AS data(value);
-
 -- indexing
-
 CREATE TABLE testjsonb (j jsonb);
 \copy testjsonb FROM 'data/jsonb.data'
 
@@ -392,7 +374,6 @@ RESET enable_seqscan;
 DROP INDEX jidx;
 
 -- nested tests
-
 SELECT '{"ff":{"a":12,"b":16}}'::jsonb;
 SELECT '{"ff":{"a":12,"b":16},"qq":123}'::jsonb;
 SELECT '{"aa":["a","aaa"],"qq":{"a":12,"b":16,"c":["c1","c2"],"d":{"d1":"d1","d2":"d2","d1":"d3"}}}'::jsonb;
@@ -469,7 +450,3 @@ SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'b';
 SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'c';
 SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'd';
 SELECT '{"n":null,"a":1,"b":[1,2],"c":{"1":2},"d":{"1":[2,3]}}'::jsonb ? 'e';
-
---nested each
-SELECT * FROM jsonb_each('{"a":{"b":"c","c":"b","1":"first"},"b":[1,2],"c":"cc","1":"first","n":null}'::jsonb) AS q;
-SELECT * FROM jsonb_each_text('{"a":{"b":"c","c":"b","1":"first"},"b":[1,2],"c":"cc","1":"first","n":null}'::jsonb) AS q;
