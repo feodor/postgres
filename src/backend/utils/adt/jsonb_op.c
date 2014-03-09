@@ -489,7 +489,7 @@ arrayToJsonbSortedArray(ArrayType *a)
 	Datum	   *key_datums;
 	bool	   *key_nulls;
 	int			key_count;
-	JsonbValue *v;
+	JsonbValue *result;
 	int			i,
 				j;
 	bool		hasNonUniq = false;
@@ -514,37 +514,38 @@ arrayToJsonbSortedArray(ArrayType *a)
 				 errmsg("number of pairs (%d) exceeds the maximum allowed (%zu)",
 						key_count, MaxAllocSize / sizeof(JsonbPair))));
 
-	v = palloc(sizeof(JsonbValue));
-	v->type = jbvArray;
-	v->array.scalar = false;
-	v->array.elems = palloc(sizeof(*v->object.pairs) * key_count);
+	result = palloc(sizeof(JsonbValue));
+	result->type = jbvArray;
+	result->array.scalar = false;
+	result->array.elems = palloc(sizeof(*result->object.pairs) * key_count);
 
 	for (i = 0, j = 0; i < key_count; i++)
 	{
 		if (!key_nulls[i])
 		{
-			v->array.elems[j].type = jbvString;
-			v->array.elems[j].string.val = VARDATA(key_datums[i]);
-			v->array.elems[j].string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+			result->array.elems[j].type = jbvString;
+			result->array.elems[j].string.val = VARDATA(key_datums[i]);
+			result->array.elems[j].string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
 			j++;
 		}
 	}
-	v->array.nelems = j;
+	result->array.nelems = j;
 
 	/*
 	 * Actually sort values, determining if any were equal on the basis of full
 	 * binary equality (rather than just having the same string length).
 	 */
-	if (v->array.nelems > 1)
-		qsort_arg(v->array.elems, v->array.nelems, sizeof(*v->array.elems),
-				  compareJsonbStringValue, &hasNonUniq);
+	if (result->array.nelems > 1)
+		qsort_arg(result->array.elems, result->array.nelems,
+				  sizeof(*result->array.elems), compareJsonbStringValue,
+				  &hasNonUniq);
 
 	if (hasNonUniq)
 	{
-		JsonbValue *ptr = v->array.elems + 1,
-				   *res = v->array.elems;
+		JsonbValue *ptr = result->array.elems + 1,
+				   *res = result->array.elems;
 
-		while (ptr - v->array.elems < v->array.nelems)
+		while (ptr - result->array.elems < result->array.nelems)
 		{
 			/* Avoid copying over binary duplicate */
 			if (!(ptr->string.len == res->string.len &&
@@ -557,8 +558,8 @@ arrayToJsonbSortedArray(ArrayType *a)
 			ptr++;
 		}
 
-		v->array.nelems = res + 1 - v->array.elems;
+		result->array.nelems = res + 1 - result->array.elems;
 	}
 
-	return v;
+	return result;
 }
