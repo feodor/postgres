@@ -574,13 +574,15 @@ crc32_JsonbValue(JsonbValue * v, uint32 r)
 	switch (r)
 	{
 		case WJB_KEY:
+			/*
+			 * An element of an array is serialized as a key for our purposes.
+			 * This is necessary because array elements are also keys.
+			 */
+		case WJB_ELEM:
 			flag = KEYFLAG;
 			break;
 		case WJB_VALUE:
 			flag = VALFLAG;
-			break;
-		case WJB_ELEM:
-			flag = ELEMFLAG;
 			break;
 		default:
 			break;
@@ -599,7 +601,7 @@ crc32_JsonbValue(JsonbValue * v, uint32 r)
 			break;
 		case jbvNumeric:
 			crc = DatumGetInt32(DirectFunctionCall1(hash_numeric,
-											   NumericGetDatum(v->numeric)));
+													NumericGetDatum(v->numeric)));
 			break;
 		default:
 			elog(ERROR, "invalid jsonb scalar type");
