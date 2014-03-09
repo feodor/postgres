@@ -64,13 +64,16 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 		switch (r)
 		{
 			case WJB_KEY:
+				/*
+				 * An element of an array is serialized as a key for our
+				 * purposes.  This is necessary because array elements are also
+				 * keys.
+				 */
+			case WJB_ELEM:
 				entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYFLAG));
 				break;
 			case WJB_VALUE:
 				entries[i++] = PointerGetDatum(makeitemFromValue(&v, VALFLAG));
-				break;
-			case WJB_ELEM:
-				entries[i++] = PointerGetDatum(makeitemFromValue(&v, ELEMFLAG));
 				break;
 			default:
 				break;
@@ -409,6 +412,11 @@ makeitem(char *str, int len, char flag)
 	return item;
 }
 
+/*
+ * Create a textual representation of a jsonbValue for GIN storage.
+ *
+ * N.B: This should only be called where the recheck flag will be set.
+ */
 static text *
 makeitemFromValue(JsonbValue * v, char flag)
 {
@@ -424,11 +432,10 @@ makeitemFromValue(JsonbValue * v, char flag)
 			item = makeitem((v->boolean) ? " t" : " f", 2, flag);
 			break;
 		case jbvNumeric:
-
 			/*
 			 * A textual, locale and precision independent representation of
-			 * numeric is required.  Use the standard hash_numeric for this.
-			 * This is sufficient because the recheck flag will be set anyway.
+			 * numeric is required.  Use the standard hash_numeric to build
+			 * one.
 			 */
 			cstr = palloc(8 /* hex numbers */ + 1 /* \0 */ );
 			snprintf(cstr, 9, "%08x", DatumGetInt32(DirectFunctionCall1(hash_numeric,

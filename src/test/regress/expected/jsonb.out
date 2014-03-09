@@ -1431,7 +1431,7 @@ SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
     42
 (1 row)
 
--- array exists - array elements should behave as keys (for index scans too)
+-- array exists - array elements should behave as keys (for GiST index scans too)
 CREATE INDEX jidx_array ON testjsonb USING gist((j->'array'));
 SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
  ?column? 
@@ -1490,6 +1490,14 @@ SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
  count 
 -------
     42
+(1 row)
+
+-- array exists - array elements should behave as keys (for GIN index scans too)
+CREATE INDEX jidx_array ON testjsonb USING gin((j->'array'));
+SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
+ ?column? 
+----------
+        1
 (1 row)
 
 RESET enable_seqscan;
@@ -1559,8 +1567,9 @@ SELECT distinct * FROM (values (jsonb '{}' || ''),('{}')) v(j);
 SET enable_sort = on;
 RESET enable_hashagg;
 RESET enable_sort;
--- btree
 DROP INDEX jidx;
+DROP INDEX jidx_array;
+-- btree
 CREATE INDEX jidx ON testjsonb USING btree (j);
 SET enable_seqscan = off;
 SELECT count(*) FROM testjsonb WHERE j > '{"p":1}';
