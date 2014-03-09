@@ -141,15 +141,20 @@ JsonbValueToJsonb(JsonbValue * v)
  ****************************************************************************/
 
 /*
- * Compare two jbvString JsonbValue values.
+ * Compare two jbvString JsonbValue values, a and b.
  *
- * This is a special qsort_arg() comparator used to
+ * This is a special qsort_arg() comparator used to sort strings in certain
+ * internal contexts where it is sufficient to have a well-defined sort order.
  *
- * Third argument 'binaryequal', when set, is deferenced to bool true if
- * strings has full binary equality.
+ * a and b are first sorted based on their length.  If a tie-breaker is
+ * required, only then do we consider string binary equality.
+ *
+ * Third argument 'binequal' may point to a bool. If so, *binequal is set to
+ * true iff strings have full binary equality, since some callers have an
+ * interest in whether the two values are equal or merely equivalent.
  */
 int
-compareJsonbStringValue(const void *a, const void *b, void *binaryequal)
+compareJsonbStringValue(const void *a, const void *b, void *binequal)
 {
 	const JsonbValue *va = (const JsonbValue *) a;
 	const JsonbValue *vb = (const JsonbValue *) b;
@@ -161,8 +166,8 @@ compareJsonbStringValue(const void *a, const void *b, void *binaryequal)
 	if (va->string.len == vb->string.len)
 	{
 		res = memcmp(va->string.val, vb->string.val, va->string.len);
-		if (res == 0 && binaryequal)
-			*((bool *) binaryequal) = true;
+		if (res == 0 && binequal)
+			*((bool *) binequal) = true;
 	}
 	else
 	{
