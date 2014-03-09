@@ -172,7 +172,7 @@ gjsonb_consistent(PG_FUNCTION_ARGS)
 			text	   *query = PG_GETARG_TEXT_PP(1);
 			int			crc = crc32_Key(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query));
 
-			qval = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(*qval));
+			qval = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(int));
 			*qval = HASHVAL(crc);
 
 			fcinfo->flinfo->fn_extra = qval;
@@ -579,7 +579,7 @@ crc32_JsonbValue(JsonbValue * v, uint32 r)
 			 * This is necessary because array elements are also keys.
 			 */
 		case WJB_ELEM:
-			flag = KEYFLAG;
+			flag = KEYELEMFLAG;
 			break;
 		case WJB_VALUE:
 			flag = VALFLAG;
@@ -615,7 +615,7 @@ static int
 crc32_Key(char *buf, int sz)
 {
 	int			crc;
-	char		flag = KEYFLAG;
+	char		flag = KEYELEMFLAG;
 
 	INIT_CRC32(crc);
 

@@ -268,7 +268,9 @@ jsonb_put_escaped_value(StringInfo out, JsonbValue * v)
 				appendBinaryStringInfo(out, "false", 5);
 			break;
 		case jbvNumeric:
-			appendStringInfoString(out, DatumGetCString(DirectFunctionCall1(numeric_out, PointerGetDatum(v->numeric))));
+			appendStringInfoString(out,
+								   DatumGetCString(DirectFunctionCall1(numeric_out,
+																	   PointerGetDatum(v->numeric))));
 			break;
 		default:
 			elog(ERROR, "unknown jsonb scalar type");

@@ -59,14 +59,16 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 		plowbound = &lowbound;
 
 	/*
-	 * we exploit the fact that the pairs list is already sorted into strictly
+	 * We exploit the fact that the pairs list is already sorted into strictly
 	 * increasing order to narrow the findUncompressedJsonbValue search; each
 	 * search can start one entry past the previous "found" entry, or at the
 	 * lower bound of the last search.
 	 */
 	for (i = 0; i < v->array.nelems; i++)
 	{
-		if (findUncompressedJsonbValueByValue(VARDATA(jb), JB_FLAG_OBJECT | JB_FLAG_ARRAY, plowbound,
+		if (findUncompressedJsonbValueByValue(VARDATA(jb),
+											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+											  plowbound,
 											  v->array.elems + i) != NULL)
 		{
 			res = true;
@@ -249,7 +251,7 @@ jsonb_cmp(PG_FUNCTION_ARGS)
 	}
 
 	/*
-	 * this is a btree support function; this is one of the few places where
+	 * This is a btree support function; this is one of the few places where
 	 * memory needs to be explicitly freed.
 	 */
 	PG_FREE_IF_COPY(jb1, 0);
@@ -303,7 +305,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 						break;
 					case jbvNumeric:
 						crc ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
-												NumericGetDatum(v.numeric)));
+																 NumericGetDatum(v.numeric)));
 						break;
 					default:
 						elog(ERROR, "invalid jsonb iterator type");
@@ -432,7 +434,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 				{
 					uint32		j = 0;
 
-					av = palloc(sizeof(*av) * nelems);
+					av = palloc(sizeof(JsonbValue) * nelems);
 
 					for (i = 0; i < nelems; i++)
 					{
@@ -477,6 +479,10 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 	return res;
 }
 
+/*
+ * Convert a Postgres text array to a JsonbSortedArray, with de-duplicated key
+ * elements.
+ */
 static JsonbValue *
 arrayToJsonbSortedArray(ArrayType *a)
 {
@@ -488,9 +494,9 @@ arrayToJsonbSortedArray(ArrayType *a)
 				j;
 	bool		hasNonUniq = false;
 
-	deconstruct_array(a,
-					  TEXTOID, -1, false, 'i',
-					  &key_datums, &key_nulls, &key_count);
+	/* Extract data for sorting */
+	deconstruct_array(a, TEXTOID, -1, false, 'i', &key_datums, &key_nulls,
+					  &key_count);
 
 	if (key_count == 0)
 		return NULL;
@@ -498,17 +504,17 @@ arrayToJsonbSortedArray(ArrayType *a)
 	/*
 	 * A text array uses at least eight bytes per element, so any overflow in
 	 * "key_count * sizeof(JsonbPair)" is small enough for palloc() to catch.
-	 * However, credible improvements to the array format could invalidate
-	 * that assumption.  Therefore, use an explicit check rather than relying
-	 * on palloc() to complain.
+	 * However, credible improvements to the array format could invalidate that
+	 * assumption.  Therefore, use an explicit check rather than relying on
+	 * palloc() to complain.
 	 */
 	if (key_count > MaxAllocSize / sizeof(JsonbPair))
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-			  errmsg("number of pairs (%d) exceeds the maximum allowed (%d)",
-					 key_count, (int) (MaxAllocSize / sizeof(JsonbPair)))));
+				 errmsg("number of pairs (%d) exceeds the maximum allowed (%zu)",
+						key_count, MaxAllocSize / sizeof(JsonbPair))));
 
-	v = palloc(sizeof(*v));
+	v = palloc(sizeof(JsonbValue));
 	v->type = jbvArray;
 	v->array.scalar = false;
 	v->array.elems = palloc(sizeof(*v->object.pairs) * key_count);
@@ -525,9 +531,13 @@ arrayToJsonbSortedArray(ArrayType *a)
 	}
 	v->array.nelems = j;
 
+	/*
+	 * Actually sort values, determining if any were equal on the basis of full
+	 * binary equality (rather than just having the same string length).
+	 */
 	if (v->array.nelems > 1)
 		qsort_arg(v->array.elems, v->array.nelems, sizeof(*v->array.elems),
-		compareJsonbStringValue /* compareJsonbStringValue */ , &hasNonUniq);
+				  compareJsonbStringValue, &hasNonUniq);
 
 	if (hasNonUniq)
 	{
@@ -536,8 +546,9 @@ arrayToJsonbSortedArray(ArrayType *a)
 
 		while (ptr - v->array.elems < v->array.nelems)
 		{
+			/* Avoid copying over binary duplicate */
 			if (!(ptr->string.len == res->string.len &&
-			 memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
+				  memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
 			{
 				res++;
 				*res = *ptr;

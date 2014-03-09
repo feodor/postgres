@@ -75,7 +75,7 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 				 * keys.
 				 */
 			case WJB_ELEM:
-				entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYFLAG));
+				entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYELEMFLAG));
 				break;
 			case WJB_VALUE:
 				entries[i++] = PointerGetDatum(makeitemFromValue(&v, VALFLAG));
@@ -116,7 +116,8 @@ gin_extract_jsonb_query(PG_FUNCTION_ARGS)
 
 		*nentries = 1;
 		entries = (Datum *) palloc(sizeof(Datum));
-		item = makeitem(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query), KEYFLAG);
+		item = makeitem(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query),
+						KEYELEMFLAG);
 		entries[0] = PointerGetDatum(item);
 	}
 	else if (strategy == JsonbExistsAnyStrategyNumber ||
@@ -142,7 +143,8 @@ gin_extract_jsonb_query(PG_FUNCTION_ARGS)
 			if (key_nulls[i])
 				continue;
 			item = makeitem(VARDATA(key_datums[i]),
-							VARSIZE(key_datums[i]) - VARHDRSZ, KEYFLAG);
+							VARSIZE(key_datums[i]) - VARHDRSZ,
+							KEYELEMFLAG);
 			entries[j++] = PointerGetDatum(item);
 		}
 

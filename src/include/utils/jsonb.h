@@ -53,9 +53,11 @@
  * the string to indicate key, value, or null values.  (As of 9.1 it might be
  * better to store null values as nulls, but we'll keep it this way for on-disk
  * compatibility.)
+ *
+ * jsonb Keys and elements are treated equivalently when serialized to text
+ * index storage.
  */
-#define ELEMFLAG    'E'
-#define KEYFLAG     'K'
+#define KEYELEMFLAG 'K'
 #define VALFLAG     'V'
 #define NULLFLAG    'N'
 
@@ -88,8 +90,8 @@ typedef struct
 typedef struct
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	/* header of hash or array jsonb type
-	 * array of JEntry follows */
+	/* header of jsonb object or array */
+	/* array of JEntry follows */
 } Jsonb;
 
 struct JsonbValue
@@ -145,7 +147,7 @@ struct JsonbPair
 {
 	JsonbValue	key;
 	JsonbValue	value;
-	uint32		order;			/* To preserve order of pairs with equal keys */
+	uint32		order;			/* preserves order of pairs with equal keys */
 };
 
 typedef struct ToJsonbState
@@ -163,12 +165,11 @@ typedef struct JsonbIterator
 	bool		isScalar;
 	char	   *data;
 	char	   *buffer;			/* unparsed buffer */
-
 	int			i;
 
 	/*
 	 * Enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_JSONB
-	 * with possibility of decoding. See optimization in JsonbIteratorGet()
+	 * with possibility of decoding.  See optimization in JsonbIteratorGet()
 	 */
 	enum
 	{

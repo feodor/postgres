@@ -143,14 +143,16 @@ JsonbValueToJsonb(JsonbValue * v)
 /*
  * Compare two jbvString JsonbValue values.
  *
- * Third argument 'arg', when set, should point to bool value which will be set
- * to true if strings are equal and untouched otherwise.
+ * This is a special qsort_arg() comparator used to
+ *
+ * Third argument 'binaryequal', when set, is deferenced to bool true if
+ * strings has full binary equality.
  */
 int
-compareJsonbStringValue(const void *a, const void *b, void *arg)
+compareJsonbStringValue(const void *a, const void *b, void *binaryequal)
 {
-	const JsonbValue *va = a;
-	const JsonbValue *vb = b;
+	const JsonbValue *va = (const JsonbValue *) a;
+	const JsonbValue *vb = (const JsonbValue *) b;
 	int			res;
 
 	Assert(va->type == jbvString);
@@ -159,8 +161,8 @@ compareJsonbStringValue(const void *a, const void *b, void *arg)
 	if (va->string.len == vb->string.len)
 	{
 		res = memcmp(va->string.val, vb->string.val, va->string.len);
-		if (res == 0 && arg)
-			*(bool *) arg = true;
+		if (res == 0 && binaryequal)
+			*((bool *) binaryequal) = true;
 	}
 	else
 	{
@@ -171,32 +173,26 @@ compareJsonbStringValue(const void *a, const void *b, void *arg)
 }
 
 /*
- * Standard lexical comparison of jsonb strings
+ * Standard lexical qsort() comparator of jsonb strings.
  *
- * not to be used for internal operations.
- *
+ * Sorts strings lexically, using the default text collation.  Used by B-Tree
+ * operators.
  */
 static int
-lexicalCompareJsonbStringValue(const void *a, const void *b, void *arg)
+lexicalCompareJsonbStringValue(const void *a, const void *b)
 {
-	const JsonbValue *va = a;
-	const JsonbValue *vb = b;
-	int			res;
+	const JsonbValue *va = (const JsonbValue *) a;
+	const JsonbValue *vb = (const JsonbValue *) b;
 
 	Assert(va->type == jbvString);
 	Assert(vb->type == jbvString);
 
-	res = varstr_cmp(va->string.val, va->string.len, vb->string.val,
-					 vb->string.len, DEFAULT_COLLATION_OID);
-
-	if (arg && res == 0 && va->string.len == vb->string.len)
-		*(bool *) arg = true;
-
-	return res;
+	return varstr_cmp(va->string.val, va->string.len, vb->string.val,
+					  vb->string.len, DEFAULT_COLLATION_OID);
 }
 
 /*
- * Give consistent ordering of JsonbValues
+ * Compare 2 JsonbValues
  */
 int
 compareJsonbValue(JsonbValue * a, JsonbValue * b)
@@ -210,7 +206,7 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 			case jbvNull:
 				return 0;
 			case jbvString:
-				return lexicalCompareJsonbStringValue(a, b, NULL);
+				return lexicalCompareJsonbStringValue(a, b);
 			case jbvBool:
 				if (a->boolean == b->boolean)
 					return 0;
@@ -243,8 +239,7 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 					for (i = 0; i < a->object.npairs; i++)
 					{
 						if ((r = lexicalCompareJsonbStringValue(&a->object.pairs[i].key,
-													 &b->object.pairs[i].key,
-														 NULL)) != 0)
+																&b->object.pairs[i].key)) != 0)
 							return r;
 						if ((r = compareJsonbValue(&a->object.pairs[i].value,
 											&b->object.pairs[i].value)) != 0)
@@ -298,7 +293,7 @@ compareJsonbBinaryValue(char *a, char *b)
 				switch (v1.type)
 				{
 					case jbvString:
-						res = lexicalCompareJsonbStringValue(&v1, &v2, NULL);
+						res = lexicalCompareJsonbStringValue(&v1, &v2);
 						break;
 					case jbvBool:
 						if (v1.boolean == v2.boolean)
@@ -787,7 +782,7 @@ JsonbIteratorInit(char *buffer)
 }
 
 /*
- * qsort comparator to compare JsonbPair values.
+ * qsort_arg() comparator to compare JsonbPair values.
  *
  * Function implemented in terms of compareJsonbStringValue(), and thus the
  * same "arg setting" hack will be applied here in respect of the pair's key
@@ -818,7 +813,8 @@ compareJsonbPair(const void *a, const void *b, void *arg)
  *					  Walk the tree representation of jsonb					*
  ****************************************************************************/
 static void
-walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg, uint32 level)
+walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg,
+						uint32 level)
 {
 	int			i;
 
