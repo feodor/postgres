@@ -27,10 +27,15 @@ typedef struct PathHashStack
 	struct PathHashStack *next;
 }	PathHashStack;
 
-static void hash_value(JsonbValue * v, PathHashStack * stack);
 static text *makeitem(char *str, int len, char flag);
 static text *makeitemFromValue(JsonbValue * v, char flag);
+static void hash_value(JsonbValue * v, PathHashStack * stack);
 
+/*
+ *
+ * jsonb_ops GIN opclass support functions
+ *
+ */
 Datum
 gin_extract_jsonb(PG_FUNCTION_ARGS)
 {
@@ -217,6 +222,11 @@ gin_consistent_jsonb(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(res);
 }
 
+/*
+ *
+ * jsonb_hash_ops GIN opclass support functions
+ *
+ */
 Datum
 gin_consistent_jsonb_hash(PG_FUNCTION_ARGS)
 {
@@ -371,30 +381,6 @@ gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(entries);
 }
 
-static void
-hash_value(JsonbValue * v, PathHashStack * stack)
-{
-	switch (v->type)
-	{
-		case jbvNull:
-			COMP_CRC32(stack->hash_state, "NULL", 5 /* include trailing \0 */ );
-			break;
-		case jbvBool:
-			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */ );
-			break;
-		case jbvNumeric:
-			stack->hash_state ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
-											   NumericGetDatum(v->numeric)));
-			break;
-		case jbvString:
-			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
-			break;
-		default:
-			elog(ERROR, "invalid jsonb scalar type");
-			break;
-	}
-}
-
 /* Build an indexable text value */
 static text *
 makeitem(char *str, int len, char flag)
@@ -433,7 +419,7 @@ makeitemFromValue(JsonbValue * v, char flag)
 			break;
 		case jbvNumeric:
 			/*
-			 * A textual, locale and precision independent representation of
+			 * A textual, locale/precision independent representation of
 			 * numeric is required.  Use the standard hash_numeric to build
 			 * one.
 			 */
@@ -451,4 +437,28 @@ makeitemFromValue(JsonbValue * v, char flag)
 	}
 
 	return item;
+}
+
+static void
+hash_value(JsonbValue * v, PathHashStack * stack)
+{
+	switch (v->type)
+	{
+		case jbvNull:
+			COMP_CRC32(stack->hash_state, "NULL", 5 /* include trailing \0 */ );
+			break;
+		case jbvBool:
+			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */ );
+			break;
+		case jbvNumeric:
+			stack->hash_state ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
+											   NumericGetDatum(v->numeric)));
+			break;
+		case jbvString:
+			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
+			break;
+		default:
+			elog(ERROR, "invalid jsonb scalar type");
+			break;
+	}
 }
