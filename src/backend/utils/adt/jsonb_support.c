@@ -61,7 +61,6 @@ typedef struct CompressState
 
 }	CompressState;
 
-static int compareJsonbPair(const void *a, const void *b, void *arg);
 static void walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb,
 									void *cb_arg, uint32 level);
 static void walkUncompressedJsonb(JsonbValue * v, walk_jsonb_cb cb,
@@ -79,7 +78,8 @@ static ToJsonbState *pushState(ToJsonbState ** state);
 static void appendArray(ToJsonbState * state, JsonbValue * v);
 static void appendKey(ToJsonbState * state, JsonbValue * v);
 static void appendValue(ToJsonbState * state, JsonbValue * v);
-static void uniqueJsonbValue(JsonbValue * v);
+static int compareJsonbPair(const void *a, const void *b, void *arg);
+static void uniqueifyJsonbValue(JsonbValue * v);
 
 /*
  * Turn a JsonbValue into a Jsonb
@@ -149,8 +149,8 @@ JsonbValueToJsonb(JsonbValue * v)
  * a and b are first sorted based on their length.  If a tie-breaker is
  * required, only then do we consider string binary equality.
  *
- * Third argument 'binequal' may point to a bool. If so, *binequal is set to
- * true iff strings have full binary equality, since some callers have an
+ * Third argument 'binequal' may point to a bool. If it's set, *binequal is set
+ * to true iff a and b have full binary equality, since some callers have an
  * interest in whether the two values are equal or merely equivalent.
  */
 int
@@ -308,8 +308,8 @@ compareJsonbBinaryValue(char *a, char *b)
 						break;
 					case jbvNumeric:
 						res = DatumGetInt32(DirectFunctionCall2(numeric_cmp,
-												 PointerGetDatum(v1.numeric),
-											   PointerGetDatum(v2.numeric)));
+																PointerGetDatum(v1.numeric),
+																PointerGetDatum(v2.numeric)));
 						break;
 					case jbvArray:
 						if (v1.array.nelems != v2.array.nelems)
@@ -401,8 +401,8 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 			else if (JBE_ISNUMERIC(*e) && key->type == jbvNumeric)
 			{
 				if (DatumGetBool(DirectFunctionCall2(numeric_eq,
-							   PointerGetDatum(data + INTALIGN(JBE_OFF(*e))),
-									 PointerGetDatum(key->numeric))) == true)
+													 PointerGetDatum(data + INTALIGN(JBE_OFF(*e))),
+													 PointerGetDatum(key->numeric))) == true)
 				{
 					r.type = jbvNumeric;
 					r.numeric = (Numeric) (data + INTALIGN(JBE_OFF(*e)));
@@ -502,8 +502,7 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 }
 
 /*
- * Just wrapped for findUncompressedJsonbValueByValue()
- * with simple string key representation
+ * findUncompressedJsonbValueByValue() wrapper that sets up JsonbValue key.
  */
 JsonbValue *
 findUncompressedJsonbValue(char *buffer, uint32 flags, uint32 *lowbound,
@@ -608,14 +607,16 @@ getJsonbValue(char *buffer, uint32 flags, int32 i)
 }
 
 /*
- * Pushes the value into state.  With r = WJB_END_OBJECT and v = NULL, it will
- * order and unique hash's keys otherwise we believe that pushed keys was
- * ordered and unique.
+ * Push JsonbValue into ToJsonbState.
+ *
+ * With r = WJB_END_OBJECT and v = NULL, this function sorts and unique-ifys
+ * the passed object's key values.  Otherwise, they are assumed to already be
+ * sorted and unique.
  *
  * Initial state of ToJsonbState is NULL.
  */
 JsonbValue *
-pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue * v)
+pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 {
 	JsonbValue *h = NULL;
 
@@ -662,14 +663,19 @@ pushJsonbValue(ToJsonbState ** state, int r /* WJB_* */ , JsonbValue * v)
 			break;
 		case WJB_END_OBJECT:
 			h = &(*state)->v;
-			/* v != NULL => we believe that keys were already sorted */
+			/*
+			 * When v != NULL and control reaches here, keys should already be
+			 * sorted
+			 */
 			if (v == NULL)
-				uniqueJsonbValue(h);
+				uniqueifyJsonbValue(h);
 
 			/*
-			 * No break here - end of "object" associative data structure
-			 * requires some extra work but the rest is the same as it is for
-			 * arrays.
+			 * No break statement here - fall through and perform those steps
+			 * required for the WJB_END_ARRAY case too.  The end of a jsonb
+			 * "object" associative structure may require us to first
+			 * unique-ify its values, but values must then be appended to state
+			 * in the same fashion as for an array.
 			 */
 		case WJB_END_ARRAY:
 			h = &(*state)->v;
@@ -712,9 +718,9 @@ JsonbIteratorGet(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 	check_stack_depth();
 
 	/*
-	 * Encode all possible states by one integer.  This is possible because
-	 * enum members of JsonbIterator->state use different bits than
-	 * JB_FLAG_ARRAY/JB_FLAG_OBJECT.  See definition of JsonbIterator
+	 * Encode all possible states in the "type" integer.  This is possible
+	 * because enum members of JsonbIterator->state use different bit values
+	 * than JB_FLAG_ARRAY/JB_FLAG_OBJECT.  See definition of JsonbIterator
 	 */
 	switch ((*it)->type | (*it)->state)
 	{
@@ -786,36 +792,8 @@ JsonbIteratorInit(char *buffer)
 	return it;
 }
 
-/*
- * qsort_arg() comparator to compare JsonbPair values.
- *
- * Function implemented in terms of compareJsonbStringValue(), and thus the
- * same "arg setting" hack will be applied here in respect of the pair's key
- * values.
- *
- * Pairs with equals keys are ordered such that the order field is respected.
- */
-static int
-compareJsonbPair(const void *a, const void *b, void *arg)
-{
-	const JsonbPair *pa = a;
-	const JsonbPair *pb = b;
-	int			res;
-
-	res = compareJsonbStringValue(&pa->key, &pb->key, arg);
-
-	/*
-	 * Guarantee keeping order of equal pair. Unique algorithm will prefer
-	 * first element as value.
-	 */
-	if (res == 0)
-		res = (pa->order > pb->order) ? -1 : 1;
-
-	return res;
-}
-
 /****************************************************************************
- *					  Walk the tree representation of jsonb					*
+ * Walk the tree representation of jsonb					*
  ****************************************************************************/
 static void
 walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg,
@@ -1055,7 +1033,7 @@ putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 
 		case jbvBinary:
 			{
 				int			addlen = INTALIGN(state->ptr - state->begin) -
-				(state->ptr - state->begin);
+					(state->ptr - state->begin);
 
 				switch (addlen)
 				{
@@ -1303,11 +1281,39 @@ appendValue(ToJsonbState * state, JsonbValue * v)
 }
 
 /*
+ * qsort_arg() comparator to compare JsonbPair values.
+ *
+ * Function implemented in terms of compareJsonbStringValue(), and thus the
+ * same "arg setting" hack will be applied here in respect of the pair's key
+ * values.
+ *
+ * Pairs with equals keys are ordered such that the order field is respected.
+ */
+static int
+compareJsonbPair(const void *a, const void *b, void *arg)
+{
+	const JsonbPair *pa = a;
+	const JsonbPair *pb = b;
+	int			res;
+
+	res = compareJsonbStringValue(&pa->key, &pb->key, arg);
+
+	/*
+	 * Guarantee keeping order of equal pair. Unique algorithm will prefer
+	 * first element as value.
+	 */
+	if (res == 0)
+		res = (pa->order > pb->order) ? -1 : 1;
+
+	return res;
+}
+
+/*
  * Sort and unique-ify pairs in JsonbValue (associative "object" data
  * structure)
  */
 static void
-uniqueJsonbValue(JsonbValue * v)
+uniqueifyJsonbValue(JsonbValue * v)
 {
 	bool		hasNonUniq = false;
 
