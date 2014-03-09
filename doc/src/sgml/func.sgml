@@ -10065,12 +10065,13 @@ table2-mapping
   </indexterm>
 
    <para>
-   <xref linkend="functions-json-op-table"> shows the operators that are
-   available for use with JSON (see <xref linkend="datatype-json">) data.
+   <xref linkend="functions-json-op-table"> shows the operators that
+   are available for use with the two JSON datatypes (see <xref
+   linkend="datatype-json">) data.
   </para>
 
   <table id="functions-json-op-table">
-     <title>JSON Operators</title>
+     <title><type>json</> and <type>jsonb</> Operators</title>
      <tgroup cols="4">
       <thead>
        <row>
@@ -10107,13 +10108,13 @@ table2-mapping
        </row>
        <row>
         <entry><literal>#&gt;</literal></entry>
-        <entry>array of text</entry>
+        <entry>text[]</entry>
         <entry>Get JSON object at specified path</entry>
         <entry><literal>'{"a":[1,2,3],"b":[4,5,6]}'::json#&gt;'{a,2}'</literal></entry>
        </row>
        <row>
         <entry><literal>#&gt;&gt;</literal></entry>
-        <entry>array of text</entry>
+        <entry>text[]</entry>
         <entry>Get JSON object at specified path as text</entry>
         <entry><literal>'{"a":[1,2,3],"b":[4,5,6]}'::json#&gt;&gt;'{a,2}'</literal></entry>
        </row>
@@ -10124,11 +10125,11 @@ table2-mapping
   <note>
    <para>
     There are parallel variants of these operators for both the
-    <type>json</type> type and the <type>jsonb</type> type.  In
-    addition to those operators common to both types, a further set of
-    operators exists for <type>jsonb</type>, listed below.  These
-    additional operators are principally intended to enable advanced
-    indexing, but have independent value.
+    <type>json</type> and <type>jsonb</type> types.  In addition to
+    those operators common to both types, a further set of operators
+    exists for <type>jsonb</type> (which comprise various
+    <acronym>GiST</acronym> and <acronym>GIN</acronym> operator
+    classes for indexing).
    </para>
   </note>
   <para>
@@ -10136,67 +10137,11 @@ table2-mapping
     The <type>jsonb</type> type uses a binary data representation,
     with <emphasis>nested</> types, and supports advanced
     <acronym>GiST</acronym> and <acronym>GIN</acronym> indexing.
-    Primitive types described by <acronym>RFC</> 7159 are effectively
-    mapped onto native <productname>PostgreSQL</productname> types.
-    Therefore, there are some very minor additional constraints on
-    what constitutes valid <type>jsonb</type> that do not apply to the
-    <type>json</type> type, or to JSON in the abstract, pertaining to
-    the upper limits on what can be represented by the underlying type
-    system.  These implementation-defined restrictions are permitted
-    by <acronym>RFC</> 7159.
   </para>
   <para>
-    Note that currently, the <type>jsonb</type>-only operators (which
-    comprise various <acronym>GiST</acronym> and
-    <acronym>GIN</acronym> operator classes for indexing) do not
-    permit searching for keys that are not at the least-nested level.
-    However, they can be used to efficiently search among more than
-    one possible key, or more than one possible key/value pair within
-    a single <type>jsonb</type> datum/document, among a large number
-    of such <quote>documents</> within a column in a table (i.e. among
-    many rows).
+   <xref linkend="json-indexing"> describes how these operators can be
+   used to effectively index <type>jsonb</>.
   </para>
-  <para>
-    Comparisons and related operations are <emphasis>type-wise</>, in
-    that the underlying <productname>PostgreSQL</productname> datatype
-    comparators are invoked recursively, much like a traditional
-    composite type.
-  </para>
-
-  <table id="functions-jsonb-type-mapping-table">
-     <title>PostgreSQL type to RFC-7159/JSON primitive type mapping</title>
-     <tgroup cols="3">
-      <thead>
-       <row>
-        <entry><productname>PostgreSQL</productname> type</entry>
-        <entry>RFC-7159/JSON primitive type</entry>
-        <entry>Notes</entry>
-       </row>
-      </thead>
-      <tbody>
-       <row>
-        <entry><literal>text</literal></entry>
-        <entry><literal>string</literal></entry>
-        <entry>See general notes on encoding and JSON below</entry>
-       </row>
-       <row>
-        <entry><literal>numeric</literal></entry>
-        <entry><literal>number</literal></entry>
-        <entry><literal>NaN</literal> and <literal>infinity</literal> values are specially disallowed</entry>
-       </row>
-       <row>
-        <entry><literal>boolean</literal></entry>
-        <entry><literal>boolean</literal></entry>
-        <entry>Only lowercase <literal>true</literal> and <literal>false</literal> values are accepted</entry>
-       </row>
-       <row>
-        <entry><literal>unknown</literal></entry>
-        <entry><literal>null</literal></entry>
-        <entry>SQL <literal>NULL</literal> is orthogonal to the <productname>PostgreSQL</productname> type system</entry>
-       </row>
-      </tbody>
-     </tgroup>
-   </table>
 
   <table id="functions-jsonb-op-table">
      <title>Additonal JSONB Operators</title>
@@ -10225,61 +10170,30 @@ table2-mapping
        <row>
         <entry><literal>&lt;@</literal></entry>
         <entry>jsonb</entry>
-        <entry>Does the jsonb have contained within it this jsonb object?</entry>
+        <entry>Does the jsonb have contained within it this jsonb?</entry>
         <entry><literal>'{"b":2}'::jsonb &lt;@ '{"a":1, "b":2}'::jsonb</literal></entry>
        </row>
        <row>
         <entry><literal>?</literal></entry>
         <entry>text</entry>
-        <entry>Does this key exist?</entry>
+        <entry>Does this key/element exist?</entry>
         <entry><literal>'{"a":1, "b":2}'::jsonb ? 'b'</literal></entry>
        </row>
        <row>
         <entry><literal>?|</literal></entry>
         <entry>text[]</entry>
-        <entry>Do any of these keys exist?</entry>
-        <entry><literal>'{"a":1, "b":2}'::jsonb ?| array['b', 'c']</literal></entry>
+        <entry>Do any of these keys/elements exist?</entry>
+        <entry><literal>'{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'c']</literal></entry>
        </row>
        <row>
         <entry><literal>?&amp;</literal></entry>
         <entry>text[]</entry>
-        <entry>Do all of these keys exist?</entry>
-        <entry><literal>'{"a":1, "b":2}'::jsonb ?&amp; array['a', 'b']</literal></entry>
+        <entry>Do all of these keys/elements exist?</entry>
+        <entry><literal>'["a", "b"]'::jsonb ?&amp; array['a', 'b']</literal></entry>
        </row>
       </tbody>
      </tgroup>
    </table>
-
-  <para>
-    <type>jsonb</> has GiST and GIN index support for the
-    <literal>@&gt;</>, <literal>?</>, <literal>?&amp;</> and
-    <literal>?|</> operators. For example:
-  </para>
-  <programlisting>
-CREATE INDEX hidx ON testhstore USING GIST (h);
-
-CREATE INDEX hidx ON testhstore USING GIN (h);
-  </programlisting>
-  <para>
-    The non-default GIN operator class <literal>jsonb_hash_ops</>
-    supports indexing the <literal>@&gt;</> operator only:
-  </para>
-  <programlisting>
-CREATE INDEX hidx ON testhstore USING GIN (h jsonb_hash_ops);
-  </programlisting>
-  <para>
-    Although only the <literal>@&gt;</> operator is made indexable, a
-    <literal>jsonb_hash_ops</literal> operator class GIN index has
-    some notable advantages over an equivalent GIN index of the
-    default GIN operator class for <type>jsonb</type>.  Search
-    operations typically perform appreciably better, and the on-disk
-    size of a <literal>jsonb_hash_ops</literal> operator class GIN
-    index can be much smaller.
-  </para>
-  <para>
-    <type>jsonb</> also supports <type>btree</> and <type>hash</>
-    indexes.
-  </para>
 
   <!--
      The release notes contain a reference to "functions-json-table". Since

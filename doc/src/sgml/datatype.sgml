@@ -4226,72 +4226,7 @@ SET xmloption TO { DOCUMENT | CONTENT };
    </sect2>
   </sect1>
 
-  <sect1 id="datatype-json">
-   <title><acronym>JSON</> Types</title>
-
-   <indexterm zone="datatype-json">
-    <primary>JSON</primary>
-   </indexterm>
-
-   <indexterm zone="datatype-json">
-    <primary>JSONB</primary>
-   </indexterm>
-
-   <para>
-    JSON data types are for storing JSON (JavaScript Object Notation)
-    data, as specified in
-    <ulink url="http://rfc7159.net/rfc7159">RFC 7159</ulink>. Such
-    data can also be stored as <type>text</type>, but the JSON data
-    types have the advantage of enforcing that each stored value is a
-    valid JSON value. There are also related support functions
-    available; see <xref linkend="functions-json">.
-   </para>
-
-   <para>
-    There are two JSON data types: <type>json</type> and
-    <type>jsonb</type>.  Both accept <emphasis>almost</emphasis>
-    identical sets of values as input. The difference is primarily a
-    matter of efficiency.  The <type>json</type> data type stores an
-    exact copy of the the input text, which processing functions must
-    continually reparse, while the <type>jsonb</type> is stored in a
-    decomposed binary format that makes it slightly less efficient to
-    input due to added serialization overhead, but significantly
-    faster to process, since it never needs reparsing.
-    <type>jsonb</type> also supports advanced <acronym>GiST</acronym>
-    and <acronym>GIN</acronym> indexing, which is a further
-    significant advantage.
-   </para>
-
-   <para>
-    The other difference between the types is that the
-    <type>json</type> type is guaranteed to contain an exact copy of
-    the input, including preservation of semantically insignificant
-    white space, and the order of keys within JSON objects. Also,
-    because the exact text is kept, if a JSON object within the value
-    contains the same key more than once, all the key/value pairs are
-    kept. In that case, the processing functions consider the last
-    value as the operative one. By contrast, <type>jsonb</type> does
-    not preserve white space, does not preserve the order of object
-    keys, and does not keep duplicate object keys. Only the last value
-    for a key specified in the input is kept.
-   </para>
-
-   <para>
-    In general, most applications will prefer to store JSON data as
-    <type>jsonb</type>, unless there are quite specialised needs.
-   </para>
-
-   <para>
-    <productname>PostgreSQL</productname> allows only one server encoding
-    per database.  It is therefore not possible for the JSON types to conform
-    rigidly to the specification unless the server encoding is UTF-8. Attempts
-    to directly include characters which cannot be represented in the server
-    encoding will fail; conversely, characters which can be represented in
-    the server encoding but not in UTF-8 will be allowed.
-    <literal>\uXXXX</literal> escapes are allowed regardless of the server
-    encoding, and are checked only for syntactic correctness.
-   </para>
-  </sect1>
+  &json;
 
   &array;
 
