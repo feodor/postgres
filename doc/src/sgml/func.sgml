@@ -10067,7 +10067,7 @@ table2-mapping
    <para>
    <xref linkend="functions-json-op-table"> shows the operators that
    are available for use with the two JSON datatypes (see <xref
-   linkend="datatype-json">) data.
+   linkend="datatype-json">).
   </para>
 
   <table id="functions-json-op-table">
@@ -10133,16 +10133,11 @@ table2-mapping
    </para>
   </note>
   <para>
-    The <type>json</type> type is a textual representation of JSON.
-    The <type>jsonb</type> type uses a binary data representation,
-    with <emphasis>nested</> types, and supports advanced
-    <acronym>GiST</acronym> and <acronym>GIN</acronym> indexing.
+   The following are <type>jsonb</>-only operators, used by
+   <type>jsonb</> operator classes.  <xref linkend="json-indexing">
+   describes how these operators can be used to effectively index
+   <type>jsonb</>.
   </para>
-  <para>
-   <xref linkend="json-indexing"> describes how these operators can be
-   used to effectively index <type>jsonb</>.
-  </para>
-
   <table id="functions-jsonb-op-table">
      <title>Additonal JSONB Operators</title>
      <tgroup cols="4">
