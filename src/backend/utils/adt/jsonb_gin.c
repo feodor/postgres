@@ -105,7 +105,7 @@ gin_extract_jsonb_query(PG_FUNCTION_ARGS)
 			DatumGetPointer(DirectFunctionCall2(gin_extract_jsonb,
 												PG_GETARG_DATUM(0),
 												PointerGetDatum(nentries)));
-		/* ...except for "contains {}", which requires a full index scan */
+		/* ...although "contains {}" requires a full index scan */
 		if (entries == NULL)
 			*searchMode = GIN_SEARCH_MODE_ALL;
 	}
@@ -372,7 +372,7 @@ gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS)
 			DatumGetPointer(DirectFunctionCall2(gin_extract_jsonb_hash,
 												PG_GETARG_DATUM(0),
 												PointerGetDatum(nentries)));
-		/* ... although "contains {}" requires a full index scan */
+		/* ...although "contains {}" requires a full index scan */
 		if (entries == NULL)
 			*searchMode = GIN_SEARCH_MODE_ALL;
 	}
@@ -423,9 +423,9 @@ makeitemFromValue(JsonbValue * v, char flag)
 			break;
 		case jbvNumeric:
 			/*
-			 * A textual, locale/precision independent representation of
-			 * numeric is required.  Use the standard hash_numeric to build
-			 * one.
+			 * A locale/precision independent textual representation of a
+			 * numeric value is required.  Use the standard hash_numeric to
+			 * build one.
 			 */
 			cstr = palloc(8 /* hex numbers */ + 1 /* \0 */ );
 			snprintf(cstr, 9, "%08x", DatumGetInt32(DirectFunctionCall1(hash_numeric,
