@@ -385,7 +385,9 @@ gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(entries);
 }
 
-/* Build an indexable text value */
+/*
+ * Build an indexable text value from a cstring and flag
+ */
 static text *
 makeitem(const char *str, int len, char flag)
 {
