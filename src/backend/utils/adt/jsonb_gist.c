@@ -22,7 +22,7 @@
 
 /* bigint defines */
 #define BITBYTE			8
-#define SIGLENINT  		4			/* >122 => key will toast, so very slow! */
+#define SIGLENINT  		4			/* > 122 => key be will toasted */
 #define SIGLEN			(sizeof(int)*SIGLENINT)
 #define SIGLENBIT		(SIGLEN*BITBYTE)
 
@@ -38,20 +38,19 @@ typedef char *BITVECP;
 			for(i=0;i<SIGLENBIT;i++)
 
 /* Beware of multiple evaluation of arguments to these macros! */
-#define GETBYTE(x,i) ( *( (BITVECP)(x) + (int)( (i) / BITBYTE ) ) )
-#define GETBITBYTE(x,i) ( (*((char*)(x)) >> (i)) & 0x01 )
-#define CLRBIT(x,i)   GETBYTE(x,i) &= ~( 0x01 << ( (i) % BITBYTE ) )
-#define SETBIT(x,i)   GETBYTE(x,i) |=  ( 0x01 << ( (i) % BITBYTE ) )
-#define GETBIT(x,i) ( (GETBYTE(x,i) >> ( (i) % BITBYTE )) & 0x01 )
-#define HASHVAL(val) (((unsigned int)(val)) % SIGLENBIT)
-#define HASH(sign, val) SETBIT((sign), HASHVAL(val))
+#define GETBYTE(x,i)		(*((BITVECP)(x) + (int)( (i) / BITBYTE )))
+#define GETBITBYTE(x,i)		((*((char*)(x)) >> (i)) & 0x01)
+#define CLRBIT(x,i)   		GETBYTE(x,i) &= ~( 0x01 << ( (i) % BITBYTE ))
+#define SETBIT(x,i)   		GETBYTE(x,i) |=  ( 0x01 << ( (i) % BITBYTE ))
+#define GETBIT(x,i) 		((GETBYTE(x,i) >> ( (i) % BITBYTE )) & 0x01)
+#define HASHVAL(val)		(((unsigned int)(val)) % SIGLENBIT)
+#define HASH(sign, val)		SETBIT((sign), HASHVAL(val))
 
-#define ALLISTRUE		0x04
-#define ISALLTRUE(x)	( ((GISTTYPE*)x)->flag & ALLISTRUE )
-#define GTHDRSIZE		(VARHDRSZ + sizeof(int32))
-#define CALCGTSIZE(flag) ( GTHDRSIZE+(((flag) & ALLISTRUE) ? 0 : SIGLEN) )
-#define GETSIGN(x)		( (BITVECP)( (char*)x+GTHDRSIZE ) )
-
+#define ALLISTRUE			0x04
+#define ISALLTRUE(x)		(((GISTTYPE*)x)->flag & ALLISTRUE)
+#define GTHDRSIZE			(VARHDRSZ + sizeof(int32))
+#define CALCGTSIZE(flag)	(GTHDRSIZE+(((flag) & ALLISTRUE) ? 0 : SIGLEN))
+#define GETSIGN(x)			((BITVECP)( (char*)x+GTHDRSIZE))
 #define SUMBIT(val) (		\
 	GETBITBYTE((val),0) + \
 	GETBITBYTE((val),1) + \
@@ -63,8 +62,8 @@ typedef char *BITVECP;
 	GETBITBYTE((val),7)   \
 )
 
-#define GETENTRY(vec,pos) ((GISTTYPE *) DatumGetPointer((vec)->vector[(pos)].key))
-#define WISH_F(a,b,c) (double)( -(double)(((a)-(b))*((a)-(b))*((a)-(b)))*(c) )
+#define GETENTRY(vec,pos)	((GISTTYPE *) DatumGetPointer((vec)->vector[(pos)].key))
+#define WISH_F(a,b,c) 		((double) ( -(double)(((a)-(b))*((a)-(b))*((a)-(b)))*(c)))
 
 typedef struct
 {
@@ -575,8 +574,9 @@ crc32_JsonbValue(JsonbValue * v, uint32 r)
 	{
 		case WJB_KEY:
 			/*
-			 * An element of an array is serialized as a key for our purposes.
-			 * This is necessary because array elements are also keys.
+			 * Serialize keys and elements as one.  This is necessary because
+			 * array elements must be indexed as keys for the benefit of
+			 * JsonbContainsStrategyNumber.
 			 */
 		case WJB_ELEM:
 			flag = KEYELEMFLAG;

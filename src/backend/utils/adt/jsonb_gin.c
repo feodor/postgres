@@ -70,9 +70,9 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 		{
 			case WJB_KEY:
 				/*
-				 * An element of an array is serialized as a key for our
-				 * purposes.  This is necessary because array elements are also
-				 * keys.
+				 * Serialize keys and elements as one.  This is necessary
+				 * because array elements must be indexed as keys for the
+				 * benefit of JsonbContainsStrategyNumber.
 				 */
 			case WJB_ELEM:
 				entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYELEMFLAG));
@@ -105,7 +105,7 @@ gin_extract_jsonb_query(PG_FUNCTION_ARGS)
 			DatumGetPointer(DirectFunctionCall2(gin_extract_jsonb,
 												PG_GETARG_DATUM(0),
 												PointerGetDatum(nentries)));
-		/* ... except that "contains {}" requires a full index scan */
+		/* ...except for "contains {}", which requires a full index scan */
 		if (entries == NULL)
 			*searchMode = GIN_SEARCH_MODE_ALL;
 	}
@@ -180,8 +180,9 @@ gin_consistent_jsonb(PG_FUNCTION_ARGS)
 	{
 		/*
 		 * Index doesn't have information about correspondence of keys and
-		 * values, so we must recheck.	However, if all of the keys are not
-		 * present, we can fail immediately.
+		 * values, so invariably we recheck.  However, if all of the keys are
+		 * not present, that's sufficient reason to return false and finish
+		 * immediately.
 		 */
 		*recheck = true;
 		for (i = 0; i < nkeys; i++)
@@ -246,9 +247,10 @@ gin_consistent_jsonb_hash(PG_FUNCTION_ARGS)
 	if (strategy == JsonbContainsStrategyNumber)
 	{
 		/*
-		 * Index doesn't have information about correspondence of keys and
-		 * values, so we must recheck.	However, if not all of the keys are
-		 * present, we can fail immediately.
+		 * jsonb_hash_ops index doesn't have information about correspondence
+		 * of keys and values, so invariably we recheck.  However, if all of
+		 * the keys are not present, that's sufficient reason to return false
+		 * and finish immediately.
 		 */
 		*recheck = true;
 		for (i = 0; i < nkeys; i++)
@@ -298,7 +300,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 
 	/*
 	 * Calculate hashes of all key_1.key_2. ... .key_n.value paths as entries.
-	 * Order of array elements doesn't matter so array keys are empty in path.
+	 * Order of array elements doesn't matter, so array keys are empty in path.
 	 * For faster calculation of hashes, use a stack of precalculated hashes of
 	 * prefixes.
 	 */
