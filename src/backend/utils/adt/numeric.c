@@ -627,6 +627,45 @@ numeric_out_sci(Numeric num, int scale)
 }
 
 /*
+ * numeric_normalize() -
+ *
+ *	Output function for numeric data type without trailing zeroes.
+ */
+char *
+numeric_normalize(Numeric num)
+{
+	NumericVar	x;
+	char	   *str;
+	Size		last;
+
+	/*
+	 * Handle NaN
+	 */
+	if (NUMERIC_IS_NAN(num))
+		return pstrdup("NaN");
+
+	init_var_from_num(num, &x);
+
+	str = get_str_from_var(&x);
+
+	last = strlen(str) - 1;
+
+	for (;;)
+	{
+		if (str[last] != '0')
+			break;
+
+		str[last] = '\0';
+		last--;
+	}
+
+	if (str[last] == '.')
+		str[last] = '\0';
+
+	return str;
+}
+
+/*
  *		numeric_recv			- converts external binary format to numeric
  *
  * External format is a sequence of int16's:

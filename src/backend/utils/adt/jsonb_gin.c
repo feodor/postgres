@@ -27,9 +27,9 @@ typedef struct PathHashStack
 	struct PathHashStack *next;
 }	PathHashStack;
 
-static text *makeitem(char *str, int len, char flag);
-static text *makeitemFromValue(JsonbValue * v, char flag);
-static void hash_value(JsonbValue * v, PathHashStack * stack);
+static text *makeitem(const char *str, int len, char flag);
+static text *makeitemFromValue(const JsonbValue * v, char flag);
+static void hash_stack_value(const JsonbValue * v, PathHashStack * stack);
 
 /*
  *
@@ -300,9 +300,9 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 
 	/*
 	 * Calculate hashes of all key_1.key_2. ... .key_n.value paths as entries.
-	 * Order of array elements doesn't matter, so array keys are empty in path.
-	 * For faster calculation of hashes, use a stack of precalculated hashes of
-	 * prefixes.
+	 * The order of array elements doesn't matter, so array keys are empty in
+	 * path.  For faster calculation of hashes, use a stack of precalculated
+	 * hashes of prefixes.
 	 */
 	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
 	{
@@ -330,12 +330,12 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 			case WJB_KEY:
 				/* Calc hash of key and separated into preserved stack item */
 				stack->hash_state = stack->next->hash_state;
-				hash_value(&v, stack);
+				hash_stack_value(&v, stack);
 				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
 				break;
 			case WJB_VALUE:
 			case WJB_ELEM:
-				hash_value(&v, stack);
+				hash_stack_value(&v, stack);
 				path_crc32 = stack->hash_state;
 				FIN_CRC32(path_crc32);
 				entries[i++] = path_crc32;
@@ -387,7 +387,7 @@ gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS)
 
 /* Build an indexable text value */
 static text *
-makeitem(char *str, int len, char flag)
+makeitem(const char *str, int len, char flag)
 {
 	text	   *item;
 
@@ -404,11 +404,9 @@ makeitem(char *str, int len, char flag)
 
 /*
  * Create a textual representation of a jsonbValue for GIN storage.
- *
- * N.B: This should only be called where the recheck flag will be set.
  */
 static text *
-makeitemFromValue(JsonbValue * v, char flag)
+makeitemFromValue(const JsonbValue * v, char flag)
 {
 	text	   *item;
 	char	   *cstr;
@@ -423,14 +421,11 @@ makeitemFromValue(JsonbValue * v, char flag)
 			break;
 		case jbvNumeric:
 			/*
-			 * A locale/precision independent textual representation of a
-			 * numeric value is required.  Use the standard hash_numeric to
-			 * build one.
+			 * A normalized textual representation, free of trailing zeroes is
+			 * is required.
 			 */
-			cstr = palloc(8 /* hex numbers */ + 1 /* \0 */ );
-			snprintf(cstr, 9, "%08x", DatumGetInt32(DirectFunctionCall1(hash_numeric,
-											  NumericGetDatum(v->numeric))));
-			item = makeitem(cstr, 8, flag);
+			cstr = numeric_normalize(v->numeric);
+			item = makeitem(cstr, strlen(cstr), flag);
 			pfree(cstr);
 			break;
 		case jbvString:
@@ -443,18 +438,24 @@ makeitemFromValue(JsonbValue * v, char flag)
 	return item;
 }
 
+/*
+ * Hash a JsonbValue, and push it on to our stack
+ */
 static void
-hash_value(JsonbValue * v, PathHashStack * stack)
+hash_stack_value(const JsonbValue * v, PathHashStack * stack)
 {
 	switch (v->type)
 	{
 		case jbvNull:
-			COMP_CRC32(stack->hash_state, "NULL", 5 /* include trailing \0 */ );
+			COMP_CRC32(stack->hash_state, "n", 2);
 			break;
 		case jbvBool:
-			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2 /* include trailing \0 */ );
+			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2);
 			break;
 		case jbvNumeric:
+			/*
+			 * A hash value unaffected by trailing zeroes is required.
+			 */
 			stack->hash_state ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,
 											   NumericGetDatum(v->numeric)));
 			break;

@@ -600,6 +600,9 @@ crc32_JsonbValue(JsonbValue * v, uint32 r)
 			COMP_CRC32(crc, &flag, 1);
 			break;
 		case jbvNumeric:
+			/*
+			 * A hash value unaffected by trailing zeros is required.
+			 */
 			crc = DatumGetInt32(DirectFunctionCall1(hash_numeric,
 													NumericGetDatum(v->numeric)));
 			break;
