@@ -80,7 +80,8 @@
     implementation-defined restrictions are permitted by
     <acronym>RFC</> 7159.  Conversely, there are some minor
     restrictions on the input format of JSON primitive types that do
-    not apply to related <productname>PostgreSQL</productname> type.
+    not apply to corresponding <productname>PostgreSQL</productname>
+    types.
   </para>
 
   <table id="json-type-mapping-table">
@@ -102,7 +103,7 @@
        <row>
         <entry><literal>numeric</literal></entry>
         <entry><literal>number</literal></entry>
-        <entry><literal>NaN</literal> and <literal>infinity</literal> values are specially disallowed</entry>
+        <entry><literal>NaN</literal> and <literal>infinity</literal> values are disallowed</entry>
        </row>
        <row>
         <entry><literal>boolean</literal></entry>
@@ -192,9 +193,9 @@ SELECT '{"bar": "baz", "balance": 7.77, "active":false}'::jsonb;
     (i.e. among many rows).
   </para>
   <para>
-    This restriction is actually far less onerous than it might first
-    appear;  expressional indexes can be used extensively to
-    support indexing of nested elements.
+    The nesting restriction is far less onerous than it might first
+    appear;  expressional indexes can be used to support indexing of
+    nested elements.
   </para>
   <para>
     <type>jsonb</> has GiST and GIN index support for the
@@ -203,10 +204,10 @@ SELECT '{"bar": "baz", "balance": 7.77, "active":false}'::jsonb;
     classes makes all these operators indexable:
   </para>
   <programlisting>
--- GiST index
+-- GiST index (default opclass)
 CREATE INDEX idxgist ON api USING GIST (jdoc);
 
--- GIN index
+-- GIN index (default opclass)
 CREATE INDEX idxgin ON api USING GIN (jdoc);
 
 -- GIN jsonb_hash_ops index
@@ -255,9 +256,9 @@ SELECT jdoc->'guid', jdoc->'name' FROM api WHERE jdoc -> 'tags' ? 'qui';
     </programlisting>
     Still, with judicious use of expressional indexing, the above
     query can use an index scan.  If there is a requirement to find
-    those records with a particular tag quickly, and the tags have
-    high <emphasis>cardinality</emphasis>, defining an index as
-    follows is likely to be helpful:
+    those records with a particular tag quickly, and the tags have a
+    high cardinality across all documents, defining an index as
+    follows is an effective approach to indexing:
   <programlisting>
 CREATE INDEX idxgin ON api USING GIN ((jdoc -> 'tags'));
   </programlisting>
@@ -277,7 +278,7 @@ CREATE INDEX idxgin ON api USING GIN ((jdoc -> 'tags'));
   </para>
   <para>
    For full details of the semantics that these indexable operators
-   represent, see <xref linkend="functions-jsonb-op-table">.
+   implement, see <xref linkend="functions-jsonb-op-table">.
   </para>
  </sect2>
  <sect2 id="json-btree-indexing">
