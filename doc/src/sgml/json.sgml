@@ -69,23 +69,8 @@
 
  <sect2 id="json-types">
   <title>Mapping of RFC-7159/JSON Primitive Types to <productname>PostgreSQL</productname> Types</title>
-  <para>
-    Primitive types described by <acronym>RFC</> 7159 are effectively
-    internally mapped onto native
-    <productname>PostgreSQL</productname> types.  Therefore, there are
-    some very minor additional constraints on what constitutes valid
-    <type>jsonb</type> that do not apply to the <type>json</type>
-    type, or to JSON in the abstract, pertaining to the upper limits
-    on what can be represented by the underlying type system.  These
-    implementation-defined restrictions are permitted by
-    <acronym>RFC</> 7159.  Conversely, there are some minor
-    restrictions on the input format of JSON primitive types that do
-    not apply to corresponding <productname>PostgreSQL</productname>
-    types.
-  </para>
-
   <table id="json-type-mapping-table">
-     <title>PostgreSQL type to RFC-7159/JSON primitive type mapping</title>
+     <title>Mapping of type correspondence, notes</title>
      <tgroup cols="3">
       <thead>
        <row>
@@ -96,28 +81,52 @@
       </thead>
       <tbody>
        <row>
-        <entry><literal>text</literal></entry>
-        <entry><literal>string</literal></entry>
+        <entry><type>text</></entry>
+        <entry><type>string</></entry>
         <entry>See general introductory notes on encoding and JSON</entry>
        </row>
        <row>
-        <entry><literal>numeric</literal></entry>
-        <entry><literal>number</literal></entry>
+        <entry><type>numeric</></entry>
+        <entry><type>number</></entry>
         <entry><literal>NaN</literal> and <literal>infinity</literal> values are disallowed</entry>
        </row>
        <row>
-        <entry><literal>boolean</literal></entry>
-        <entry><literal>boolean</literal></entry>
+        <entry><type>boolean</></entry>
+        <entry><type>boolean</></entry>
         <entry>Only lowercase <literal>true</literal> and <literal>false</literal> values are accepted</entry>
        </row>
        <row>
-        <entry><literal>unknown</literal></entry>
-        <entry><literal>null</literal></entry>
+        <entry><type>unknown</></entry>
+        <entry><type>null</></entry>
         <entry>SQL <literal>NULL</literal> is orthogonal.  NULL semantics do not apply.</entry>
        </row>
       </tbody>
      </tgroup>
    </table>
+  <para>
+    Primitive types described by <acronym>RFC</> 7159 are effectively
+    internally mapped onto native
+    <productname>PostgreSQL</productname> types.  Therefore, there are
+    some very minor additional constraints on what constitutes valid
+    <type>jsonb</type> that do not apply to the <type>json</type>
+    type, or to JSON in the abstract, that pertain to limits on what
+    can be represented by the underlying type system.  These
+    implementation-defined restrictions are permitted by
+    <acronym>RFC</> 7159.  However, in practice problems are far more
+    likely to occur in other implementations which internally
+    represent the <type>number</> JSON primitive type as IEEE 754
+    double precision floating point values, which <acronym>RFC</> 7159
+    explicitly anticipates and allows for.  The danger of losing
+    numeric precision in respect of data originating in
+    <productname>PostgreSQL</productname> is such a system should be
+    considered.
+  </para>
+  <para>
+    Conversely, as noted above there are some minor restrictions on
+    the input format of JSON primitive types that do not apply to
+    corresponding <productname>PostgreSQL</productname> types.
+  </para>
+
  </sect2>
 
  <sect2 id="json-querying">
