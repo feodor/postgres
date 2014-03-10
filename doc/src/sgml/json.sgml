@@ -113,7 +113,7 @@
        <row>
         <entry><literal>unknown</literal></entry>
         <entry><literal>null</literal></entry>
-        <entry>SQL <literal>NULL</literal> is orthogonal to the <productname>PostgreSQL</productname> type system.  NULL semantics do not apply.</entry>
+        <entry>SQL <literal>NULL</literal> is orthogonal.  NULL semantics do not apply.</entry>
        </row>
       </tbody>
      </tgroup>
