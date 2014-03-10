@@ -305,12 +305,12 @@ CREATE INDEX idxgin ON api USING GIN ((jdoc -> 'tags'));
       compared lexically, using the default database collation.
       Objects with equal numbers of keys are compared:
     <synopsis>
-      <replaceable>key-1</replaceable>, <replaceable>value-1</replaceable>, <replaceable>key-2</replaceable>...
+      <replaceable>key-1</replaceable>, <replaceable>value-1</replaceable>, <replaceable>key-2</replaceable> ...
     </synopsis>
       Similarly, arrays with equal
       numbers of elements are compared:
     <synopsis>
-      <replaceable>element-1</replaceable>, <replaceable>element-2</replaceable>...
+      <replaceable>element-1</replaceable>, <replaceable>element-2</replaceable> ...
     </synopsis>
   </para>
  </sect2>
