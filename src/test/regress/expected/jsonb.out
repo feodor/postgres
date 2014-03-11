@@ -1381,67 +1381,6 @@ SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
     42
 (1 row)
 
-CREATE INDEX jidx ON testjsonb USING gist(j);
-SET enable_seqscan = off;
-SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';
- count 
--------
-     1
-(1 row)
-
-SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
- count 
--------
-    15
-(1 row)
-
-SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
- count 
--------
-     2
-(1 row)
-
-SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
- count 
--------
-     2
-(1 row)
-
-SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
- count 
--------
-     2
-(1 row)
-
-SELECT count(*) FROM testjsonb WHERE j ? 'public';
- count 
--------
-   194
-(1 row)
-
-SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
- count 
--------
-   337
-(1 row)
-
-SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
- count 
--------
-    42
-(1 row)
-
--- array exists - array elements should behave as keys (for GiST index scans too)
-CREATE INDEX jidx_array ON testjsonb USING gist((j->'array'));
-SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
- count 
--------
-     3
-(1 row)
-
-RESET enable_seqscan;
-DROP INDEX jidx;
-DROP INDEX jidx_array;
 CREATE INDEX jidx ON testjsonb USING gin (j);
 SET enable_seqscan = off;
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';

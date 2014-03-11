@@ -30,8 +30,8 @@
   makes it slightly less efficient to input due to added serialization
   overhead, but significantly faster to process, since it never needs
   reparsing.  <type>jsonb</> also supports advanced
-  <acronym>GiST</acronym> and <acronym>GIN</acronym> indexing, which
-  is a further significant advantage.
+  <acronym>GIN</acronym> indexing, which is a further significant
+  advantage.
  </para>
 
  <para>
@@ -185,7 +185,7 @@ SELECT '{"bar": "baz", "balance": 7.77, "active":false}'::jsonb;
   </para>
  </sect2>
  <sect2 id="json-indexing">
-  <title><type>jsonb</> GiST and GIN Indexing</title>
+  <title><type>jsonb</> GIN Indexing</title>
   <indexterm>
     <primary>jsonb</primary>
     <secondary>indexes on</secondary>
@@ -207,15 +207,12 @@ SELECT '{"bar": "baz", "balance": 7.77, "active":false}'::jsonb;
     nested elements.
   </para>
   <para>
-    <type>jsonb</> has GiST and GIN index support for the
-    <literal>@&gt;</>, <literal>?</>, <literal>?&amp;</> and
-    <literal>?|</> operators. The default GiST and GIN operator
-    classes makes all these operators indexable:
+    <type>jsonb</> has GIN index support for the <literal>@&gt;</>,
+    <literal>?</>, <literal>?&amp;</> and <literal>?|</> operators.
+    The default GIN operator class makes all these operators
+    indexable:
   </para>
   <programlisting>
--- GiST index (default opclass)
-CREATE INDEX idxgist ON api USING GIST (jdoc);
-
 -- GIN index (default opclass)
 CREATE INDEX idxgin ON api USING GIN (jdoc);
 
@@ -250,8 +247,8 @@ CREATE INDEX idxginh ON api USING GIN (jdoc jsonb_hash_ops);
     ]
 }
     </programlisting>
-    If a GiST or GIN index were to be created on the table that stores
-    these documents, <literal>api</literal>, on its <literal>jdoc</>
+    If a GIN index is created on the table that stores these
+    documents, <literal>api</literal>, on its <literal>jdoc</>
     <type>jsonb</> column, we can expect that queries like the
     following may make use of the index:
     <programlisting>

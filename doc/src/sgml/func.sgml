@@ -10141,9 +10141,8 @@ table2-mapping
     There are parallel variants of these operators for both the
     <type>json</type> and <type>jsonb</type> types.  In addition to
     those operators common to both types, a further set of operators
-    exists for <type>jsonb</type> (which comprise various
-    <acronym>GiST</acronym> and <acronym>GIN</acronym> operator
-    classes for indexing).
+    exists for <type>jsonb</type> (which comprise the default
+    <acronym>GIN</acronym> operator class).
    </para>
   </note>
   <para>

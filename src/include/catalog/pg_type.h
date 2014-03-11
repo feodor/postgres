@@ -611,8 +611,6 @@ DATA(insert OID = 3802 ( jsonb			PGNSP PGUID -1 f b C f t \054 0 0 3807 jsonb_in
 DESCR("Binary JSON");
 #define JSONBOID 3802
 DATA(insert OID = 3807 ( _jsonb			PGNSP PGUID -1 f b A f t \054 0 3802 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
-DATA(insert OID = 3801 ( gjsonb			PGNSP PGUID -1 f b U f t \054 0 0 3800 gjsonb_in gjsonb_out - - - - - i p f 0 -1 0 0 _null_ _null_ _null_ ));
-DATA(insert OID = 3800 ( _gjsonb		PGNSP PGUID -1 f b A f t \054 0 3801 0 array_in array_out array_recv array_send - - array_typanalyze i x f 0 -1 0 0 _null_ _null_ _null_ ));
 
 DATA(insert OID = 2970 ( txid_snapshot	PGNSP PGUID -1 f b U f t \054 0 0 2949 txid_snapshot_in txid_snapshot_out txid_snapshot_recv txid_snapshot_send - - - d x f 0 -1 0 0 _null_ _null_ _null_ ));
 DESCR("txid snapshot");

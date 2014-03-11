@@ -792,15 +792,6 @@ DATA(insert (	4033   3802 3802 5 s	3243 403 0 ));
 DATA(insert (	4034   3802 3802 1 s 3240 405 0 ));
 
 /*
- * GiST jsonb ops
- */
-DATA(insert (	4035   3802 3802 7 s 3246 783 0 ));
-DATA(insert (	4035   3802 25 9 s 3247 783 0 ));
-DATA(insert (	4035   3802 1009 10 s 3248 783 0 ));
-DATA(insert (	4035   3802 1009 11 s 3249 783 0 ));
-DATA(insert (	4035   3802 3802 13 s 3250 783 0 ));
-
-/*
  * GIN jsonb ops
  */
 DATA(insert (	4036   3802 3802 7 s 3246 2742 0 ));

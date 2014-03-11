@@ -48,10 +48,10 @@
 #define WJB_END_OBJECT		(0x040)
 
 /*
- * When using a GIN/GiST index for jsonb, we choose to index both keys and
- * values.  The storage format is "text" values, with K, V, or N prepended to
- * the string to indicate key, value, or null values.  (As of 9.1 it might be
- * better to store null values as nulls, but we'll keep it this way for on-disk
+ * When using a GIN index for jsonb, we choose to index both keys and values.
+ * The storage format is "text" values, with K, V, or N prepended to the string
+ * to indicate key, value, or null values.  (As of 9.1 it might be better to
+ * store null values as nulls, but we'll keep it this way for on-disk
  * compatibility.)
  *
  * jsonb Keys and elements are treated equivalently when serialized to text
@@ -219,18 +219,6 @@ extern Datum gin_consistent_jsonb(PG_FUNCTION_ARGS);
 extern Datum gin_extract_jsonb_hash(PG_FUNCTION_ARGS);
 extern Datum gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS);
 extern Datum gin_consistent_jsonb_hash(PG_FUNCTION_ARGS);
-
-/* GiST support functions */
-extern Datum gjsonb_consistent(PG_FUNCTION_ARGS);
-extern Datum gjsonb_union(PG_FUNCTION_ARGS);
-extern Datum gjsonb_compress(PG_FUNCTION_ARGS);
-extern Datum gjsonb_decompress(PG_FUNCTION_ARGS);
-extern Datum gjsonb_penalty(PG_FUNCTION_ARGS);
-extern Datum gjsonb_picksplit(PG_FUNCTION_ARGS);
-extern Datum gjsonb_same(PG_FUNCTION_ARGS);
-/* Dummy GiST routines */
-extern Datum gjsonb_in(PG_FUNCTION_ARGS);
-extern Datum gjsonb_out(PG_FUNCTION_ARGS);
 
 /* Support functions */
 extern int	compareJsonbStringValue(const void *a, const void *b, void *arg);
