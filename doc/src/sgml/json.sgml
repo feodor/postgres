@@ -168,7 +168,7 @@
   <para>
    The following are all valid <type>jsonb</> expressions:
   <programlisting>
--- Simple scalar value (explicitly required by RFC-7159)
+-- Simple scalar/primitive value (explicitly required by RFC-7159)
 SELECT '5'::jsonb;
 
 -- Array of heterogeneous, primitive-typed elements
@@ -180,8 +180,8 @@ SELECT '{"bar": "baz", "balance": 7.77, "active":false}'::jsonb;
   </programlisting>
   </para>
   <para>
-   Note the distinction between scalar values (primitive types) as
-   elements, keys and values.
+   Note the distinction between scalar/primitive values as elements,
+   keys and values.
   </para>
  </sect2>
  <sect2 id="json-indexing">

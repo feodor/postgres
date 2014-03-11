@@ -98,13 +98,16 @@ struct JsonbValue
 {
 	enum
 	{
+		/* Scalar types */
 		jbvNull,
 		jbvString,
 		jbvNumeric,
 		jbvBool,
+		/* Composite types */
 		jbvArray,
 		jbvObject,
-		jbvBinary				/* Binary form of jbvArray/jbvObject */
+		/* Binary form of jbvArray/jbvObject */
+		jbvBinary
 	}			type;
 
 	uint32		size;			/* Estimation size of node (including
@@ -157,6 +160,10 @@ typedef struct ToJsonbState
 	struct ToJsonbState *next;
 } ToJsonbState;
 
+/*
+ * JsonbIterator holds details of the type for each iteration. It also stores
+ * an unoriginal unparsed varlena buffer.
+ */
 typedef struct JsonbIterator
 {
 	uint32		type;
@@ -236,7 +243,7 @@ extern JsonbValue *findUncompressedJsonbValue(char *buffer, uint32 flags,
 extern JsonbValue *getJsonbValue(char *buffer, uint32 flags, int32 i);
 extern JsonbValue *pushJsonbValue(ToJsonbState ** state, int r, JsonbValue *v);
 extern JsonbIterator *JsonbIteratorInit(char *buffer);
-extern int JsonbIteratorGet(JsonbIterator **it, JsonbValue *v, bool skipNested);
+extern int JsonbIteratorNext(JsonbIterator **it, JsonbValue *v, bool skipNested);
 extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
 
 /* jsonb.c support function */

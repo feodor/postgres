@@ -285,8 +285,8 @@ compareJsonbBinaryValue(char *a, char *b)
 		int			r1,
 					r2;
 
-		r1 = JsonbIteratorGet(&it1, &v1, false);
-		r2 = JsonbIteratorGet(&it2, &v2, false);
+		r1 = JsonbIteratorNext(&it1, &v1, false);
+		r2 = JsonbIteratorNext(&it2, &v2, false);
 
 		if (r1 == r2)
 		{
@@ -707,8 +707,23 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 	return h;
 }
 
+/*
+ * Given an unparsed varlena buffer, expand to JsonbIterator.
+ */
+JsonbIterator *
+JsonbIteratorInit(char *buffer)
+{
+	JsonbIterator *it = palloc(sizeof(*it));
+
+	parseBuffer(it, buffer);
+	it->next = NULL;
+
+	return it;
+}
+
+/* Get next JsonbValue while iterating */
 int
-JsonbIteratorGet(JsonbIterator ** it, JsonbValue * v, bool skipNested)
+JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 {
 	int			res;
 
@@ -740,7 +755,7 @@ JsonbIteratorGet(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 			}
 			else if (formAnswer(it, v, &(*it)->array[(*it)->i++], skipNested))
 			{
-				res = JsonbIteratorGet(it, v, skipNested);
+				res = JsonbIteratorNext(it, v, skipNested);
 			}
 			else
 			{
@@ -770,7 +785,7 @@ JsonbIteratorGet(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 		case JB_FLAG_OBJECT | jbi_value:
 			(*it)->state = jbi_key;
 			if (formAnswer(it, v, &(*it)->array[((*it)->i++) * 2 + 1], skipNested))
-				res = JsonbIteratorGet(it, v, skipNested);
+				res = JsonbIteratorNext(it, v, skipNested);
 			else
 				res = WJB_VALUE;
 			break;
@@ -779,17 +794,6 @@ JsonbIteratorGet(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 	}
 
 	return res;
-}
-
-JsonbIterator *
-JsonbIteratorInit(char *buffer)
-{
-	JsonbIterator *it = palloc(sizeof(*it));
-
-	parseBuffer(it, buffer);
-	it->next = NULL;
-
-	return it;
 }
 
 /****************************************************************************

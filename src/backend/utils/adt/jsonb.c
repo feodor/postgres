@@ -137,8 +137,8 @@ jsonb_typeof(PG_FUNCTION_ARGS)
 		 * A root scalar is stored as an array of one element, so we get the
 		 * array and then its first (and only) member.
 		 */
-		(void) JsonbIteratorGet(&it, &v, true);
-		(void) JsonbIteratorGet(&it, &v, true);
+		(void) JsonbIteratorNext(&it, &v, true);
+		(void) JsonbIteratorNext(&it, &v, true);
 		switch (v.type)
 		{
 			case jbvNull:
@@ -382,7 +382,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 
 	it = JsonbIteratorInit(in);
 
-	while (redo_switch || ((type = JsonbIteratorGet(&it, &v, false)) != 0))
+	while (redo_switch || ((type = JsonbIteratorNext(&it, &v, false)) != 0))
 	{
 		redo_switch = false;
 		switch (type)
@@ -413,7 +413,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				jsonb_put_escaped_value(out, &v);
 				appendBinaryStringInfo(out, ": ", 2);
 
-				type = JsonbIteratorGet(&it, &v, false);
+				type = JsonbIteratorNext(&it, &v, false);
 				if (type == WJB_VALUE)
 				{
 					first = false;

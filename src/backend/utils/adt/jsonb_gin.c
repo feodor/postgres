@@ -28,8 +28,8 @@ typedef struct PathHashStack
 }	PathHashStack;
 
 static text *make_text_key(const char *str, int len, char flag);
-static text *make_primitive_text_key(const JsonbValue * v, char flag);
-static void hash_primitive_value(const JsonbValue * v, PathHashStack * stack);
+static text *make_scalar_text_key(const JsonbValue * v, char flag);
+static void hash_scalar_value(const JsonbValue * v, PathHashStack * stack);
 
 /*
  *
@@ -58,7 +58,7 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 
 	it = JsonbIteratorInit(VARDATA(jb));
 
-	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, false)) != 0)
 	{
 		if (i >= total)
 		{
@@ -75,10 +75,10 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 				 * benefit of JsonbContainsStrategyNumber.
 				 */
 			case WJB_ELEM:
-				entries[i++] = PointerGetDatum(make_primitive_text_key(&v, KEYELEMFLAG));
+				entries[i++] = PointerGetDatum(make_scalar_text_key(&v, KEYELEMFLAG));
 				break;
 			case WJB_VALUE:
-				entries[i++] = PointerGetDatum(make_primitive_text_key(&v, VALFLAG));
+				entries[i++] = PointerGetDatum(make_scalar_text_key(&v, VALFLAG));
 				break;
 			default:
 				break;
@@ -302,7 +302,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 	 * path.  For faster calculation of hashes, use a stack of precalculated
 	 * hashes of prefixes.
 	 */
-	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, false)) != 0)
 	{
 		pg_crc32		path_crc32;
 		PathHashStack  *tmp;
@@ -333,14 +333,14 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 			case WJB_KEY:
 				/* Calc hash of key and separated into preserved stack item */
 				stack->hash_state = stack->next->hash_state;
-				hash_primitive_value(&v, stack);
+				hash_scalar_value(&v, stack);
 				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
 				break;
 			case WJB_VALUE:
 			case WJB_ELEM:
 				stack->hash_state = stack->next->hash_state;
 				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
-				hash_primitive_value(&v, stack);
+				hash_scalar_value(&v, stack);
 				path_crc32 = stack->hash_state;
 				FIN_CRC32(path_crc32);
 				entries[i++] = path_crc32;
@@ -413,7 +413,7 @@ make_text_key(const char *str, int len, char flag)
  * Create a textual representation of a jsonbValue for GIN storage.
  */
 static text *
-make_primitive_text_key(const JsonbValue * v, char flag)
+make_scalar_text_key(const JsonbValue * v, char flag)
 {
 	text	   *item;
 	char	   *cstr;
@@ -439,17 +439,17 @@ make_primitive_text_key(const JsonbValue * v, char flag)
 			item = make_text_key(v->string.val, v->string.len, flag);
 			break;
 		default:
-			elog(ERROR, "invalid jsonb primitive type: %d", v->type);
+			elog(ERROR, "invalid jsonb scalar type: %d", v->type);
 	}
 
 	return item;
 }
 
 /*
- * Hash a JsonbValue primitive value, and push it on to hashing stack
+ * Hash a JsonbValue scalar value, and push it on to hashing stack
  */
 static void
-hash_primitive_value(const JsonbValue * v, PathHashStack * stack)
+hash_scalar_value(const JsonbValue * v, PathHashStack * stack)
 {
 	switch (v->type)
 	{
@@ -470,7 +470,7 @@ hash_primitive_value(const JsonbValue * v, PathHashStack * stack)
 			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
 			break;
 		default:
-			elog(ERROR, "invalid jsonb primitive type");
+			elog(ERROR, "invalid jsonb scalar type");
 			break;
 	}
 }

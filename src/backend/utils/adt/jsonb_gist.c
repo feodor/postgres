@@ -138,7 +138,7 @@ gjsonb_consistent(PG_FUNCTION_ARGS)
 				JsonbIterator *it = JsonbIteratorInit(VARDATA(query));
 				JsonbValue	v;
 
-				while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
+				while ((r = JsonbIteratorNext(&it, &v, false)) != 0)
 				{
 					if ((r == WJB_ELEM || r == WJB_KEY || r == WJB_VALUE) && v.type != jbvNull)
 					{
@@ -298,7 +298,7 @@ gjsonb_compress(PG_FUNCTION_ARGS)
 			JsonbValue	v;
 			int			r;
 
-			while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
+			while ((r = JsonbIteratorNext(&it, &v, false)) != 0)
 			{
 				if ((r == WJB_ELEM || r == WJB_KEY || r == WJB_VALUE) &&
 					v.type != jbvNull)

@@ -275,7 +275,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 	it = JsonbIteratorInit(VARDATA(jb));
 	INIT_CRC32(crc);
 
-	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, false)) != 0)
 	{
 		switch (r)
 		{
@@ -337,8 +337,8 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 				v2;
 	bool		res = true;
 
-	r1 = JsonbIteratorGet(it1, &v1, false);
-	r2 = JsonbIteratorGet(it2, &v2, false);
+	r1 = JsonbIteratorNext(it1, &v1, false);
+	r2 = JsonbIteratorNext(it2, &v2, false);
 
 	if (r1 != r2)
 	{
@@ -351,7 +351,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 
 		for (;;)
 		{
-			r2 = JsonbIteratorGet(it2, &v2, false);
+			r2 = JsonbIteratorNext(it2, &v2, false);
 			if (r2 == WJB_END_OBJECT)
 				break;
 
@@ -367,7 +367,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 				break;
 			}
 
-			r2 = JsonbIteratorGet(it2, &v2, true);
+			r2 = JsonbIteratorNext(it2, &v2, true);
 			Assert(r2 == WJB_VALUE);
 
 			if (v->type != v2.type)
@@ -408,7 +408,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 
 		for (;;)
 		{
-			r2 = JsonbIteratorGet(it2, &v2, true);
+			r2 = JsonbIteratorNext(it2, &v2, true);
 			if (r2 == WJB_END_ARRAY)
 				break;
 
@@ -438,7 +438,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 
 					for (i = 0; i < nelems; i++)
 					{
-						r2 = JsonbIteratorGet(it1, &v1, true);
+						r2 = JsonbIteratorNext(it1, &v1, true);
 						Assert(r2 == WJB_ELEM);
 
 						if (v1.type == jbvBinary)

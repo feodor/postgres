@@ -282,7 +282,7 @@ jsonb_object_keys(PG_FUNCTION_ARGS)
 
 		it = JsonbIteratorInit(VARDATA_ANY(jb));
 
-		while ((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+		while ((r = JsonbIteratorNext(&it, &v, skipNested)) != 0)
 		{
 			skipNested = true;
 
@@ -480,7 +480,7 @@ jsonb_object_field(PG_FUNCTION_ARGS)
 
 	it = JsonbIteratorInit(VARDATA_ANY(jb));
 
-	while ((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, skipNested)) != 0)
 	{
 		skipNested = true;
 
@@ -492,7 +492,7 @@ jsonb_object_field(PG_FUNCTION_ARGS)
 				 * The next thing the iterator fetches should be the value, no
 				 * matter what shape it is.
 				 */
-				r = JsonbIteratorGet(&it, &v, skipNested);
+				r = JsonbIteratorNext(&it, &v, skipNested);
 				PG_RETURN_JSONB(JsonbValueToJsonb(&v));
 			}
 		}
@@ -541,7 +541,7 @@ jsonb_object_field_text(PG_FUNCTION_ARGS)
 
 	it = JsonbIteratorInit(VARDATA_ANY(jb));
 
-	while ((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, skipNested)) != 0)
 	{
 		skipNested = true;
 
@@ -555,7 +555,7 @@ jsonb_object_field_text(PG_FUNCTION_ARGS)
 				 * The next thing the iterator fetches should be the value, no
 				 * matter what shape it is.
 				 */
-				r = JsonbIteratorGet(&it, &v, skipNested);
+				r = JsonbIteratorNext(&it, &v, skipNested);
 
 				/*
 				 * if it's a scalar string it needs to be de-escaped,
@@ -624,7 +624,7 @@ jsonb_array_element(PG_FUNCTION_ARGS)
 
 	it = JsonbIteratorInit(VARDATA_ANY(jb));
 
-	while ((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, skipNested)) != 0)
 	{
 		skipNested = true;
 
@@ -678,7 +678,7 @@ jsonb_array_element_text(PG_FUNCTION_ARGS)
 
 	it = JsonbIteratorInit(VARDATA_ANY(jb));
 
-	while ((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, skipNested)) != 0)
 	{
 		skipNested = true;
 
@@ -1223,7 +1223,7 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 			JsonbIterator *it = JsonbIteratorInit(jbvp->binary.data);
 			int			r;
 
-			r = JsonbIteratorGet(&it, &tv, true);
+			r = JsonbIteratorNext(&it, &tv, true);
 			jbvp = (JsonbValue *) jbvp->binary.data;
 			have_object = r == WJB_BEGIN_OBJECT;
 			have_array = r == WJB_BEGIN_ARRAY;
@@ -1438,7 +1438,7 @@ each_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 
 	it = JsonbIteratorInit(VARDATA_ANY(jb));
 
-	while ((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, skipNested)) != 0)
 	{
 		skipNested = true;
 
@@ -1458,7 +1458,7 @@ each_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 			 * The next thing the iterator fetches should be the value, no
 			 * matter what shape it is.
 			 */
-			r = JsonbIteratorGet(&it, &v, skipNested);
+			r = JsonbIteratorNext(&it, &v, skipNested);
 
 			values[0] = PointerGetDatum(key);
 
@@ -1763,7 +1763,7 @@ elements_worker_jsonb(FunctionCallInfo fcinfo, bool as_text)
 
 	it = JsonbIteratorInit(VARDATA_ANY(jb));
 
-	while ((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+	while ((r = JsonbIteratorNext(&it, &v, skipNested)) != 0)
 	{
 		skipNested = true;
 
@@ -2767,7 +2767,7 @@ populate_recordset_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 
 		it = JsonbIteratorInit(VARDATA_ANY(jb));
 
-		while ((r = JsonbIteratorGet(&it, &v, skipNested)) != 0)
+		while ((r = JsonbIteratorNext(&it, &v, skipNested)) != 0)
 		{
 			skipNested = true;
 
