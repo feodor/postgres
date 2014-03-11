@@ -27,9 +27,9 @@ typedef struct PathHashStack
 	struct PathHashStack *next;
 }	PathHashStack;
 
-static text *makeitem(const char *str, int len, char flag);
-static text *makeitemFromValue(const JsonbValue * v, char flag);
-static void hash_stack_value(const JsonbValue * v, PathHashStack * stack);
+static text *make_text_key(const char *str, int len, char flag);
+static text *make_primitive_text_key(const JsonbValue * v, char flag);
+static void hash_primitive_value(const JsonbValue * v, PathHashStack * stack);
 
 /*
  *
@@ -75,10 +75,10 @@ gin_extract_jsonb(PG_FUNCTION_ARGS)
 				 * benefit of JsonbContainsStrategyNumber.
 				 */
 			case WJB_ELEM:
-				entries[i++] = PointerGetDatum(makeitemFromValue(&v, KEYELEMFLAG));
+				entries[i++] = PointerGetDatum(make_primitive_text_key(&v, KEYELEMFLAG));
 				break;
 			case WJB_VALUE:
-				entries[i++] = PointerGetDatum(makeitemFromValue(&v, VALFLAG));
+				entries[i++] = PointerGetDatum(make_primitive_text_key(&v, VALFLAG));
 				break;
 			default:
 				break;
@@ -116,7 +116,7 @@ gin_extract_jsonb_query(PG_FUNCTION_ARGS)
 
 		*nentries = 1;
 		entries = (Datum *) palloc(sizeof(Datum));
-		item = makeitem(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query),
+		item = make_text_key(VARDATA_ANY(query), VARSIZE_ANY_EXHDR(query),
 						KEYELEMFLAG);
 		entries[0] = PointerGetDatum(item);
 	}
@@ -142,7 +142,7 @@ gin_extract_jsonb_query(PG_FUNCTION_ARGS)
 			/* Nulls in the array are ignored */
 			if (key_nulls[i])
 				continue;
-			item = makeitem(VARDATA(key_datums[i]),
+			item = make_text_key(VARDATA(key_datums[i]),
 							VARSIZE(key_datums[i]) - VARHDRSZ,
 							KEYELEMFLAG);
 			entries[j++] = PointerGetDatum(item);
@@ -280,9 +280,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 	JsonbIterator *it;
 	JsonbValue	v;
 	PathHashStack tail;
-	PathHashStack *stack,
-			   *tmp;
-	pg_crc32	path_crc32;
+	PathHashStack *stack;
 
 	if (total == 0)
 	{
@@ -306,21 +304,26 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 	 */
 	while ((r = JsonbIteratorGet(&it, &v, false)) != 0)
 	{
+		pg_crc32		path_crc32;
+		PathHashStack  *tmp;
+
 		if (i >= total)
 		{
 			total *= 2;
 			entries = (Datum *) repalloc(entries, sizeof(Datum) * total);
 		}
 
+		/*
+		 * Keys and values CRC'd as one.
+		 *
+		 * Note that we don't CRC anything that directly reflects the nesting
+		 * structure (e.g. whether a structure is an array or object).  It's
+		 * generally assumed that per column jsonb values frequently have a
+		 * somewhat homogeneous structure.
+		 */
 		switch (r)
 		{
 			case WJB_BEGIN_ARRAY:
-				tmp = stack;
-				stack = (PathHashStack *) palloc(sizeof(PathHashStack));
-				stack->next = tmp;
-				stack->hash_state = tmp->hash_state;
-				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
-				break;
 			case WJB_BEGIN_OBJECT:
 				/* Preserve stack item for key */
 				tmp = stack;
@@ -330,19 +333,21 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 			case WJB_KEY:
 				/* Calc hash of key and separated into preserved stack item */
 				stack->hash_state = stack->next->hash_state;
-				hash_stack_value(&v, stack);
+				hash_primitive_value(&v, stack);
 				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
 				break;
 			case WJB_VALUE:
 			case WJB_ELEM:
-				hash_stack_value(&v, stack);
+				stack->hash_state = stack->next->hash_state;
+				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
+				hash_primitive_value(&v, stack);
 				path_crc32 = stack->hash_state;
 				FIN_CRC32(path_crc32);
 				entries[i++] = path_crc32;
 				break;
 			case WJB_END_ARRAY:
 			case WJB_END_OBJECT:
-				/* Pop stack item */
+				/* Pop the stack */
 				tmp = stack->next;
 				pfree(stack);
 				stack = tmp;
@@ -389,7 +394,7 @@ gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS)
  * Build an indexable text value from a cstring and flag
  */
 static text *
-makeitem(const char *str, int len, char flag)
+make_text_key(const char *str, int len, char flag)
 {
 	text	   *item;
 
@@ -408,7 +413,7 @@ makeitem(const char *str, int len, char flag)
  * Create a textual representation of a jsonbValue for GIN storage.
  */
 static text *
-makeitemFromValue(const JsonbValue * v, char flag)
+make_primitive_text_key(const JsonbValue * v, char flag)
 {
 	text	   *item;
 	char	   *cstr;
@@ -416,10 +421,10 @@ makeitemFromValue(const JsonbValue * v, char flag)
 	switch (v->type)
 	{
 		case jbvNull:
-			item = makeitem(NULL, 0, NULLFLAG);
+			item = make_text_key(NULL, 0, NULLFLAG);
 			break;
 		case jbvBool:
-			item = makeitem((v->boolean) ? " t" : " f", 2, flag);
+			item = make_text_key((v->boolean) ? " t" : " f", 2, flag);
 			break;
 		case jbvNumeric:
 			/*
@@ -427,24 +432,24 @@ makeitemFromValue(const JsonbValue * v, char flag)
 			 * is required.
 			 */
 			cstr = numeric_normalize(v->numeric);
-			item = makeitem(cstr, strlen(cstr), flag);
+			item = make_text_key(cstr, strlen(cstr), flag);
 			pfree(cstr);
 			break;
 		case jbvString:
-			item = makeitem(v->string.val, v->string.len, flag);
+			item = make_text_key(v->string.val, v->string.len, flag);
 			break;
 		default:
-			elog(ERROR, "invalid jsonb scalar type");
+			elog(ERROR, "invalid jsonb primitive type: %d", v->type);
 	}
 
 	return item;
 }
 
 /*
- * Hash a JsonbValue, and push it on to our stack
+ * Hash a JsonbValue primitive value, and push it on to hashing stack
  */
 static void
-hash_stack_value(const JsonbValue * v, PathHashStack * stack)
+hash_primitive_value(const JsonbValue * v, PathHashStack * stack)
 {
 	switch (v->type)
 	{
@@ -465,7 +470,7 @@ hash_stack_value(const JsonbValue * v, PathHashStack * stack)
 			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
 			break;
 		default:
-			elog(ERROR, "invalid jsonb scalar type");
+			elog(ERROR, "invalid jsonb primitive type");
 			break;
 	}
 }

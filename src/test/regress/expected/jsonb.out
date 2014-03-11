@@ -740,10 +740,10 @@ SELECT jsonb '{"a":"null", "b":"qq"}' ? 'a';
 (1 row)
 
 -- array exists - array elements should behave as keys
-SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
- ?column? 
-----------
-        1
+SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
+ count 
+-------
+     3
 (1 row)
 
 SELECT jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['a','b']);
@@ -1433,10 +1433,10 @@ SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
 
 -- array exists - array elements should behave as keys (for GiST index scans too)
 CREATE INDEX jidx_array ON testjsonb USING gist((j->'array'));
-SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
- ?column? 
-----------
-        1
+SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
+ count 
+-------
+     3
 (1 row)
 
 RESET enable_seqscan;
@@ -1474,6 +1474,18 @@ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
      2
 (1 row)
 
+SELECT count(*) FROM testjsonb WHERE j @> '{"array":["foo"]}';
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(*) FROM testjsonb WHERE j @> '{"array":["bar"]}';
+ count 
+-------
+     3
+(1 row)
+
 SELECT count(*) FROM testjsonb WHERE j ? 'public';
  count 
 -------
@@ -1494,17 +1506,17 @@ SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
 
 -- array exists - array elements should behave as keys (for GIN index scans too)
 CREATE INDEX jidx_array ON testjsonb USING gin((j->'array'));
-SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
- ?column? 
-----------
-        1
+SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
+ count 
+-------
+     3
 (1 row)
 
 RESET enable_seqscan;
 SELECT count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow;
  count 
 -------
-  4784
+  4787
 (1 row)
 
 SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GROUP BY key ORDER BY count DESC, key;
@@ -1532,22 +1544,22 @@ SELECT key, count(*) FROM (SELECT (jsonb_each(j)).key FROM testjsonb) AS wow GRO
  subtitle  |   169
  auth      |   168
  abstract  |   161
+ array     |     4
  age       |     2
- array     |     1
 (24 rows)
 
 -- sort/hash
 SELECT count(distinct j) FROM testjsonb;
  count 
 -------
-   887
+   890
 (1 row)
 
 SET enable_hashagg = off;
 SELECT count(*) FROM (SELECT j FROM (SELECT * FROM testjsonb UNION ALL SELECT * FROM testjsonb) js GROUP BY j) js2;
  count 
 -------
-   887
+   890
 (1 row)
 
 SET enable_hashagg = on;
@@ -1555,7 +1567,7 @@ SET enable_sort = off;
 SELECT count(*) FROM (SELECT j FROM (SELECT * FROM testjsonb UNION ALL SELECT * FROM testjsonb) js GROUP BY j) js2;
  count 
 -------
-   887
+   890
 (1 row)
 
 SELECT distinct * FROM (values (jsonb '{}' || ''),('{}')) v(j);

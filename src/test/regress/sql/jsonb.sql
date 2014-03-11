@@ -169,7 +169,7 @@ SELECT jsonb '{"a":null, "b":"qq"}' ? 'b';
 SELECT jsonb '{"a":null, "b":"qq"}' ? 'c';
 SELECT jsonb '{"a":"null", "b":"qq"}' ? 'a';
 -- array exists - array elements should behave as keys
-SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
+SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
 
 SELECT jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['a','b']);
 SELECT jsonb_exists_any('{"a":null, "b":"qq"}', ARRAY['b','a']);
@@ -321,7 +321,7 @@ SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
 SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
 -- array exists - array elements should behave as keys (for GiST index scans too)
 CREATE INDEX jidx_array ON testjsonb USING gist((j->'array'));
-SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
+SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
 
 RESET enable_seqscan;
 
@@ -335,13 +335,15 @@ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
+SELECT count(*) FROM testjsonb WHERE j @> '{"array":["foo"]}';
+SELECT count(*) FROM testjsonb WHERE j @> '{"array":["bar"]}';
 SELECT count(*) FROM testjsonb WHERE j ? 'public';
 SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
 SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
 
 -- array exists - array elements should behave as keys (for GIN index scans too)
 CREATE INDEX jidx_array ON testjsonb USING gin((j->'array'));
-SELECT 1 from testjsonb  WHERE j->'array' ? 'bar';
+SELECT count(*) from testjsonb  WHERE j->'array' ? 'bar';
 
 RESET enable_seqscan;
 
