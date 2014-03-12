@@ -41,9 +41,6 @@
 					  ? JBE_ENDPOS(he_) \
 					  : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
 
-typedef void (*walk_jsonb_cb) (void * /* arg */ , JsonbValue * /* value */ ,
-								   uint32 /* flags */ , uint32 /* level */ );
-
 typedef struct CompressState
 {
 	char	   *begin;
@@ -61,21 +58,21 @@ typedef struct CompressState
 
 }	CompressState;
 
-static void walkUncompressedJsonb(JsonbValue * v, walk_jsonb_cb cb,
-								  void *cb_arg, uint32 level);
+static void walkUncompressedJsonb(JsonbValue * value, CompressState * state,
+								  uint32 nestlevel);
 static void parseBuffer(JsonbIterator * it, char *buffer);
 static bool formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e,
 					   bool skipNested);
 static JsonbIterator *up(JsonbIterator * it);
+static void compressJsonbValue(CompressState * state, JsonbValue * value,
+							   uint32 flags, uint32 level);
 static void putJEntryString(CompressState * state, JsonbValue * value,
 							uint32 level, uint32 i);
-static void compressCallback(void *arg, JsonbValue * value, uint32 flags,
-							 uint32 level);
 static uint32 compressJsonb(JsonbValue * v, char *buffer);
 static ToJsonbState *pushState(ToJsonbState ** state);
-static void appendArray(ToJsonbState * state, JsonbValue * v);
 static void appendKey(ToJsonbState * state, JsonbValue * v);
 static void appendValue(ToJsonbState * state, JsonbValue * v);
+static void appendElement(ToJsonbState * state, JsonbValue * v);
 static int compareJsonbPair(const void *a, const void *b, void *arg);
 static void uniqueifyJsonbValue(JsonbValue * v);
 
@@ -134,9 +131,9 @@ JsonbValueToJsonb(JsonbValue * v)
 	return out;
 }
 
-/****************************************************************************
- *				     Internal comparison functions							*
- ****************************************************************************/
+/*
+ * Internal comparison functions
+ */
 
 /*
  * Compare two jbvString JsonbValue values, a and b.
@@ -178,8 +175,8 @@ compareJsonbStringValue(const void *a, const void *b, void *binequal)
 /*
  * Standard lexical qsort() comparator of jsonb strings.
  *
- * Sorts strings lexically, using the default text collation.  Used by B-Tree
- * operators.
+ * Sorts strings lexically, using the default database collation.  Used by
+ * B-Tree operators.
  */
 static int
 lexicalCompareJsonbStringValue(const void *a, const void *b)
@@ -643,21 +640,17 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 			(*state)->v.object.pairs = palloc(sizeof(*(*state)->v.object.pairs) *
 											  (*state)->size);
 			break;
-		case WJB_ELEM:
-			Assert(v->type == jbvNull || v->type == jbvString ||
-				   v->type == jbvBool || v->type == jbvNumeric ||
-				   v->type == jbvBinary);
-			appendArray(*state, v);
-			break;
 		case WJB_KEY:
 			Assert(v->type == jbvString);
 			appendKey(*state, v);
 			break;
 		case WJB_VALUE:
-			Assert(v->type == jbvNull || v->type == jbvString ||
-				   v->type == jbvBool || v->type == jbvNumeric ||
-				   v->type == jbvBinary);
+			Assert((v->type >= jbvNull && v->type <= jbvBool) || v->type == jbvBinary);
 			appendValue(*state, v);
+			break;
+		case WJB_ELEM:
+			Assert((v->type >= jbvNull && v->type <= jbvBool) || v->type == jbvBinary);
+			appendElement(*state, v);
 			break;
 		case WJB_END_OBJECT:
 			h = &(*state)->v;
@@ -673,7 +666,7 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 			 * required for the WJB_END_ARRAY case too.  The end of a jsonb
 			 * "object" associative structure may require us to first
 			 * unique-ify its values, but values must then be appended to state
-			 * in the same fashion as for an array.
+			 * in the same fashion as arrays.
 			 */
 		case WJB_END_ARRAY:
 			h = &(*state)->v;
@@ -688,7 +681,7 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 				switch ((*state)->v.type)
 				{
 					case jbvArray:
-						appendArray(*state, h);
+						appendElement(*state, h);
 						break;
 					case jbvObject:
 						appendValue(*state, h);
@@ -727,10 +720,11 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 {
 	int			res;
 
+	check_stack_depth();
+
 	if (*it == NULL)
 		return 0;
 
-	check_stack_depth();
 
 	/*
 	 * Encode all possible states in the "type" integer.  This is possible
@@ -796,11 +790,11 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 	return res;
 }
 
-/****************************************************************************
- * Walk the tree representation of jsonb					*
- ****************************************************************************/
+/*
+ * Walk the tree representation of jsonb
+ */
 static void
-walkUncompressedJsonb(JsonbValue * value, walk_jsonb_cb cb, void *cb_arg,
+walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 					  uint32 nestlevel)
 {
 	int			i;
@@ -811,7 +805,7 @@ walkUncompressedJsonb(JsonbValue * value, walk_jsonb_cb cb, void *cb_arg,
 	switch (value->type)
 	{
 		case jbvArray:
-			cb(cb_arg, value, WJB_BEGIN_ARRAY, nestlevel);
+			compressJsonbValue(state, value, WJB_BEGIN_ARRAY, nestlevel);
 			for (i = 0; i < value->array.nelems; i++)
 			{
 				if (value->array.elems[i].type == jbvNull ||
@@ -819,41 +813,41 @@ walkUncompressedJsonb(JsonbValue * value, walk_jsonb_cb cb, void *cb_arg,
 					value->array.elems[i].type == jbvBool ||
 					value->array.elems[i].type == jbvNumeric ||
 					value->array.elems[i].type == jbvBinary)
-					cb(cb_arg, value->array.elems + i, WJB_ELEM, nestlevel);
+					compressJsonbValue(state, value->array.elems + i, WJB_ELEM, nestlevel);
 				else
-					walkUncompressedJsonb(value->array.elems + i, cb, cb_arg,
+					walkUncompressedJsonb(value->array.elems + i, state,
 										  nestlevel + 1);
 			}
-			cb(cb_arg, value, WJB_END_ARRAY, nestlevel);
+			compressJsonbValue(state, value, WJB_END_ARRAY, nestlevel);
 			break;
 		case jbvObject:
-			cb(cb_arg, value, WJB_BEGIN_OBJECT, nestlevel);
+			compressJsonbValue(state, value, WJB_BEGIN_OBJECT, nestlevel);
 
 			for (i = 0; i < value->object.npairs; i++)
 			{
-				cb(cb_arg, &value->object.pairs[i].key, WJB_KEY, nestlevel);
+				compressJsonbValue(state, &value->object.pairs[i].key, WJB_KEY, nestlevel);
 
 				if (value->object.pairs[i].value.type == jbvNull ||
 					value->object.pairs[i].value.type == jbvString ||
 					value->object.pairs[i].value.type == jbvBool ||
 					value->object.pairs[i].value.type == jbvNumeric ||
 					value->object.pairs[i].value.type == jbvBinary)
-					cb(cb_arg, &value->object.pairs[i].value, WJB_VALUE, nestlevel);
+					compressJsonbValue(state, &value->object.pairs[i].value, WJB_VALUE, nestlevel);
 				else
-					walkUncompressedJsonb(&value->object.pairs[i].value, cb,
-										  cb_arg, nestlevel + 1);
+					walkUncompressedJsonb(&value->object.pairs[i].value,
+										  state, nestlevel + 1);
 			}
 
-			cb(cb_arg, value, WJB_END_OBJECT, nestlevel);
+			compressJsonbValue(state, value, WJB_END_OBJECT, nestlevel);
 			break;
 		default:
 			elog(ERROR, "unknown type of jsonb container");
 	}
 }
 
-/****************************************************************************
- *						   Iteration over binary jsonb						*
- ****************************************************************************/
+/*
+ * Iteration over binary jsonb
+ */
 static void
 parseBuffer(JsonbIterator * it, char *buffer)
 {
@@ -951,129 +945,16 @@ up(JsonbIterator * it)
 	return v;
 }
 
-/****************************************************************************
- *		  Transformation from tree to binary representation of jsonb		*
- ****************************************************************************/
-
+/*
+ * Transformation from tree to binary representation of jsonb
+ */
 #define curLevelState	state->lptr
 #define prevLevelState	state->pptr
 
 static void
-putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 i)
+compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
+				   uint32 level)
 {
-	curLevelState = state->levelstate + level;
-
-	if (i == 0)
-		curLevelState->array[0].entry = JENTRY_ISFIRST;
-	else
-		curLevelState->array[i].entry = 0;
-
-	switch (value->type)
-	{
-		case jbvNull:
-			curLevelState->array[i].entry |= JENTRY_ISNULL;
-
-			if (i > 0)
-				curLevelState->array[i].entry |=
-					curLevelState->array[i - 1].entry & JENTRY_POSMASK;
-			break;
-		case jbvString:
-			memcpy(state->ptr, value->string.val, value->string.len);
-			state->ptr += value->string.len;
-
-			if (i == 0)
-				curLevelState->array[i].entry |= value->string.len;
-			else
-				curLevelState->array[i].entry |=
-					(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
-					value->string.len;
-			break;
-		case jbvBool:
-			curLevelState->array[i].entry |= (value->boolean) ?
-				JENTRY_ISTRUE : JENTRY_ISFALSE;
-
-			if (i > 0)
-				curLevelState->array[i].entry |=
-					curLevelState->array[i - 1].entry & JENTRY_POSMASK;
-			break;
-		case jbvNumeric:
-			{
-				int			addlen = INTALIGN(state->ptr - state->begin) -
-				(state->ptr - state->begin);
-				int			numlen = VARSIZE_ANY(value->numeric);
-
-				switch (addlen)
-				{
-					case 3:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 2:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 1:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 0:
-					default:
-						break;
-				}
-
-				memcpy(state->ptr, value->numeric, numlen);
-				state->ptr += numlen;
-
-				curLevelState->array[i].entry |= JENTRY_ISNUMERIC;
-				if (i == 0)
-					curLevelState->array[i].entry |= addlen + numlen;
-				else
-					curLevelState->array[i].entry |=
-						(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
-						addlen + numlen;
-				break;
-			}
-		case jbvBinary:
-			{
-				int			addlen = INTALIGN(state->ptr - state->begin) -
-					(state->ptr - state->begin);
-
-				switch (addlen)
-				{
-					case 3:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 2:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 1:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 0:
-					default:
-						break;
-				}
-
-				memcpy(state->ptr, value->binary.data, value->binary.len);
-				state->ptr += value->binary.len;
-
-				curLevelState->array[i].entry |= JENTRY_ISNEST;
-
-				if (i == 0)
-					curLevelState->array[i].entry |= addlen + value->binary.len;
-				else
-					curLevelState->array[i].entry |=
-						(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
-						addlen + value->binary.len;
-			}
-			break;
-		default:
-			elog(ERROR, "invalid jsonb scalar type");
-	}
-}
-
-static void
-compressCallback(void *arg, JsonbValue * value, uint32 flags, uint32 level)
-{
-	CompressState *state = arg;
-
 	if (level == state->maxlevel)
 	{
 		state->maxlevel *= 2;
@@ -1196,6 +1077,117 @@ compressCallback(void *arg, JsonbValue * value, uint32 flags, uint32 level)
 	}
 }
 
+static void
+putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 i)
+{
+	curLevelState = state->levelstate + level;
+
+	if (i == 0)
+		curLevelState->array[0].entry = JENTRY_ISFIRST;
+	else
+		curLevelState->array[i].entry = 0;
+
+	switch (value->type)
+	{
+		case jbvNull:
+			curLevelState->array[i].entry |= JENTRY_ISNULL;
+
+			if (i > 0)
+				curLevelState->array[i].entry |=
+					curLevelState->array[i - 1].entry & JENTRY_POSMASK;
+			break;
+		case jbvString:
+			memcpy(state->ptr, value->string.val, value->string.len);
+			state->ptr += value->string.len;
+
+			if (i == 0)
+				curLevelState->array[i].entry |= value->string.len;
+			else
+				curLevelState->array[i].entry |=
+					(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
+					value->string.len;
+			break;
+		case jbvBool:
+			curLevelState->array[i].entry |= (value->boolean) ?
+				JENTRY_ISTRUE : JENTRY_ISFALSE;
+
+			if (i > 0)
+				curLevelState->array[i].entry |=
+					curLevelState->array[i - 1].entry & JENTRY_POSMASK;
+			break;
+		case jbvNumeric:
+			{
+				int			addlen = INTALIGN(state->ptr - state->begin) -
+				(state->ptr - state->begin);
+				int			numlen = VARSIZE_ANY(value->numeric);
+
+				switch (addlen)
+				{
+					case 3:
+						*state->ptr = '\0';
+						state->ptr++;
+					case 2:
+						*state->ptr = '\0';
+						state->ptr++;
+					case 1:
+						*state->ptr = '\0';
+						state->ptr++;
+					case 0:
+					default:
+						break;
+				}
+
+				memcpy(state->ptr, value->numeric, numlen);
+				state->ptr += numlen;
+
+				curLevelState->array[i].entry |= JENTRY_ISNUMERIC;
+				if (i == 0)
+					curLevelState->array[i].entry |= addlen + numlen;
+				else
+					curLevelState->array[i].entry |=
+						(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
+						addlen + numlen;
+				break;
+			}
+		case jbvBinary:
+			{
+				int			addlen = INTALIGN(state->ptr - state->begin) -
+					(state->ptr - state->begin);
+
+				switch (addlen)
+				{
+					case 3:
+						*state->ptr = '\0';
+						state->ptr++;
+					case 2:
+						*state->ptr = '\0';
+						state->ptr++;
+					case 1:
+						*state->ptr = '\0';
+						state->ptr++;
+					case 0:
+					default:
+						break;
+				}
+
+				memcpy(state->ptr, value->binary.data, value->binary.len);
+				state->ptr += value->binary.len;
+
+				curLevelState->array[i].entry |= JENTRY_ISNEST;
+
+				if (i == 0)
+					curLevelState->array[i].entry |= addlen + value->binary.len;
+				else
+					curLevelState->array[i].entry |=
+						(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
+						addlen + value->binary.len;
+			}
+			break;
+		default:
+			elog(ERROR, "invalid jsonb scalar type");
+	}
+}
+
 /*
  * puts JsonbValue tree into preallocated buffer
  */
@@ -1209,7 +1201,7 @@ compressJsonb(JsonbValue * v, char *buffer)
 	state.maxlevel = 8;
 	state.levelstate = palloc(sizeof(*state.levelstate) * state.maxlevel);
 
-	walkUncompressedJsonb(v, compressCallback, &state, 0);
+	walkUncompressedJsonb(v, &state, 0);
 
 	l = state.ptr - buffer;
 	Assert(l <= v->size);
@@ -1217,9 +1209,9 @@ compressJsonb(JsonbValue * v, char *buffer)
 	return l;
 }
 
-/****************************************************************************
- *					Iteration-like forming jsonb							*
- ****************************************************************************/
+/*
+ * Iteration-like forming jsonb
+ */
 static ToJsonbState *
 pushState(ToJsonbState ** state)
 {
@@ -1227,25 +1219,6 @@ pushState(ToJsonbState ** state)
 
 	ns->next = *state;
 	return ns;
-}
-
-static void
-appendArray(ToJsonbState * state, JsonbValue * v)
-{
-	JsonbValue *a = &state->v;
-
-	Assert(a->type == jbvArray);
-
-	if (a->array.nelems >= state->size)
-	{
-		state->size *= 2;
-		a->array.elems = repalloc(a->array.elems,
-								  sizeof(*a->array.elems) * state->size);
-	}
-
-	a->array.elems[a->array.nelems++] = *v;
-
-	a->size += v->size;
 }
 
 static void
@@ -1278,6 +1251,25 @@ appendValue(ToJsonbState * state, JsonbValue * v)
 	h->object.pairs[h->object.npairs++].value = *v;
 
 	h->size += v->size;
+}
+
+static void
+appendElement(ToJsonbState * state, JsonbValue * v)
+{
+	JsonbValue *a = &state->v;
+
+	Assert(a->type == jbvArray);
+
+	if (a->array.nelems >= state->size)
+	{
+		state->size *= 2;
+		a->array.elems = repalloc(a->array.elems,
+								  sizeof(*a->array.elems) * state->size);
+	}
+
+	a->array.elems[a->array.nelems++] = *v;
+
+	a->size += v->size;
 }
 
 /*

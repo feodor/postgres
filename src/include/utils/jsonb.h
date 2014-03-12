@@ -99,7 +99,7 @@ struct JsonbValue
 	enum
 	{
 		/* Scalar types */
-		jbvNull,
+		jbvNull = 0,
 		jbvString,
 		jbvNumeric,
 		jbvBool,
