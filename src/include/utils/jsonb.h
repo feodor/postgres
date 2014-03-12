@@ -104,7 +104,7 @@ struct JsonbValue
 		jbvNumeric,
 		jbvBool,
 		/* Composite types */
-		jbvArray,
+		jbvArray = 4,
 		jbvObject,
 		/* Binary form of jbvArray/jbvObject */
 		jbvBinary

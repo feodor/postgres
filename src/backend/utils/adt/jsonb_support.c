@@ -599,11 +599,11 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 			appendKey(*state, v);
 			break;
 		case WJB_VALUE:
-			Assert((v->type >= jbvNull && v->type <= jbvBool) || v->type == jbvBinary);
+			Assert((v->type >= jbvNull && v->type < jbvArray) || v->type == jbvBinary);
 			appendValue(*state, v);
 			break;
 		case WJB_ELEM:
-			Assert((v->type >= jbvNull && v->type <= jbvBool) || v->type == jbvBinary);
+			Assert((v->type >= jbvNull && v->type < jbvArray) || v->type == jbvBinary);
 			appendElement(*state, v);
 			break;
 		case WJB_END_OBJECT:
