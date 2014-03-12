@@ -835,10 +835,8 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 			compressJsonbValue(state, value, WJB_BEGIN_ARRAY, nestlevel);
 			for (i = 0; i < value->array.nelems; i++)
 			{
-				if (value->array.elems[i].type == jbvNull ||
-					value->array.elems[i].type == jbvString ||
-					value->array.elems[i].type == jbvBool ||
-					value->array.elems[i].type == jbvNumeric ||
+				if ((value->array.elems[i].type >= jbvNull &&
+					value->array.elems[i].type < jbvArray) ||
 					value->array.elems[i].type == jbvBinary)
 					compressJsonbValue(state, value->array.elems + i, WJB_ELEM, nestlevel);
 				else
@@ -854,10 +852,8 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 			{
 				compressJsonbValue(state, &value->object.pairs[i].key, WJB_KEY, nestlevel);
 
-				if (value->object.pairs[i].value.type == jbvNull ||
-					value->object.pairs[i].value.type == jbvString ||
-					value->object.pairs[i].value.type == jbvBool ||
-					value->object.pairs[i].value.type == jbvNumeric ||
+				if ((value->object.pairs[i].value.type >= jbvNull &&
+					value->object.pairs[i].value.type < jbvArray) ||
 					value->object.pairs[i].value.type == jbvBinary)
 					compressJsonbValue(state, &value->object.pairs[i].value,
 									   WJB_VALUE, nestlevel);
