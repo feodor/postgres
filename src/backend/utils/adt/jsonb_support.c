@@ -832,7 +832,8 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 					value->object.pairs[i].value.type == jbvBool ||
 					value->object.pairs[i].value.type == jbvNumeric ||
 					value->object.pairs[i].value.type == jbvBinary)
-					compressJsonbValue(state, &value->object.pairs[i].value, WJB_VALUE, nestlevel);
+					compressJsonbValue(state, &value->object.pairs[i].value,
+									   WJB_VALUE, nestlevel);
 				else
 					walkUncompressedJsonb(&value->object.pairs[i].value,
 										  state, nestlevel + 1);
@@ -966,26 +967,22 @@ compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
 
 	if (flags & (WJB_BEGIN_ARRAY | WJB_BEGIN_OBJECT))
 	{
+		short		padlen, p;
+
 		Assert(((flags & WJB_BEGIN_ARRAY) && value->type == jbvArray) ||
 			   ((flags & WJB_BEGIN_OBJECT) && value->type == jbvObject));
 
 		curLevelState->begin = state->ptr;
 
-		switch (INTALIGN(state->ptr - state->begin) -
-				(state->ptr - state->begin))
+		padlen = INTALIGN(state->ptr - state->begin) - (state->ptr -
+														state->begin);
+		/*
+		 * Add padding as necessary
+		 */
+		for (p = padlen; p > 0; p--)
 		{
-			case 3:
-				*state->ptr = '\0';
-				state->ptr++;
-			case 2:
-				*state->ptr = '\0';
-				state->ptr++;
-			case 1:
-				*state->ptr = '\0';
-				state->ptr++;
-			case 0:
-			default:
-				break;
+			*state->ptr = '\0';
+			state->ptr++;
 		}
 
 		curLevelState->header = (uint32 *) state->ptr;
@@ -1080,6 +1077,8 @@ compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
 static void
 putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 i)
 {
+	short		p, padlen;
+
 	curLevelState = state->levelstate + level;
 
 	if (i == 0)
@@ -1117,24 +1116,18 @@ putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 
 			break;
 		case jbvNumeric:
 			{
-				int			addlen = INTALIGN(state->ptr - state->begin) -
-				(state->ptr - state->begin);
-				int			numlen = VARSIZE_ANY(value->numeric);
+				int numlen = VARSIZE_ANY(value->numeric);
 
-				switch (addlen)
+				padlen = INTALIGN(state->ptr - state->begin) -
+					(state->ptr - state->begin);
+
+				/*
+				 * Add padding as necessary
+				 */
+				for (p = padlen; p > 0; p--)
 				{
-					case 3:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 2:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 1:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 0:
-					default:
-						break;
+					*state->ptr = '\0';
+					state->ptr++;
 				}
 
 				memcpy(state->ptr, value->numeric, numlen);
@@ -1142,32 +1135,24 @@ putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 
 
 				curLevelState->array[i].entry |= JENTRY_ISNUMERIC;
 				if (i == 0)
-					curLevelState->array[i].entry |= addlen + numlen;
+					curLevelState->array[i].entry |= padlen + numlen;
 				else
 					curLevelState->array[i].entry |=
 						(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
-						addlen + numlen;
+						padlen + numlen;
 				break;
 			}
 		case jbvBinary:
 			{
-				int			addlen = INTALIGN(state->ptr - state->begin) -
-					(state->ptr - state->begin);
-
-				switch (addlen)
+				padlen = INTALIGN(state->ptr - state->begin) - (state->ptr -
+																state->begin);
+				/*
+				 * Add padding as necessary
+				 */
+				for (p = padlen; p > 0; p--)
 				{
-					case 3:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 2:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 1:
-						*state->ptr = '\0';
-						state->ptr++;
-					case 0:
-					default:
-						break;
+					*state->ptr = '\0';
+					state->ptr++;
 				}
 
 				memcpy(state->ptr, value->binary.data, value->binary.len);
@@ -1176,11 +1161,11 @@ putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 
 				curLevelState->array[i].entry |= JENTRY_ISNEST;
 
 				if (i == 0)
-					curLevelState->array[i].entry |= addlen + value->binary.len;
+					curLevelState->array[i].entry |= value->binary.len + padlen;
 				else
 					curLevelState->array[i].entry |=
 						(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
-						addlen + value->binary.len;
+						value->binary.len + padlen;
 			}
 			break;
 		default:
