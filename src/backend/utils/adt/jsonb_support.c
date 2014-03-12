@@ -61,10 +61,8 @@ typedef struct CompressState
 
 }	CompressState;
 
-static void walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb,
-									void *cb_arg, uint32 level);
 static void walkUncompressedJsonb(JsonbValue * v, walk_jsonb_cb cb,
-								  void *cb_arg);
+								  void *cb_arg, uint32 level);
 static void parseBuffer(JsonbIterator * it, char *buffer);
 static bool formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e,
 					   bool skipNested);
@@ -721,7 +719,9 @@ JsonbIteratorInit(char *buffer)
 	return it;
 }
 
-/* Get next JsonbValue while iterating */
+/*
+ * Get next JsonbValue while iterating
+ */
 int
 JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 {
@@ -800,59 +800,55 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
  * Walk the tree representation of jsonb					*
  ****************************************************************************/
 static void
-walkUncompressedJsonbDo(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg,
-						uint32 level)
+walkUncompressedJsonb(JsonbValue * value, walk_jsonb_cb cb, void *cb_arg,
+					  uint32 nestlevel)
 {
 	int			i;
 
-	switch (v->type)
+	if (!value)
+		return;
+
+	switch (value->type)
 	{
 		case jbvArray:
-			cb(cb_arg, v, WJB_BEGIN_ARRAY, level);
-			for (i = 0; i < v->array.nelems; i++)
+			cb(cb_arg, value, WJB_BEGIN_ARRAY, nestlevel);
+			for (i = 0; i < value->array.nelems; i++)
 			{
-				if (v->array.elems[i].type == jbvNull ||
-					v->array.elems[i].type == jbvString ||
-					v->array.elems[i].type == jbvBool ||
-					v->array.elems[i].type == jbvNumeric ||
-					v->array.elems[i].type == jbvBinary)
-					cb(cb_arg, v->array.elems + i, WJB_ELEM, level);
+				if (value->array.elems[i].type == jbvNull ||
+					value->array.elems[i].type == jbvString ||
+					value->array.elems[i].type == jbvBool ||
+					value->array.elems[i].type == jbvNumeric ||
+					value->array.elems[i].type == jbvBinary)
+					cb(cb_arg, value->array.elems + i, WJB_ELEM, nestlevel);
 				else
-					walkUncompressedJsonbDo(v->array.elems + i, cb, cb_arg,
-											level + 1);
+					walkUncompressedJsonb(value->array.elems + i, cb, cb_arg,
+										  nestlevel + 1);
 			}
-			cb(cb_arg, v, WJB_END_ARRAY, level);
+			cb(cb_arg, value, WJB_END_ARRAY, nestlevel);
 			break;
 		case jbvObject:
-			cb(cb_arg, v, WJB_BEGIN_OBJECT, level);
+			cb(cb_arg, value, WJB_BEGIN_OBJECT, nestlevel);
 
-			for (i = 0; i < v->object.npairs; i++)
+			for (i = 0; i < value->object.npairs; i++)
 			{
-				cb(cb_arg, &v->object.pairs[i].key, WJB_KEY, level);
+				cb(cb_arg, &value->object.pairs[i].key, WJB_KEY, nestlevel);
 
-				if (v->object.pairs[i].value.type == jbvNull ||
-					v->object.pairs[i].value.type == jbvString ||
-					v->object.pairs[i].value.type == jbvBool ||
-					v->object.pairs[i].value.type == jbvNumeric ||
-					v->object.pairs[i].value.type == jbvBinary)
-					cb(cb_arg, &v->object.pairs[i].value, WJB_VALUE, level);
+				if (value->object.pairs[i].value.type == jbvNull ||
+					value->object.pairs[i].value.type == jbvString ||
+					value->object.pairs[i].value.type == jbvBool ||
+					value->object.pairs[i].value.type == jbvNumeric ||
+					value->object.pairs[i].value.type == jbvBinary)
+					cb(cb_arg, &value->object.pairs[i].value, WJB_VALUE, nestlevel);
 				else
-					walkUncompressedJsonbDo(&v->object.pairs[i].value, cb, cb_arg,
-											level + 1);
+					walkUncompressedJsonb(&value->object.pairs[i].value, cb,
+										  cb_arg, nestlevel + 1);
 			}
 
-			cb(cb_arg, v, WJB_END_OBJECT, level);
+			cb(cb_arg, value, WJB_END_OBJECT, nestlevel);
 			break;
 		default:
 			elog(ERROR, "unknown type of jsonb container");
 	}
-}
-
-static void
-walkUncompressedJsonb(JsonbValue * v, walk_jsonb_cb cb, void *cb_arg)
-{
-	if (v)
-		walkUncompressedJsonbDo(v, cb, cb_arg, 0);
 }
 
 /****************************************************************************
@@ -1213,7 +1209,7 @@ compressJsonb(JsonbValue * v, char *buffer)
 	state.maxlevel = 8;
 	state.levelstate = palloc(sizeof(*state.levelstate) * state.maxlevel);
 
-	walkUncompressedJsonb(v, compressCallback, &state);
+	walkUncompressedJsonb(v, compressCallback, &state, 0);
 
 	l = state.ptr - buffer;
 	Assert(l <= v->size);
