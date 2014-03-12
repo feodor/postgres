@@ -60,7 +60,6 @@ typedef struct CompressState
 
 }	CompressState;
 
-static int compareJsonbStringValue(const void *a, const void *b, void *arg);
 static int lexicalCompareJsonbStringValue(const void *a, const void *b);
 static void walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 								  uint32 nestlevel);
@@ -77,8 +76,10 @@ static ToJsonbState *pushState(ToJsonbState ** state);
 static void appendKey(ToJsonbState * state, JsonbValue * v);
 static void appendValue(ToJsonbState * state, JsonbValue * v);
 static void appendElement(ToJsonbState * state, JsonbValue * v);
-static int compareJsonbPair(const void *a, const void *b, void *arg);
-static void uniqueifyJsonbValue(JsonbValue * v);
+static int lengthCompareJsonbStringValue(const void *a, const void *b, void *arg);
+static int lengthCompareJsonbPair(const void *a, const void *b, void *arg);
+static void uniqueifyJsonbObject(JsonbValue * v);
+static void uniqueifyJsonbArray(JsonbValue * v);
 
 /*
  * Turn a JsonbValue into a Jsonb
@@ -612,7 +613,7 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 			 * sorted
 			 */
 			if (v == NULL)
-				uniqueifyJsonbValue(h);
+				uniqueifyJsonbObject(h);
 
 			/*
 			 * No break statement here - fall through and perform those steps
@@ -756,7 +757,6 @@ arrayToJsonbSortedArray(ArrayType *a)
 	JsonbValue *result;
 	int			i,
 				j;
-	bool		hasNonUniq = false;
 
 	/* Extract data for sorting */
 	deconstruct_array(a, TEXTOID, -1, false, 'i', &key_datums, &key_nulls,
@@ -795,83 +795,15 @@ arrayToJsonbSortedArray(ArrayType *a)
 	}
 	result->array.nelems = j;
 
-	/*
-	 * Actually sort values, determining if any were equal on the basis of full
-	 * binary equality (rather than just having the same string length).
-	 */
-	if (result->array.nelems > 1)
-		qsort_arg(result->array.elems, result->array.nelems,
-				  sizeof(*result->array.elems), compareJsonbStringValue,
-				  &hasNonUniq);
-
-	if (hasNonUniq)
-	{
-		JsonbValue *ptr = result->array.elems + 1,
-				   *res = result->array.elems;
-
-		while (ptr - result->array.elems < result->array.nelems)
-		{
-			/* Avoid copying over binary duplicate */
-			if (!(ptr->string.len == res->string.len &&
-				  memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
-			{
-				res++;
-				*res = *ptr;
-			}
-
-			ptr++;
-		}
-
-		result->array.nelems = res + 1 - result->array.elems;
-	}
-
+	uniqueifyJsonbArray(result);
 	return result;
-}
-
-/*
- * Compare two jbvString JsonbValue values, a and b.
- *
- * This is a special qsort_arg() comparator used to sort strings in certain
- * internal contexts where it is sufficient to have a well-defined sort order.
- * In particular, objects are sorted according to this criteria to facilitate
- * cheap binary searches where we don't care about lexical sort order.
- *
- * a and b are first sorted based on their length.  If a tie-breaker is
- * required, only then do we consider string binary equality.
- *
- * Third argument 'binequal' may point to a bool. If it's set, *binequal is set
- * to true iff a and b have full binary equality, since some callers have an
- * interest in whether the two values are equal or merely equivalent.
- */
-static int
-compareJsonbStringValue(const void *a, const void *b, void *binequal)
-{
-	const JsonbValue *va = (const JsonbValue *) a;
-	const JsonbValue *vb = (const JsonbValue *) b;
-	int			res;
-
-	Assert(va->type == jbvString);
-	Assert(vb->type == jbvString);
-
-	if (va->string.len == vb->string.len)
-	{
-		res = memcmp(va->string.val, vb->string.val, va->string.len);
-		if (res == 0 && binequal)
-			*((bool *) binequal) = true;
-	}
-	else
-	{
-		res = (va->string.len > vb->string.len) ? 1 : -1;
-	}
-
-	return res;
 }
 
 /*
  * Standard lexical qsort() comparator of jsonb strings.
  *
  * Sorts strings lexically, using the default database collation.  Used by
- * B-Tree operators.
+ * B-Tree operators, where a lexical sort order is generally expected.
  */
 static int
 lexicalCompareJsonbStringValue(const void *a, const void *b)
@@ -1354,22 +1286,63 @@ appendElement(ToJsonbState * state, JsonbValue * v)
 }
 
 /*
+ * Compare two jbvString JsonbValue values, a and b.
+ *
+ * This is a special qsort_arg() comparator used to sort strings in certain
+ * internal contexts where it is sufficient to have a well-defined sort order.
+ * In particular, objects are sorted according to this criteria to facilitate
+ * cheap binary searches where we don't care about lexical sort order.
+ *
+ * a and b are first sorted based on their length.  If a tie-breaker is
+ * required, only then do we consider string binary equality.
+ *
+ * Third argument 'binequal' may point to a bool. If it's set, *binequal is set
+ * to true iff a and b have full binary equality, since some callers have an
+ * interest in whether the two values are equal or merely equivalent.
+ */
+static int
+lengthCompareJsonbStringValue(const void *a, const void *b, void *binequal)
+{
+	const JsonbValue *va = (const JsonbValue *) a;
+	const JsonbValue *vb = (const JsonbValue *) b;
+	int			res;
+
+	Assert(va->type == jbvString);
+	Assert(vb->type == jbvString);
+
+	if (va->string.len == vb->string.len)
+	{
+		res = memcmp(va->string.val, vb->string.val, va->string.len);
+		if (res == 0 && binequal)
+			*((bool *) binequal) = true;
+	}
+	else
+	{
+		res = (va->string.len > vb->string.len) ? 1 : -1;
+	}
+
+	return res;
+}
+
+/*
  * qsort_arg() comparator to compare JsonbPair values.
  *
- * Function implemented in terms of compareJsonbStringValue(), and thus the
+ * Function implemented in terms of lengthCompareJsonbStringValue(), and thus the
  * same "arg setting" hack will be applied here in respect of the pair's key
  * values.
+ *
+ * N.B: String comparions here are "length-wise"
  *
  * Pairs with equals keys are ordered such that the order field is respected.
  */
 static int
-compareJsonbPair(const void *a, const void *b, void *arg)
+lengthCompareJsonbPair(const void *a, const void *b, void *arg)
 {
 	const JsonbPair *pa = a;
 	const JsonbPair *pb = b;
 	int			res;
 
-	res = compareJsonbStringValue(&pa->key, &pb->key, arg);
+	res = lengthCompareJsonbStringValue(&pa->key, &pb->key, arg);
 
 	/*
 	 * Guarantee keeping order of equal pair. Unique algorithm will prefer
@@ -1386,7 +1359,7 @@ compareJsonbPair(const void *a, const void *b, void *arg)
  * structure)
  */
 static void
-uniqueifyJsonbValue(JsonbValue * v)
+uniqueifyJsonbObject(JsonbValue * v)
 {
 	bool		hasNonUniq = false;
 
@@ -1394,7 +1367,7 @@ uniqueifyJsonbValue(JsonbValue * v)
 
 	if (v->object.npairs > 1)
 		qsort_arg(v->object.pairs, v->object.npairs, sizeof(*v->object.pairs),
-				  compareJsonbPair, &hasNonUniq);
+				  lengthCompareJsonbPair, &hasNonUniq);
 
 	if (hasNonUniq)
 	{
@@ -1403,6 +1376,7 @@ uniqueifyJsonbValue(JsonbValue * v)
 
 		while (ptr - v->object.pairs < v->object.npairs)
 		{
+			/* Avoid copying over binary duplicate */
 			if (ptr->key.string.len == res->key.string.len &&
 				memcmp(ptr->key.string.val, res->key.string.val,
 					   ptr->key.string.len) == 0)
@@ -1419,5 +1393,46 @@ uniqueifyJsonbValue(JsonbValue * v)
 		}
 
 		v->object.npairs = res + 1 - v->object.pairs;
+	}
+}
+
+/*
+ * Sort and unique-ify JsonbArray
+ */
+static void
+uniqueifyJsonbArray(JsonbValue * v)
+{
+	bool hasNonUniq = false;
+
+	Assert(v->type == jbvArray);
+
+	/*
+	 * Actually sort values, determining if any were equal on the basis of full
+	 * binary equality (rather than just having the same string length).
+	 */
+	if (v->array.nelems > 1)
+		qsort_arg(v->array.elems, v->array.nelems,
+				  sizeof(*v->array.elems), lengthCompareJsonbStringValue,
+				  &hasNonUniq);
+
+	if (hasNonUniq)
+	{
+		JsonbValue *ptr = v->array.elems + 1,
+				   *res = v->array.elems;
+
+		while (ptr - v->array.elems < v->array.nelems)
+		{
+			/* Avoid copying over binary duplicate */
+			if (!(ptr->string.len == res->string.len &&
+				  memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
+			{
+				res++;
+				*res = *ptr;
+			}
+
+			ptr++;
+		}
+
+		v->array.nelems = res + 1 - v->array.elems;
 	}
 }

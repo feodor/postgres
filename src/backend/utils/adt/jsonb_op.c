@@ -328,7 +328,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 }
 
 /*
- * Worker for various "contains" operators
+ * Work horse for "contains" operator
  */
 static bool
 deepContains(JsonbIterator ** it1, JsonbIterator ** it2)

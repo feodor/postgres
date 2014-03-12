@@ -98,7 +98,7 @@ struct JsonbValue
 {
 	enum
 	{
-		/* Scalar types */
+		/* Scalar types (type influences sort order) */
 		jbvNull = 0,
 		jbvString,
 		jbvNumeric,
