@@ -246,6 +246,9 @@ jsonb_cmp(PG_FUNCTION_ARGS)
 	}
 	else
 	{
+		/*
+		 * TODO: Think harder about the memory leaked here
+		 */
 		res = compareJsonbBinaryValue(VARDATA(jb1), VARDATA(jb2));
 	}
 

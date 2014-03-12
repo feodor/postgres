@@ -206,6 +206,8 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
  * Gives consistent ordering of Jsonb values.
  *
  * Strings are compared lexically, making this suitable as a sort comparator.
+ *
+ * This is called from B-Tree support function 1.
  */
 int
 compareJsonbBinaryValue(char *a, char *b)
@@ -272,6 +274,9 @@ compareJsonbBinaryValue(char *a, char *b)
 			res = (r1 > r2) ? 1 : -1;	/* dummy order */
 		}
 	}
+
+	pfree(it1);
+	pfree(it2);
 
 	return res;
 }
