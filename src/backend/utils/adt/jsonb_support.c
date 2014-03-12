@@ -60,6 +60,8 @@ typedef struct CompressState
 
 }	CompressState;
 
+static int compareJsonbStringValue(const void *a, const void *b, void *arg);
+static int lexicalCompareJsonbStringValue(const void *a, const void *b);
 static void walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 								  uint32 nestlevel);
 static void parseBuffer(JsonbIterator * it, char *buffer);
@@ -134,69 +136,9 @@ JsonbValueToJsonb(JsonbValue * v)
 }
 
 /*
- * Internal comparison functions
- */
-
-/*
- * Compare two jbvString JsonbValue values, a and b.
+ * Compare 2 JsonbValues.
  *
- * This is a special qsort_arg() comparator used to sort strings in certain
- * internal contexts where it is sufficient to have a well-defined sort order.
- * In particular, objects are sorted according to this criteria to facilitate
- * cheap binary searches where we don't care about lexical sort order.
- *
- * a and b are first sorted based on their length.  If a tie-breaker is
- * required, only then do we consider string binary equality.
- *
- * Third argument 'binequal' may point to a bool. If it's set, *binequal is set
- * to true iff a and b have full binary equality, since some callers have an
- * interest in whether the two values are equal or merely equivalent.
- */
-int
-compareJsonbStringValue(const void *a, const void *b, void *binequal)
-{
-	const JsonbValue *va = (const JsonbValue *) a;
-	const JsonbValue *vb = (const JsonbValue *) b;
-	int			res;
-
-	Assert(va->type == jbvString);
-	Assert(vb->type == jbvString);
-
-	if (va->string.len == vb->string.len)
-	{
-		res = memcmp(va->string.val, vb->string.val, va->string.len);
-		if (res == 0 && binequal)
-			*((bool *) binequal) = true;
-	}
-	else
-	{
-		res = (va->string.len > vb->string.len) ? 1 : -1;
-	}
-
-	return res;
-}
-
-/*
- * Standard lexical qsort() comparator of jsonb strings.
- *
- * Sorts strings lexically, using the default database collation.  Used by
- * B-Tree operators.
- */
-static int
-lexicalCompareJsonbStringValue(const void *a, const void *b)
-{
-	const JsonbValue *va = (const JsonbValue *) a;
-	const JsonbValue *vb = (const JsonbValue *) b;
-
-	Assert(va->type == jbvString);
-	Assert(vb->type == jbvString);
-
-	return varstr_cmp(va->string.val, va->string.len, vb->string.val,
-					  vb->string.len, DEFAULT_COLLATION_OID);
-}
-
-/*
- * Compare 2 JsonbValues
+ * Uses lexical string sorting.
  */
 int
 compareJsonbValue(JsonbValue * a, JsonbValue * b)
@@ -884,6 +826,64 @@ arrayToJsonbSortedArray(ArrayType *a)
 	}
 
 	return result;
+}
+
+/*
+ * Compare two jbvString JsonbValue values, a and b.
+ *
+ * This is a special qsort_arg() comparator used to sort strings in certain
+ * internal contexts where it is sufficient to have a well-defined sort order.
+ * In particular, objects are sorted according to this criteria to facilitate
+ * cheap binary searches where we don't care about lexical sort order.
+ *
+ * a and b are first sorted based on their length.  If a tie-breaker is
+ * required, only then do we consider string binary equality.
+ *
+ * Third argument 'binequal' may point to a bool. If it's set, *binequal is set
+ * to true iff a and b have full binary equality, since some callers have an
+ * interest in whether the two values are equal or merely equivalent.
+ */
+static int
+compareJsonbStringValue(const void *a, const void *b, void *binequal)
+{
+	const JsonbValue *va = (const JsonbValue *) a;
+	const JsonbValue *vb = (const JsonbValue *) b;
+	int			res;
+
+	Assert(va->type == jbvString);
+	Assert(vb->type == jbvString);
+
+	if (va->string.len == vb->string.len)
+	{
+		res = memcmp(va->string.val, vb->string.val, va->string.len);
+		if (res == 0 && binequal)
+			*((bool *) binequal) = true;
+	}
+	else
+	{
+		res = (va->string.len > vb->string.len) ? 1 : -1;
+	}
+
+	return res;
+}
+
+/*
+ * Standard lexical qsort() comparator of jsonb strings.
+ *
+ * Sorts strings lexically, using the default database collation.  Used by
+ * B-Tree operators.
+ */
+static int
+lexicalCompareJsonbStringValue(const void *a, const void *b)
+{
+	const JsonbValue *va = (const JsonbValue *) a;
+	const JsonbValue *vb = (const JsonbValue *) b;
+
+	Assert(va->type == jbvString);
+	Assert(vb->type == jbvString);
+
+	return varstr_cmp(va->string.val, va->string.len, vb->string.val,
+					  vb->string.len, DEFAULT_COLLATION_OID);
 }
 
 /*

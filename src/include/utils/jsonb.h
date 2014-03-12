@@ -221,7 +221,6 @@ extern Datum gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS);
 extern Datum gin_consistent_jsonb_hash(PG_FUNCTION_ARGS);
 
 /* Support functions */
-extern int	compareJsonbStringValue(const void *a, const void *b, void *arg);
 extern int	compareJsonbBinaryValue(char *a, char *b);
 extern int	compareJsonbValue(JsonbValue *a, JsonbValue *b);
 extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
