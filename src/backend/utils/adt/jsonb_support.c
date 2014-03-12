@@ -896,6 +896,7 @@ parseBuffer(JsonbIterator * it, char *buffer)
 		case JB_FLAG_ARRAY:
 			it->data = buffer + it->nelems * sizeof(JEntry);
 			it->isScalar = (header & JB_FLAG_SCALAR) != 0;
+			/* This is either a "raw scalar", or an array */
 			Assert(!it->isScalar || it->nelems == 1);
 			break;
 		case JB_FLAG_OBJECT:

@@ -14,7 +14,7 @@
 #include "postgres.h"
 
 #include "access/gin.h"
-#include "access/skey.h"
+#include "access/hash.h"
 #include "catalog/pg_type.h"
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
@@ -23,7 +23,7 @@
 
 typedef struct PathHashStack
 {
-	pg_crc32	hash_state;
+	uint32	hash_state;
 	struct PathHashStack *next;
 }	PathHashStack;
 
@@ -293,7 +293,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 	it = JsonbIteratorInit(VARDATA(jb));
 
 	tail.next = NULL;
-	INIT_CRC32(tail.hash_state);
+	tail.hash_state = 0;
 	stack = &tail;
 
 	/*
@@ -304,7 +304,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 	 */
 	while ((r = JsonbIteratorNext(&it, &v, false)) != 0)
 	{
-		pg_crc32		path_crc32;
+		uint32			temphash;
 		PathHashStack  *tmp;
 
 		if (i >= total)
@@ -314,9 +314,9 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 		}
 
 		/*
-		 * Keys and values CRC'd as one.
+		 * Keys and values hashed as one.
 		 *
-		 * Note that we don't CRC anything that directly reflects the nesting
+		 * Note that we don't hash anything that directly reflects the nesting
 		 * structure (e.g. whether a structure is an array or object).  It's
 		 * generally assumed that per column jsonb values frequently have a
 		 * somewhat homogeneous structure.
@@ -334,16 +334,13 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 				/* Calc hash of key and separated into preserved stack item */
 				stack->hash_state = stack->next->hash_state;
 				hash_scalar_value(&v, stack);
-				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
 				break;
 			case WJB_VALUE:
 			case WJB_ELEM:
 				stack->hash_state = stack->next->hash_state;
-				COMP_CRC32(stack->hash_state, PATH_SEPARATOR, 1);
 				hash_scalar_value(&v, stack);
-				path_crc32 = stack->hash_state;
-				FIN_CRC32(path_crc32);
-				entries[i++] = path_crc32;
+				temphash = stack->hash_state;
+				entries[i++] = temphash;
 				break;
 			case WJB_END_ARRAY:
 			case WJB_END_OBJECT:
@@ -353,7 +350,7 @@ gin_extract_jsonb_hash(PG_FUNCTION_ARGS)
 				stack = tmp;
 				break;
 			default:
-				break;
+				elog(ERROR, "invalid JsonbIteratorNext rc: %d", r);
 		}
 	}
 
@@ -424,7 +421,7 @@ make_scalar_text_key(const JsonbValue * v, char flag)
 			item = make_text_key(NULL, 0, NULLFLAG);
 			break;
 		case jbvBool:
-			item = make_text_key((v->boolean) ? " t" : " f", 2, flag);
+			item = make_text_key((v->boolean) ? "t" : "f", 1, flag);
 			break;
 		case jbvNumeric:
 			/*
@@ -454,10 +451,10 @@ hash_scalar_value(const JsonbValue * v, PathHashStack * stack)
 	switch (v->type)
 	{
 		case jbvNull:
-			COMP_CRC32(stack->hash_state, "n", 2);
+			stack->hash_state ^= 0x01;
 			break;
 		case jbvBool:
-			COMP_CRC32(stack->hash_state, (v->boolean) ? " t" : " f", 2);
+			stack->hash_state ^= v->boolean? 0x02:0x04;
 			break;
 		case jbvNumeric:
 			/*
@@ -467,7 +464,8 @@ hash_scalar_value(const JsonbValue * v, PathHashStack * stack)
 											   NumericGetDatum(v->numeric)));
 			break;
 		case jbvString:
-			COMP_CRC32(stack->hash_state, v->string.val, v->string.len);
+			stack->hash_state ^= hash_any((unsigned char *) v->string.val,
+										  v->string.len);
 			break;
 		default:
 			elog(ERROR, "invalid jsonb scalar type");

@@ -310,7 +310,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 				COMP_CRC32(crc, "he", 3);
 				break;
 			default:
-				elog(ERROR, "invalid jsonb iterator type");
+				elog(ERROR, "invalid JsonbIteratorNext rc: %d", r);
 		}
 	}
 
