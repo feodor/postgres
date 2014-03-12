@@ -280,7 +280,7 @@ compareJsonbBinaryValue(char *a, char *b)
 }
 
 /*
- * Find string key in object or element by value in array
+ * Find string key in object or element by value in array (packed format)
  */
 JsonbValue *
 findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
@@ -313,6 +313,7 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 			}
 			else if (JBE_ISSTRING(*e) && key->type == jbvString)
 			{
+				/* Equivalent to lengthCompareJsonbStringValue() */
 				if (key->string.len == JBE_LEN(*e) &&
 					memcmp(key->string.val, data + JBE_OFF(*e),
 						   key->string.len) == 0)
@@ -382,6 +383,7 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 
 			e = array + stopMiddle * 2;
 
+			/* Equivalent to lengthCompareJsonbStringValue() */
 			if (key->string.len == JBE_LEN(*e))
 				difference = memcmp(data + JBE_OFF(*e), key->string.val,
 									key->string.len);
@@ -1375,9 +1377,7 @@ uniqueifyJsonbObject(JsonbValue * v)
 		while (ptr - v->object.pairs < v->object.npairs)
 		{
 			/* Avoid copying over binary duplicate */
-			if (ptr->key.string.len == res->key.string.len &&
-				memcmp(ptr->key.string.val, res->key.string.val,
-					   ptr->key.string.len) == 0)
+			if (lengthCompareJsonbStringValue(ptr, res, NULL) == 0)
 			{
 				v->size -= ptr->key.size + ptr->value.size;
 			}
@@ -1421,8 +1421,7 @@ uniqueifyJsonbArray(JsonbValue * v)
 		while (ptr - v->array.elems < v->array.nelems)
 		{
 			/* Avoid copying over binary duplicate */
-			if (!(ptr->string.len == res->string.len &&
-				  memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
+			if (lengthCompareJsonbStringValue(ptr, res, NULL) != 0)
 			{
 				res++;
 				*res = *ptr;
