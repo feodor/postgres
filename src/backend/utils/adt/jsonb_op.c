@@ -49,7 +49,6 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	int			i;
 	uint32	   *plowbound = NULL,
 				lowbound = 0;
-	bool		res = false;
 
 	if (JB_ISEMPTY(jb) || v == NULL || v->object.npairs == 0)
 		PG_RETURN_BOOL(false);
@@ -69,13 +68,10 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
 											  plowbound,
 											  v->array.elems + i) != NULL)
-		{
-			res = true;
-			break;
-		}
+			PG_RETURN_BOOL(true);
 	}
 
-	PG_RETURN_BOOL(res);
+	PG_RETURN_BOOL(false);
 }
 
 Datum
@@ -86,7 +82,6 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	JsonbValue *v = arrayToJsonbSortedArray(keys);
 	uint32	   *plowbound = NULL;
 	uint32		lowbound = 0;
-	bool		res = true;
 	int			i;
 
 	if (JB_ISEMPTY(js) || v == NULL || v->array.nelems == 0)
@@ -112,13 +107,10 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
 											  plowbound,
 											  v->array.elems + i) == NULL)
-		{
-			res = false;
-			break;
-		}
+			PG_RETURN_BOOL(false);
 	}
 
-	PG_RETURN_BOOL(res);
+	PG_RETURN_BOOL(true);
 }
 
 Datum
@@ -127,9 +119,7 @@ jsonb_contains(PG_FUNCTION_ARGS)
 	Jsonb	   *val = PG_GETARG_JSONB(0);
 	Jsonb	   *tmpl = PG_GETARG_JSONB(1);
 
-	bool		res = true;
-	JsonbIterator *it1,
-			   *it2;
+	JsonbIterator *it1, *it2;
 
 	if (JB_ROOT_COUNT(val) < JB_ROOT_COUNT(tmpl) ||
 		JB_ROOT_IS_OBJECT(val) != JB_ROOT_IS_OBJECT(tmpl))
@@ -137,14 +127,14 @@ jsonb_contains(PG_FUNCTION_ARGS)
 
 	it1 = JsonbIteratorInit(VARDATA(val));
 	it2 = JsonbIteratorInit(VARDATA(tmpl));
-	res = deepContains(&it1, &it2);
 
-	PG_RETURN_BOOL(res);
+	PG_RETURN_BOOL(deepContains(&it1, &it2));
 }
 
 Datum
 jsonb_contained(PG_FUNCTION_ARGS)
 {
+	/* Just invert "contains" */
 	PG_RETURN_DATUM(DirectFunctionCall2(jsonb_contains,
 										PG_GETARG_DATUM(1),
 										PG_GETARG_DATUM(0)
@@ -236,11 +226,11 @@ jsonb_cmp(PG_FUNCTION_ARGS)
 			res = 1;
 		}
 	}
-	else if (JB_ROOT_IS_SCALAR(jb1) && ! JB_ROOT_IS_SCALAR(jb2))
+	else if (JB_ROOT_IS_SCALAR(jb1) && !JB_ROOT_IS_SCALAR(jb2))
 	{
 		res = -1;
 	}
-	else if (JB_ROOT_IS_SCALAR(jb2) && ! JB_ROOT_IS_SCALAR(jb1))
+	else if (JB_ROOT_IS_SCALAR(jb2) && !JB_ROOT_IS_SCALAR(jb1))
 	{
 		res = 1;
 	}
@@ -272,7 +262,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 	int			crc;
 
 	if (JB_ROOT_COUNT(jb) == 0)
-		PG_RETURN_INT32(0x1EEE);
+		PG_RETURN_INT32(0);
 
 	it = JsonbIteratorInit(VARDATA(jb));
 	INIT_CRC32(crc);
@@ -418,8 +408,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 
 			Assert(r2 == WJB_ELEM);
 
-			if (v2.type == jbvString || v2.type == jbvNull ||
-				v2.type == jbvBool || v2.type == jbvNumeric)
+			if (v2.type >= jbvNull && v2.type < jbvArray)
 			{
 				v = findUncompressedJsonbValueByValue((*it1)->buffer,
 													  JB_FLAG_ARRAY, NULL,
@@ -482,4 +471,3 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 
 	return res;
 }
-
