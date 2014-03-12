@@ -388,16 +388,16 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 		switch (type)
 		{
 			case WJB_BEGIN_ARRAY:
-				if (first == false)
+				if (!first)
 					appendBinaryStringInfo(out, ", ", 2);
 				first = true;
 
-				if (v.array.scalar == false)
+				if (!v.array.scalar)
 					appendStringInfoChar(out, '[');
 				level++;
 				break;
 			case WJB_BEGIN_OBJECT:
-				if (first == false)
+				if (!first)
 					appendBinaryStringInfo(out, ", ", 2);
 				first = true;
 				appendStringInfoCharMacro(out, '{');
@@ -405,7 +405,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				level++;
 				break;
 			case WJB_KEY:
-				if (first == false)
+				if (!first)
 					appendBinaryStringInfo(out, ", ", 2);
 				first = true;
 
@@ -432,7 +432,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				}
 				break;
 			case WJB_ELEM:
-				if (first == false)
+				if (!first)
 					appendBinaryStringInfo(out, ", ", 2);
 				else
 					first = false;
@@ -441,7 +441,7 @@ JsonbToCString(StringInfo out, char *in, int estimated_len)
 				break;
 			case WJB_END_ARRAY:
 				level--;
-				if (v.array.scalar == false)
+				if (!v.array.scalar)
 					appendStringInfoChar(out, ']');
 				first = false;
 				break;

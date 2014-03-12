@@ -382,8 +382,8 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 			}
 			else if (JBE_ISBOOL(*e) && key->type == jbvBool)
 			{
-				if ((JBE_ISBOOL_TRUE(*e) && key->boolean == true) ||
-					(JBE_ISBOOL_FALSE(*e) && key->boolean == false))
+				if ((JBE_ISBOOL_TRUE(*e) && key->boolean) ||
+					(JBE_ISBOOL_FALSE(*e) && !key->boolean))
 				{
 					r = *key;
 					r.size = sizeof(JEntry);
@@ -395,12 +395,14 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 			}
 			else if (JBE_ISNUMERIC(*e) && key->type == jbvNumeric)
 			{
+				Numeric entry = (Numeric) (data + INTALIGN(JBE_OFF(*e)));
+
 				if (DatumGetBool(DirectFunctionCall2(numeric_eq,
-													 PointerGetDatum(data + INTALIGN(JBE_OFF(*e))),
-													 PointerGetDatum(key->numeric))) == true)
+													 PointerGetDatum(entry),
+													 PointerGetDatum(key->numeric))))
 				{
 					r.type = jbvNumeric;
-					r.numeric = (Numeric) (data + INTALIGN(JBE_OFF(*e)));
+					r.numeric = entry;
 
 					if (lowbound)
 						*lowbound = i;
@@ -418,13 +420,16 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 					stopHigh = (header & JB_COUNT_MASK),
 					stopMiddle;
 
-		if (key->type != jbvString)
-			return NULL;
+		/* Object keys must be strings */
+		Assert(key->type == jbvString);
 
+		/*
+		 * Binary search for matching jsonb value
+		 */
 		while (stopLow < stopHigh)
 		{
-			int			difference;
-			JEntry	   *e;
+			JEntry *e;
+			int		difference;
 
 			stopMiddle = stopLow + (stopHigh - stopLow) / 2;
 
@@ -608,7 +613,7 @@ getJsonbValue(char *buffer, uint32 flags, int32 i)
  * the passed object's key values.  Otherwise, they are assumed to already be
  * sorted and unique.
  *
- * Initial state of ToJsonbState is NULL.
+ * Initial state of *ToJsonbState is NULL.
  */
 JsonbValue *
 pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
@@ -869,7 +874,7 @@ parseBuffer(JsonbIterator * it, char *buffer)
 		case JB_FLAG_ARRAY:
 			it->data = buffer + it->nelems * sizeof(JEntry);
 			it->isScalar = (header & JB_FLAG_SCALAR) != 0;
-			Assert(it->isScalar == false || it->nelems == 1);
+			Assert(!it->isScalar || it->nelems == 1);
 			break;
 		case JB_FLAG_OBJECT:
 			it->data = buffer + it->nelems * sizeof(JEntry) * 2;
