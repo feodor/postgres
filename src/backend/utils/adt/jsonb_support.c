@@ -275,9 +275,6 @@ compareJsonbBinaryValue(char *a, char *b)
 		}
 	}
 
-	pfree(it1);
-	pfree(it2);
-
 	return res;
 }
 
