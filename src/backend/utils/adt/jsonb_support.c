@@ -280,6 +280,29 @@ compareJsonbBinaryValue(char *a, char *b)
 }
 
 /*
+ * findUncompressedJsonbValueByValue() wrapper that sets up JsonbValue key.
+ */
+JsonbValue *
+findUncompressedJsonbValue(char *buffer, uint32 flags, uint32 *lowbound,
+						   char *key, uint32 keylen)
+{
+	JsonbValue	v;
+
+	if (key == NULL)
+	{
+		v.type = jbvNull;
+	}
+	else
+	{
+		v.type = jbvString;
+		v.string.val = key;
+		v.string.len = keylen;
+	}
+
+	return findUncompressedJsonbValueByValue(buffer, flags, lowbound, &v);
+}
+
+/*
  * Find string key in object or element by value in array (packed format)
  */
 JsonbValue *
@@ -448,29 +471,6 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 	}
 
 	return NULL;
-}
-
-/*
- * findUncompressedJsonbValueByValue() wrapper that sets up JsonbValue key.
- */
-JsonbValue *
-findUncompressedJsonbValue(char *buffer, uint32 flags, uint32 *lowbound,
-						   char *key, uint32 keylen)
-{
-	JsonbValue	v;
-
-	if (key == NULL)
-	{
-		v.type = jbvNull;
-	}
-	else
-	{
-		v.type = jbvString;
-		v.string.val = key;
-		v.string.len = keylen;
-	}
-
-	return findUncompressedJsonbValueByValue(buffer, flags, lowbound, &v);
 }
 
 /*
@@ -678,7 +678,6 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 
 	if (*it == NULL)
 		return 0;
-
 
 	/*
 	 * Encode all possible states in the "type" integer.  This is possible
@@ -977,8 +976,8 @@ up(JsonbIterator * it)
 /*
  * Transformation from tree to binary representation of jsonb
  */
-#define curLevelState	state->lptr
-#define prevLevelState	state->pptr
+#define curLevelState	(state->lptr)
+#define prevLevelState	(state->pptr)
 
 static void
 compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
