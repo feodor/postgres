@@ -108,7 +108,7 @@ struct JsonbValue
 		jbvObject,
 		/* Binary form of jbvArray/jbvObject */
 		jbvBinary
-	}			type;
+	} type;
 
 	uint32		size;			/* Estimation size of node (including
 								 * subnodes) */
@@ -121,7 +121,7 @@ struct JsonbValue
 		{
 			uint32		len;
 			char	   *val;	/* Not necessarily null-terminated */
-		}			string;
+		} string;
 
 		struct
 		{
@@ -129,19 +129,19 @@ struct JsonbValue
 			JsonbValue *elems;
 			bool		scalar; /* Scalar actually shares representation with
 								 * array */
-		}			array;
+		} array;
 
 		struct
 		{
 			int			npairs;
 			JsonbPair  *pairs;
-		}			object;		/* Associative data structure */
+		} object;		/* Associative data structure */
 
 		struct
 		{
 			uint32		len;
 			char	   *data;
-		}			binary;
+		} binary;
 	};
 
 };

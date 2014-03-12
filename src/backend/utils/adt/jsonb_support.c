@@ -474,8 +474,9 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 }
 
 /*
- * Get i-th value of array or object.  If i < 0, then it counts from the end of
- * array/object. Note: returns pointer to statically allocated JsonbValue.
+ * Get i-th value of array or object.
+ *
+ * Note: returns pointer to statically allocated JsonbValue.
  */
 JsonbValue *
 getJsonbValue(char *buffer, uint32 flags, int32 i)
@@ -489,18 +490,10 @@ getJsonbValue(char *buffer, uint32 flags, int32 i)
 	Assert((header & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
 		   (JB_FLAG_ARRAY | JB_FLAG_OBJECT));
 
-	if (i >= 0)
-	{
-		if (i >= (header & JB_COUNT_MASK))
-			return NULL;
-	}
-	else
-	{
-		if (-i > (header & JB_COUNT_MASK))
-			return NULL;
+	Assert(i >= 0);
 
-		i = (header & JB_COUNT_MASK) + i;
-	}
+	if (i >= (header & JB_COUNT_MASK))
+		return NULL;
 
 	array = (JEntry *) (buffer + sizeof(header));
 
