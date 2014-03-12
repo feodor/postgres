@@ -18,7 +18,6 @@
 #include "utils/memutils.h"
 #include "utils/jsonb.h"
 
-#define JENTRY_ISFIRST		(0x80000000)
 #define JENTRY_ISSTRING		(0x00000000)
 #define JENTRY_ISNUMERIC	(0x10000000)
 #define JENTRY_ISNEST		(0x20000000)
@@ -37,6 +36,7 @@
 #define JBE_ISBOOL_TRUE(he_)	(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISTRUE)
 #define JBE_ISBOOL_FALSE(he_)	(JBE_ISBOOL(he_) && !JBE_ISBOOL_TRUE(he_))
 
+/* Macros give offset  */
 #define JBE_ENDPOS(he_) ((he_).entry & JENTRY_POSMASK)
 #define JBE_OFF(he_) (JBE_ISFIRST(he_) ? 0 : JBE_ENDPOS((&(he_))[-1]))
 #define JBE_LEN(he_) (JBE_ISFIRST(he_)	\
@@ -104,7 +104,7 @@ JsonbValueToJsonb(JsonbValue * v)
 
 		scalarArray.type = jbvArray;
 		scalarArray.array.scalar = true;
-		scalarArray.array.nelems = 1;
+		scalarArray.array.nElems = 1;
 
 		pushJsonbValue(&state, WJB_BEGIN_ARRAY, &scalarArray);
 		pushJsonbValue(&state, WJB_ELEM, v);
@@ -168,18 +168,18 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 														PointerGetDatum(a->numeric),
 														PointerGetDatum(b->numeric)));
 			case jbvArray:
-				if (a->array.nelems == b->array.nelems)
+				if (a->array.nElems == b->array.nElems)
 				{
-					for (i = 0; i < a->array.nelems; i++)
+					for (i = 0; i < a->array.nElems; i++)
 						if (compareJsonbValue(a->array.elems + i,
 											  b->array.elems + i))
 							return true;
 				}
 				break;
 			case jbvObject:
-				if (a->object.npairs == b->object.npairs)
+				if (a->object.nPairs == b->object.nPairs)
 				{
-					for (i = 0; i < a->object.npairs; i++)
+					for (i = 0; i < a->object.nPairs; i++)
 					{
 						if (lengthCompareJsonbStringValue(&a->object.pairs[i].key,
 														  &b->object.pairs[i].key,
@@ -253,12 +253,12 @@ compareJsonbBinaryValue(char *a, char *b)
 																PointerGetDatum(v2.numeric)));
 						break;
 					case jbvArray:
-						if (v1.array.nelems != v2.array.nelems)
-							res = (v1.array.nelems > v2.array.nelems) ? 1 : -1;
+						if (v1.array.nElems != v2.array.nElems)
+							res = (v1.array.nElems > v2.array.nElems) ? 1 : -1;
 						break;
 					case jbvObject:
-						if (v1.object.npairs != v2.object.npairs)
-							res = (v1.object.npairs > v2.object.npairs) ? 1 : -1;
+						if (v1.object.nPairs != v2.object.nPairs)
+							res = (v1.object.nPairs > v2.object.nPairs) ? 1 : -1;
 						break;
 					default:
 						break;
@@ -569,10 +569,10 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 			h = &(*state)->v;
 			(*state)->v.type = jbvArray;
 			(*state)->v.size = 3 * sizeof(JEntry);
-			(*state)->v.array.nelems = 0;
+			(*state)->v.array.nElems = 0;
 			(*state)->v.array.scalar = (v && v->array.scalar) != 0;
-			(*state)->size = (v && v->type == jbvArray && v->array.nelems > 0)
-				? v->array.nelems : 4;
+			(*state)->size = (v && v->type == jbvArray && v->array.nElems > 0)
+				? v->array.nElems : 4;
 			(*state)->v.array.elems = palloc(sizeof(*(*state)->v.array.elems) *
 											 (*state)->size);
 			break;
@@ -581,9 +581,9 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 			h = &(*state)->v;
 			(*state)->v.type = jbvObject;
 			(*state)->v.size = 3 * sizeof(JEntry);
-			(*state)->v.object.npairs = 0;
-			(*state)->size = (v && v->type == jbvObject && v->object.npairs > 0) ?
-				v->object.npairs : 4;
+			(*state)->v.object.nPairs = 0;
+			(*state)->size = (v && v->type == jbvObject && v->object.nPairs > 0) ?
+				v->object.nPairs : 4;
 			(*state)->v.object.pairs = palloc(sizeof(*(*state)->v.object.pairs) *
 											  (*state)->size);
 			break;
@@ -677,23 +677,23 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 	 * because enum members of JsonbIterator->state use different bit values
 	 * than JB_FLAG_ARRAY/JB_FLAG_OBJECT.  See definition of JsonbIterator
 	 */
-	switch ((*it)->type | (*it)->state)
+	switch ((*it)->containerType | (*it)->state)
 	{
 		case JB_FLAG_ARRAY | jbi_start:
 			(*it)->state = jbi_elem;
 			(*it)->i = 0;
 			v->type = jbvArray;
-			v->array.nelems = (*it)->nelems;
+			v->array.nElems = (*it)->nElems;
 			res = WJB_BEGIN_ARRAY;
 			v->array.scalar = (*it)->isScalar;
 			break;
 		case JB_FLAG_ARRAY | jbi_elem:
-			if ((*it)->i >= (*it)->nelems)
+			if ((*it)->i >= (*it)->nElems)
 			{
 				*it = up(*it);
 				res = WJB_END_ARRAY;
 			}
-			else if (formAnswer(it, v, &(*it)->array[(*it)->i++], skipNested))
+			else if (formAnswer(it, v, &(*it)->metaArray[(*it)->i++], skipNested))
 			{
 				res = JsonbIteratorNext(it, v, skipNested);
 			}
@@ -706,25 +706,25 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 			(*it)->state = jbi_key;
 			(*it)->i = 0;
 			v->type = jbvObject;
-			v->object.npairs = (*it)->nelems;
+			v->object.nPairs = (*it)->nElems;
 			res = WJB_BEGIN_OBJECT;
 			break;
 		case JB_FLAG_OBJECT | jbi_key:
-			if ((*it)->i >= (*it)->nelems)
+			if ((*it)->i >= (*it)->nElems)
 			{
 				*it = up(*it);
 				res = WJB_END_OBJECT;
 			}
 			else
 			{
-				formAnswer(it, v, &(*it)->array[(*it)->i * 2], false);
+				formAnswer(it, v, &(*it)->metaArray[(*it)->i * 2], false);
 				(*it)->state = jbi_value;
 				res = WJB_KEY;
 			}
 			break;
 		case JB_FLAG_OBJECT | jbi_value:
 			(*it)->state = jbi_key;
-			if (formAnswer(it, v, &(*it)->array[((*it)->i++) * 2 + 1], skipNested))
+			if (formAnswer(it, v, &(*it)->metaArray[((*it)->i++) * 2 + 1], skipNested))
 				res = JsonbIteratorNext(it, v, skipNested);
 			else
 				res = WJB_VALUE;
@@ -785,7 +785,7 @@ arrayToJsonbSortedArray(ArrayType *a)
 			j++;
 		}
 	}
-	result->array.nelems = j;
+	result->array.nElems = j;
 
 	uniqueifyJsonbArray(result);
 	return result;
@@ -826,7 +826,7 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 	{
 		case jbvArray:
 			compressJsonbValue(state, value, WJB_BEGIN_ARRAY, nestlevel);
-			for (i = 0; i < value->array.nelems; i++)
+			for (i = 0; i < value->array.nElems; i++)
 			{
 				if ((value->array.elems[i].type >= jbvNull &&
 					value->array.elems[i].type < jbvArray) ||
@@ -841,7 +841,7 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 		case jbvObject:
 			compressJsonbValue(state, value, WJB_BEGIN_OBJECT, nestlevel);
 
-			for (i = 0; i < value->object.npairs; i++)
+			for (i = 0; i < value->object.nPairs; i++)
 			{
 				compressJsonbValue(state, &value->object.pairs[i].key, WJB_KEY, nestlevel);
 
@@ -865,31 +865,40 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 /*
  * Iteration over binary jsonb
  */
+
+/*
+ * Initialize iterator from buffer
+ */
 static void
 parseBuffer(JsonbIterator * it, char *buffer)
 {
 	uint32		header = *(uint32 *) buffer;
 
-	it->type = header & (JB_FLAG_ARRAY | JB_FLAG_OBJECT);
-	it->nelems = header & JB_COUNT_MASK;
+	it->containerType = header & (JB_FLAG_ARRAY | JB_FLAG_OBJECT);
+	it->nElems = header & JB_COUNT_MASK;
 	it->buffer = buffer;
 
-
-	buffer += sizeof(uint32);
-	it->array = (JEntry *) buffer;
-
+	/* Array starts just after header */
+	it->metaArray = (JEntry *) (buffer + sizeof(uint32));
 	it->state = jbi_start;
 
-	switch (it->type)
+	switch (it->containerType)
 	{
 		case JB_FLAG_ARRAY:
-			it->data = buffer + it->nelems * sizeof(JEntry);
+			it->containerData =
+				(char *) it->metaArray + it->nElems * sizeof(JEntry);
 			it->isScalar = (header & JB_FLAG_SCALAR) != 0;
 			/* This is either a "raw scalar", or an array */
-			Assert(!it->isScalar || it->nelems == 1);
+			Assert(!it->isScalar || it->nElems == 1);
 			break;
 		case JB_FLAG_OBJECT:
-			it->data = buffer + it->nelems * sizeof(JEntry) * 2;
+			/*
+			 * Offset reflects that nElems indicates JsonbPairs in an object
+			 *
+			 * Each key and each value have Jentry metadata.
+			 */
+			it->containerData =
+				(char *) it->metaArray + it->nElems * sizeof(JEntry) * 2;
 			break;
 		default:
 			elog(ERROR, "unknown type of jsonb container");
@@ -902,7 +911,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	if (JBE_ISSTRING(*e))
 	{
 		v->type = jbvString;
-		v->string.val = (*it)->data + JBE_OFF(*e);
+		v->string.val = (*it)->containerData + JBE_OFF(*e);
 		v->string.len = JBE_LEN(*e);
 		v->size = sizeof(JEntry) + v->string.len;
 
@@ -919,7 +928,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	else if (JBE_ISNUMERIC(*e))
 	{
 		v->type = jbvNumeric;
-		v->numeric = (Numeric) ((*it)->data + INTALIGN(JBE_OFF(*e)));
+		v->numeric = (Numeric) ((*it)->containerData + INTALIGN(JBE_OFF(*e)));
 
 		v->size = 2 * sizeof(JEntry) + VARSIZE_ANY(v->numeric);
 
@@ -935,7 +944,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	else if (skipNested)
 	{
 		v->type = jbvBinary;
-		v->binary.data = (*it)->data + INTALIGN(JBE_OFF(*e));
+		v->binary.data = (*it)->containerData + INTALIGN(JBE_OFF(*e));
 		v->binary.len = JBE_LEN(*e) - (INTALIGN(JBE_OFF(*e)) - JBE_OFF(*e));
 		v->size = v->binary.len + 2 * sizeof(JEntry);
 
@@ -945,7 +954,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	{
 		JsonbIterator *nit = palloc(sizeof(*nit));
 
-		parseBuffer(nit, (*it)->data + INTALIGN(JBE_OFF(*e)));
+		parseBuffer(nit, (*it)->containerData + INTALIGN(JBE_OFF(*e)));
 		nit->next = *it;
 		*it = nit;
 
@@ -1010,20 +1019,20 @@ compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
 
 		if (value->type == jbvArray)
 		{
-			*curLevelState->header = value->array.nelems | JB_FLAG_ARRAY;
-			state->ptr += sizeof(JEntry) * value->array.nelems;
+			*curLevelState->header = value->array.nElems | JB_FLAG_ARRAY;
+			state->ptr += sizeof(JEntry) * value->array.nElems;
 
 			if (value->array.scalar)
 			{
-				Assert(value->array.nelems == 1);
+				Assert(value->array.nElems == 1);
 				Assert(level == 0);
 				*curLevelState->header |= JB_FLAG_SCALAR;
 			}
 		}
 		else
 		{
-			*curLevelState->header = value->object.npairs | JB_FLAG_OBJECT;
-			state->ptr += sizeof(JEntry) * value->object.npairs * 2;
+			*curLevelState->header = value->object.nPairs | JB_FLAG_OBJECT;
+			state->ptr += sizeof(JEntry) * value->object.nPairs * 2;
 		}
 	}
 	else if (flags & WJB_ELEM)
@@ -1230,15 +1239,15 @@ appendKey(ToJsonbState * state, JsonbValue * v)
 
 	Assert(h->type == jbvObject);
 
-	if (h->object.npairs >= state->size)
+	if (h->object.nPairs >= state->size)
 	{
 		state->size *= 2;
 		h->object.pairs = repalloc(h->object.pairs,
 								   sizeof(*h->object.pairs) * state->size);
 	}
 
-	h->object.pairs[h->object.npairs].key = *v;
-	h->object.pairs[h->object.npairs].order = h->object.npairs;
+	h->object.pairs[h->object.nPairs].key = *v;
+	h->object.pairs[h->object.nPairs].order = h->object.nPairs;
 
 	h->size += v->size;
 }
@@ -1250,7 +1259,7 @@ appendValue(ToJsonbState * state, JsonbValue * v)
 
 	Assert(h->type == jbvObject);
 
-	h->object.pairs[h->object.npairs++].value = *v;
+	h->object.pairs[h->object.nPairs++].value = *v;
 
 	h->size += v->size;
 }
@@ -1262,14 +1271,14 @@ appendElement(ToJsonbState * state, JsonbValue * v)
 
 	Assert(a->type == jbvArray);
 
-	if (a->array.nelems >= state->size)
+	if (a->array.nElems >= state->size)
 	{
 		state->size *= 2;
 		a->array.elems = repalloc(a->array.elems,
 								  sizeof(*a->array.elems) * state->size);
 	}
 
-	a->array.elems[a->array.nelems++] = *v;
+	a->array.elems[a->array.nElems++] = *v;
 
 	a->size += v->size;
 }
@@ -1354,8 +1363,8 @@ uniqueifyJsonbObject(JsonbValue * v)
 
 	Assert(v->type == jbvObject);
 
-	if (v->object.npairs > 1)
-		qsort_arg(v->object.pairs, v->object.npairs, sizeof(*v->object.pairs),
+	if (v->object.nPairs > 1)
+		qsort_arg(v->object.pairs, v->object.nPairs, sizeof(*v->object.pairs),
 				  lengthCompareJsonbPair, &hasNonUniq);
 
 	if (hasNonUniq)
@@ -1363,7 +1372,7 @@ uniqueifyJsonbObject(JsonbValue * v)
 		JsonbPair  *ptr = v->object.pairs + 1,
 				   *res = v->object.pairs;
 
-		while (ptr - v->object.pairs < v->object.npairs)
+		while (ptr - v->object.pairs < v->object.nPairs)
 		{
 			/* Avoid copying over binary duplicate */
 			if (lengthCompareJsonbStringValue(ptr, res, NULL) == 0)
@@ -1379,7 +1388,7 @@ uniqueifyJsonbObject(JsonbValue * v)
 			ptr++;
 		}
 
-		v->object.npairs = res + 1 - v->object.pairs;
+		v->object.nPairs = res + 1 - v->object.pairs;
 	}
 }
 
@@ -1397,8 +1406,8 @@ uniqueifyJsonbArray(JsonbValue * v)
 	 * Actually sort values, determining if any were equal on the basis of full
 	 * binary equality (rather than just having the same string length).
 	 */
-	if (v->array.nelems > 1)
-		qsort_arg(v->array.elems, v->array.nelems,
+	if (v->array.nElems > 1)
+		qsort_arg(v->array.elems, v->array.nElems,
 				  sizeof(*v->array.elems), lengthCompareJsonbStringValue,
 				  &hasNonUniq);
 
@@ -1407,7 +1416,7 @@ uniqueifyJsonbArray(JsonbValue * v)
 		JsonbValue *ptr = v->array.elems + 1,
 				   *res = v->array.elems;
 
-		while (ptr - v->array.elems < v->array.nelems)
+		while (ptr - v->array.elems < v->array.nElems)
 		{
 			/* Avoid copying over binary duplicate */
 			if (lengthCompareJsonbStringValue(ptr, res, NULL) != 0)
@@ -1419,6 +1428,6 @@ uniqueifyJsonbArray(JsonbValue * v)
 			ptr++;
 		}
 
-		v->array.nelems = res + 1 - v->array.elems;
+		v->array.nElems = res + 1 - v->array.elems;
 	}
 }

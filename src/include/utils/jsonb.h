@@ -16,7 +16,8 @@
 #include "utils/array.h"
 #include "utils/numeric.h"
 
-#define JENTRY_POSMASK	0x0FFFFFFF
+#define JENTRY_POSMASK	(0x0FFFFFFF)
+#define JENTRY_ISFIRST	(0x80000000)
 #define JENTRY_TYPEMASK (~(JENTRY_POSMASK | JENTRY_ISFIRST))
 
 /*
@@ -79,7 +80,7 @@ typedef struct JsonbValue JsonbValue;
  * JEntry: there is one of these for each key _and_ value in a jsonb object
  *
  * The position offset points to the _end_ so that we can get the length by
- * subtraction from the previous entry.	the ISFIRST flag lets us tell whether
+ * subtraction from the previous entry.	 The JENTRY_ISFIRST flag indicates if
  * there is a previous entry.
  */
 typedef struct
@@ -98,7 +99,7 @@ struct JsonbValue
 {
 	enum
 	{
-		/* Scalar types (type influences sort order) */
+		/* Scalar types (influences sort order) */
 		jbvNull = 0,
 		jbvString,
 		jbvNumeric,
@@ -125,7 +126,7 @@ struct JsonbValue
 
 		struct
 		{
-			int			nelems;
+			int			nElems;
 			JsonbValue *elems;
 			bool		scalar; /* Scalar actually shares representation with
 								 * array */
@@ -133,7 +134,7 @@ struct JsonbValue
 
 		struct
 		{
-			int			npairs;
+			int			nPairs;
 			JsonbPair  *pairs;
 		} object;		/* Associative data structure */
 
@@ -162,21 +163,38 @@ typedef struct ToJsonbState
 
 /*
  * JsonbIterator holds details of the type for each iteration. It also stores
- * an unoriginal unparsed varlena buffer.
+ * an unoriginal unparsed varlena buffer, which can be directly accessed
+ * without deserialization in some contexts.
  */
 typedef struct JsonbIterator
 {
-	uint32		type;
-	uint32		nelems;
-	JEntry	   *array;
-	bool		isScalar;
-	char	   *data;
-	char	   *buffer;			/* unparsed buffer */
+	/* Unparsed buffer (not necessarily root) */
+	char	   *buffer;
+
+	/* Current item in buffer */
 	int			i;
 
+	/* Current value */
+	uint32		containerType; /* Never JB_FLAG_SCALAR
+								* scalars may appear in pseudo-arrays */
+	uint32		nElems;		   /* Number of elements in metaArray
+								* (we * 2 for pairs within objects) */
+	bool		isScalar;	   /* Pseudo-array scalar value? */
+	JEntry	   *metaArray;
+
 	/*
-	 * Enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_JSONB
-	 * with possibility of decoding.  See optimization in JsonbIteratorGet()
+	 * Jentry items.  Note that this points just past metaArray (straight to
+	 * items proper).
+	 *
+	 * char pointer due to alignment considerations
+	 */
+	char	   *containerData;
+
+	/*
+	 * Enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_OBJECT
+	 * with possibility of decoding.
+	 *
+	 * See space optimization in JsonbIteratorGet()
 	 */
 	enum
 	{

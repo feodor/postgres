@@ -326,7 +326,7 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 
 		va.type = jbvArray;
 		va.array.scalar = true;
-		va.array.nelems = 1;
+		va.array.nElems = 1;
 
 		_state->res = pushJsonbValue(&_state->state, WJB_BEGIN_ARRAY, &va);
 		_state->res = pushJsonbValue(&_state->state, WJB_ELEM, &v);

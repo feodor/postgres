@@ -46,7 +46,7 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	uint32	   *plowbound = NULL,
 				lowbound = 0;
 
-	if (JB_ISEMPTY(jb) || v == NULL || v->object.npairs == 0)
+	if (JB_ISEMPTY(jb) || v == NULL || v->object.nPairs == 0)
 		PG_RETURN_BOOL(false);
 
 	if (JB_ROOT_IS_OBJECT(jb))
@@ -58,7 +58,7 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	 * search can start one entry past the previous "found" entry, or at the
 	 * lower bound of the last search.
 	 */
-	for (i = 0; i < v->array.nelems; i++)
+	for (i = 0; i < v->array.nElems; i++)
 	{
 		if (findUncompressedJsonbValueByValue(VARDATA(jb),
 											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
@@ -80,9 +80,9 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	uint32		lowbound = 0;
 	int			i;
 
-	if (JB_ISEMPTY(js) || v == NULL || v->array.nelems == 0)
+	if (JB_ISEMPTY(js) || v == NULL || v->array.nElems == 0)
 	{
-		if (v == NULL || v->array.nelems == 0)
+		if (v == NULL || v->array.nElems == 0)
 			PG_RETURN_BOOL(true);		/* compatibility */
 		else
 			PG_RETURN_BOOL(false);
@@ -97,7 +97,7 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	 * search can start one entry past the previous "found" entry, or at the
 	 * lower bound of the last search.
 	 */
-	for (i = 0; i < v->array.nelems; i++)
+	for (i = 0; i < v->array.nElems; i++)
 	{
 		if (findUncompressedJsonbValueByValue(VARDATA(js),
 											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
@@ -269,12 +269,12 @@ jsonb_hash(PG_FUNCTION_ARGS)
 		{
 			case WJB_BEGIN_ARRAY:
 				COMP_CRC32(crc, "ab", 3);
-				COMP_CRC32(crc, &v.array.nelems, sizeof(v.array.nelems));
+				COMP_CRC32(crc, &v.array.nElems, sizeof(v.array.nElems));
 				COMP_CRC32(crc, &v.array.scalar, sizeof(v.array.scalar));
 				break;
 			case WJB_BEGIN_OBJECT:
 				COMP_CRC32(crc, "hb", 3);
-				COMP_CRC32(crc, &v.object.npairs, sizeof(v.object.npairs));
+				COMP_CRC32(crc, &v.object.nPairs, sizeof(v.object.nPairs));
 				break;
 			case WJB_KEY:
 				COMP_CRC32(crc, "k", 2);
@@ -394,7 +394,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 	{
 		JsonbValue *v;
 		JsonbValue *av = NULL;
-		uint32		nelems = v1.array.nelems;
+		uint32		nElems = v1.array.nElems;
 
 		for (;;)
 		{
@@ -423,9 +423,9 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 				{
 					uint32		j = 0;
 
-					av = palloc(sizeof(JsonbValue) * nelems);
+					av = palloc(sizeof(JsonbValue) * nElems);
 
-					for (i = 0; i < nelems; i++)
+					for (i = 0; i < nElems; i++)
 					{
 						r2 = JsonbIteratorNext(it1, &v1, true);
 						Assert(r2 == WJB_ELEM);
@@ -440,11 +440,11 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 						break;
 					}
 
-					nelems = j;
+					nElems = j;
 				}
 
 				res = false;
-				for (i = 0; res == false && i < nelems; i++)
+				for (i = 0; res == false && i < nElems; i++)
 				{
 					JsonbIterator *it1a,
 							   *it2a;

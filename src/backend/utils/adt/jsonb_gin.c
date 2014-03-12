@@ -419,7 +419,7 @@ make_scalar_text_key(const JsonbValue * v, char flag)
 			item = make_text_key(NULL, 0, NULLFLAG);
 			break;
 		case jbvBool:
-			item = make_text_key((v->boolean) ? "t" : "f", 1, flag);
+			item = make_text_key(v->boolean ? "t" : "f", 1, flag);
 			break;
 		case jbvNumeric:
 			/*
