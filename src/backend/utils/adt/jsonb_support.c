@@ -140,6 +140,8 @@ JsonbValueToJsonb(JsonbValue * v)
  *
  * This is a special qsort_arg() comparator used to sort strings in certain
  * internal contexts where it is sufficient to have a well-defined sort order.
+ * In particular, objects are sorted according to this criteria to facilitate
+ * cheap binary searches where we don't care about lexical sort order.
  *
  * a and b are first sorted based on their length.  If a tie-breaker is
  * required, only then do we consider string binary equality.
