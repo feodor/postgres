@@ -197,8 +197,7 @@ typedef struct JsonbIterator
 	char	   *dataProper;
 
 	/*
-	 * Enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_OBJECT
-	 * with possibility of decoding.
+	 * Enum members are OR'ed with JB_FLAG_ARRAY/JB_FLAG_OBJECT.
 	 *
 	 * See optimization in JsonbIteratorNext()
 	 */

@@ -23,7 +23,7 @@ typedef struct JsonbInState
 	JsonbValue *res;
 }	JsonbInState;
 
-static inline Datum deserialize_json_text(char *json, int len);
+static inline Datum serialize_json_text(char *json, int len);
 static size_t checkStringLen(size_t len);
 static void jsonb_in_object_start(void *state);
 static void jsonb_in_object_end(void *state);
@@ -42,7 +42,7 @@ jsonb_in(PG_FUNCTION_ARGS)
 {
 	char	   *json = PG_GETARG_CSTRING(0);
 
-	return deserialize_json_text(json, strlen(json));
+	return serialize_json_text(json, strlen(json));
 }
 
 /*
@@ -66,7 +66,7 @@ jsonb_recv(PG_FUNCTION_ARGS)
 	else
 		elog(ERROR, "Unsupported jsonb version number %d", version);
 
-	return deserialize_json_text(str, nbytes);
+	return serialize_json_text(str, nbytes);
 }
 
 /*
@@ -161,14 +161,14 @@ jsonb_typeof(PG_FUNCTION_ARGS)
 }
 
 /*
- * deserialize_json_text
+ * serialize_json_text
  *
- * turn json text into a jsonb Datum.
+ * Turn json text into a jsonb Datum.
  *
- * uses the json parser with hooks to contruct the jsonb.
+ * Uses the json parser with hooks to contruct a jsonb.
  */
 static inline Datum
-deserialize_json_text(char *json, int len)
+serialize_json_text(char *json, int len)
 {
 	JsonLexContext *lex;
 	JsonbInState state;
