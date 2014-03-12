@@ -12,7 +12,6 @@
 #include "postgres.h"
 
 #include "libpq/pqformat.h"
-#include "miscadmin.h"
 #include "utils/builtins.h"
 #include "utils/json.h"
 #include "utils/jsonapi.h"

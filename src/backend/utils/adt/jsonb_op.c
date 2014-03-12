@@ -14,12 +14,8 @@
 #include "postgres.h"
 
 #include "access/hash.h"
-#include "catalog/pg_type.h"
-#include "funcapi.h"
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
-#include "utils/memutils.h"
-#include "utils/pg_crc.h"
 
 static bool deepContains(JsonbIterator ** it1, JsonbIterator ** it2);
 
