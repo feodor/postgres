@@ -48,6 +48,13 @@
 #define WJB_BEGIN_OBJECT	(0x020)
 #define WJB_END_OBJECT		(0x040)
 
+/* Macros give offset  */
+#define JBE_ENDPOS(he_) ((he_).entry & JENTRY_POSMASK)
+#define JBE_OFF(he_) (JBE_ISFIRST(he_) ? 0 : JBE_ENDPOS((&(he_))[-1]))
+#define JBE_LEN(he_) (JBE_ISFIRST(he_)	\
+					  ? JBE_ENDPOS(he_) \
+					  : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
+
 /*
  * When using a GIN index for jsonb, we choose to index both keys and values.
  * The storage format is "text" values, with K, V, or N prepended to the string
@@ -183,18 +190,17 @@ typedef struct JsonbIterator
 	JEntry	   *metaArray;
 
 	/*
-	 * Jentry items.  Note that this points just past metaArray (straight to
-	 * items proper).
-	 *
-	 * char pointer due to alignment considerations
+	 * Data proper.  Note that this points just past metaArray.  We use
+	 * metaArray metadata (Jentrys) with JBE_OFF() macro to find appropriate
+	 * offsets into this array.
 	 */
-	char	   *containerData;
+	char	   *dataProper;
 
 	/*
 	 * Enum members should be freely OR'ed with JB_FLAG_ARRAY/JB_FLAG_OBJECT
 	 * with possibility of decoding.
 	 *
-	 * See space optimization in JsonbIteratorGet()
+	 * See optimization in JsonbIteratorNext()
 	 */
 	enum
 	{

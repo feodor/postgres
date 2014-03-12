@@ -36,13 +36,6 @@
 #define JBE_ISBOOL_TRUE(he_)	(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISTRUE)
 #define JBE_ISBOOL_FALSE(he_)	(JBE_ISBOOL(he_) && !JBE_ISBOOL_TRUE(he_))
 
-/* Macros give offset  */
-#define JBE_ENDPOS(he_) ((he_).entry & JENTRY_POSMASK)
-#define JBE_OFF(he_) (JBE_ISFIRST(he_) ? 0 : JBE_ENDPOS((&(he_))[-1]))
-#define JBE_LEN(he_) (JBE_ISFIRST(he_)	\
-					  ? JBE_ENDPOS(he_) \
-					  : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
-
 typedef struct CompressState
 {
 	char	   *begin;
@@ -674,8 +667,10 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 
 	/*
 	 * Encode all possible states in the "type" integer.  This is possible
-	 * because enum members of JsonbIterator->state use different bit values
-	 * than JB_FLAG_ARRAY/JB_FLAG_OBJECT.  See definition of JsonbIterator
+	 * because enum constants within JsonbIterator.containerType use different
+	 * bit values than JB_FLAG_ARRAY/JB_FLAG_OBJECT.
+	 *
+	 * See definition of JsonbIterator
 	 */
 	switch ((*it)->containerType | (*it)->state)
 	{
@@ -885,7 +880,7 @@ parseBuffer(JsonbIterator * it, char *buffer)
 	switch (it->containerType)
 	{
 		case JB_FLAG_ARRAY:
-			it->containerData =
+			it->dataProper =
 				(char *) it->metaArray + it->nElems * sizeof(JEntry);
 			it->isScalar = (header & JB_FLAG_SCALAR) != 0;
 			/* This is either a "raw scalar", or an array */
@@ -897,7 +892,7 @@ parseBuffer(JsonbIterator * it, char *buffer)
 			 *
 			 * Each key and each value have Jentry metadata.
 			 */
-			it->containerData =
+			it->dataProper =
 				(char *) it->metaArray + it->nElems * sizeof(JEntry) * 2;
 			break;
 		default:
@@ -911,7 +906,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	if (JBE_ISSTRING(*e))
 	{
 		v->type = jbvString;
-		v->string.val = (*it)->containerData + JBE_OFF(*e);
+		v->string.val = (*it)->dataProper + JBE_OFF(*e);
 		v->string.len = JBE_LEN(*e);
 		v->size = sizeof(JEntry) + v->string.len;
 
@@ -928,7 +923,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	else if (JBE_ISNUMERIC(*e))
 	{
 		v->type = jbvNumeric;
-		v->numeric = (Numeric) ((*it)->containerData + INTALIGN(JBE_OFF(*e)));
+		v->numeric = (Numeric) ((*it)->dataProper + INTALIGN(JBE_OFF(*e)));
 
 		v->size = 2 * sizeof(JEntry) + VARSIZE_ANY(v->numeric);
 
@@ -944,7 +939,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	else if (skipNested)
 	{
 		v->type = jbvBinary;
-		v->binary.data = (*it)->containerData + INTALIGN(JBE_OFF(*e));
+		v->binary.data = (*it)->dataProper + INTALIGN(JBE_OFF(*e));
 		v->binary.len = JBE_LEN(*e) - (INTALIGN(JBE_OFF(*e)) - JBE_OFF(*e));
 		v->size = v->binary.len + 2 * sizeof(JEntry);
 
@@ -954,7 +949,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	{
 		JsonbIterator *nit = palloc(sizeof(*nit));
 
-		parseBuffer(nit, (*it)->containerData + INTALIGN(JBE_OFF(*e)));
+		parseBuffer(nit, (*it)->dataProper + INTALIGN(JBE_OFF(*e)));
 		nit->next = *it;
 		*it = nit;
 
