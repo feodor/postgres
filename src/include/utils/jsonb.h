@@ -233,6 +233,7 @@ extern JsonbValue *pushJsonbValue(ToJsonbState ** state, int r, JsonbValue *v);
 extern JsonbIterator *JsonbIteratorInit(char *buffer);
 extern int JsonbIteratorNext(JsonbIterator **it, JsonbValue *v, bool skipNested);
 extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
+extern JsonbValue *arrayToJsonbSortedArray(ArrayType *a);
 
 /* jsonb.c support function */
 extern char *JsonbToCString(StringInfo out, char *in, int estimated_len);

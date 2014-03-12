@@ -13,7 +13,9 @@
 
 #include "miscadmin.h"
 #include "catalog/pg_collation.h"
+#include "catalog/pg_type.h"
 #include "utils/builtins.h"
+#include "utils/memutils.h"
 #include "utils/jsonb.h"
 
 #define JENTRY_ISFIRST		(0x80000000)
@@ -263,7 +265,9 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 }
 
 /*
- * Gives consistent ordering of Jsonb values
+ * Gives consistent ordering of Jsonb values.
+ *
+ * Strings are compared lexically.
  */
 int
 compareJsonbBinaryValue(char *a, char *b)
@@ -795,6 +799,91 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 	}
 
 	return res;
+}
+
+/*
+ * Convert a Postgres text array to a JsonbSortedArray, with de-duplicated key
+ * elements.
+ */
+JsonbValue *
+arrayToJsonbSortedArray(ArrayType *a)
+{
+	Datum	   *key_datums;
+	bool	   *key_nulls;
+	int			key_count;
+	JsonbValue *result;
+	int			i,
+				j;
+	bool		hasNonUniq = false;
+
+	/* Extract data for sorting */
+	deconstruct_array(a, TEXTOID, -1, false, 'i', &key_datums, &key_nulls,
+					  &key_count);
+
+	if (key_count == 0)
+		return NULL;
+
+	/*
+	 * A text array uses at least eight bytes per element, so any overflow in
+	 * "key_count * sizeof(JsonbPair)" is small enough for palloc() to catch.
+	 * However, credible improvements to the array format could invalidate that
+	 * assumption.  Therefore, use an explicit check rather than relying on
+	 * palloc() to complain.
+	 */
+	if (key_count > MaxAllocSize / sizeof(JsonbPair))
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+				 errmsg("number of pairs (%d) exceeds the maximum allowed (%zu)",
+						key_count, MaxAllocSize / sizeof(JsonbPair))));
+
+	result = palloc(sizeof(JsonbValue));
+	result->type = jbvArray;
+	result->array.scalar = false;
+	result->array.elems = palloc(sizeof(*result->object.pairs) * key_count);
+
+	for (i = 0, j = 0; i < key_count; i++)
+	{
+		if (!key_nulls[i])
+		{
+			result->array.elems[j].type = jbvString;
+			result->array.elems[j].string.val = VARDATA(key_datums[i]);
+			result->array.elems[j].string.len = VARSIZE(key_datums[i]) - VARHDRSZ;
+			j++;
+		}
+	}
+	result->array.nelems = j;
+
+	/*
+	 * Actually sort values, determining if any were equal on the basis of full
+	 * binary equality (rather than just having the same string length).
+	 */
+	if (result->array.nelems > 1)
+		qsort_arg(result->array.elems, result->array.nelems,
+				  sizeof(*result->array.elems), compareJsonbStringValue,
+				  &hasNonUniq);
+
+	if (hasNonUniq)
+	{
+		JsonbValue *ptr = result->array.elems + 1,
+				   *res = result->array.elems;
+
+		while (ptr - result->array.elems < result->array.nelems)
+		{
+			/* Avoid copying over binary duplicate */
+			if (!(ptr->string.len == res->string.len &&
+				  memcmp(ptr->string.val, res->string.val, ptr->string.len) == 0))
+			{
+				res++;
+				*res = *ptr;
+			}
+
+			ptr++;
+		}
+
+		result->array.nelems = res + 1 - result->array.elems;
+	}
+
+	return result;
 }
 
 /*
