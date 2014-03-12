@@ -19,8 +19,6 @@
 #include "utils/builtins.h"
 #include "utils/jsonb.h"
 
-#define PATH_SEPARATOR ("\0")
-
 typedef struct PathHashStack
 {
 	uint32	hash_state;
