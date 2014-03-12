@@ -219,7 +219,7 @@ compareJsonbBinaryValue(char *a, char *b)
 	it1 = JsonbIteratorInit(a);
 	it2 = JsonbIteratorInit(b);
 
-	while (res == 0)
+	do
 	{
 		JsonbValue	v1,
 					v2;
@@ -274,6 +274,7 @@ compareJsonbBinaryValue(char *a, char *b)
 			res = (r1 > r2) ? 1 : -1;	/* dummy order */
 		}
 	}
+	while (res == 0);
 
 	return res;
 }
