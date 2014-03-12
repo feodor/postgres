@@ -222,7 +222,7 @@ extern Datum gin_consistent_jsonb_hash(PG_FUNCTION_ARGS);
 
 /* Support functions */
 extern int	compareJsonbBinaryValue(char *a, char *b);
-extern int	compareJsonbValue(JsonbValue *a, JsonbValue *b);
+extern bool	compareJsonbValue(JsonbValue *a, JsonbValue *b);
 extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 								  uint32 *lowbound, JsonbValue *key);
 extern JsonbValue *findUncompressedJsonbValue(char *buffer, uint32 flags,

@@ -380,7 +380,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 			else if (v->type == jbvString || v->type == jbvNull ||
 					 v->type == jbvBool || v->type == jbvNumeric)
 			{
-				if (compareJsonbValue(v, &v2) != 0)
+				if (!compareJsonbValue(v, &v2))
 				{
 					res = false;
 					break;

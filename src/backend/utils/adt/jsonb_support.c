@@ -137,13 +137,20 @@ JsonbValueToJsonb(JsonbValue * v)
 }
 
 /*
- * Compare 2 JsonbValues.
+ * Are two JsonbValues a and b equal?
  *
- * Uses lexical string sorting.
+ * Does not use lexical comparisons.  Therefore, it is essentially that this
+ * never be used for anything other than searching for values within a single
+ * jsonb.
+ *
+ * We return bool because we don't want to give anyone any ideas about using
+ * this for sorting.  This is just for "contains" style searching.
  */
-int
+bool
 compareJsonbValue(JsonbValue * a, JsonbValue * b)
 {
+	int			i;
+
 	check_stack_depth();
 
 	if (a->type == b->type)
@@ -151,66 +158,54 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 		switch (a->type)
 		{
 			case jbvNull:
-				return 0;
+				return true;
 			case jbvString:
-				return lexicalCompareJsonbStringValue(a, b);
+				return lengthCompareJsonbStringValue(a, b, NULL) == 0;
 			case jbvBool:
-				if (a->boolean == b->boolean)
-					return 0;
-				return (a->boolean > b->boolean) ? 1 : -1;
+				return a->boolean == b->boolean;
 			case jbvNumeric:
-				return DatumGetInt32(DirectFunctionCall2(numeric_cmp,
-												 PointerGetDatum(a->numeric),
-											   PointerGetDatum(b->numeric)));
+				return DatumGetBool(DirectFunctionCall2(numeric_eq,
+														PointerGetDatum(a->numeric),
+														PointerGetDatum(b->numeric)));
 			case jbvArray:
 				if (a->array.nelems == b->array.nelems)
 				{
-					int			i,
-								r;
-
 					for (i = 0; i < a->array.nelems; i++)
-						if ((r = compareJsonbValue(a->array.elems + i,
-												   b->array.elems + i)) != 0)
-							return r;
-
-					return 0;
+						if (compareJsonbValue(a->array.elems + i,
+											  b->array.elems + i))
+							return true;
 				}
-
-				return (a->array.nelems > b->array.nelems) ? 1 : -1;
+				break;
 			case jbvObject:
 				if (a->object.npairs == b->object.npairs)
 				{
-					int			i,
-								r;
-
 					for (i = 0; i < a->object.npairs; i++)
 					{
-						if ((r = lexicalCompareJsonbStringValue(&a->object.pairs[i].key,
-																&b->object.pairs[i].key)) != 0)
-							return r;
-						if ((r = compareJsonbValue(&a->object.pairs[i].value,
-											&b->object.pairs[i].value)) != 0)
-							return r;
+						if (lengthCompareJsonbStringValue(&a->object.pairs[i].key,
+														  &b->object.pairs[i].key,
+														  NULL) == 0)
+							return true;
+						if (compareJsonbValue(&a->object.pairs[i].value,
+											  &b->object.pairs[i].value))
+							return true;
 					}
-
-					return 0;
 				}
-
-				return (a->object.npairs > b->object.npairs) ? 1 : -1;
+				break;
 			case jbvBinary:
-				return compareJsonbBinaryValue(a->binary.data, b->binary.data);
+				/* This wastes a few cycles on unneeded lexical comparisons */
+				return compareJsonbBinaryValue(a->binary.data, b->binary.data) == 0;
 			default:
 				elog(ERROR, "invalid jsonb scalar type");
 		}
 	}
 
-	return (a->type > b->type) ? 1 : -1;
+	return false;
 }
 
 /*
  * Gives consistent ordering of Jsonb values.
  *
- * Strings are compared lexically.
+ * Strings are compared lexically, making this suitable as a sort comparator.
  */
 int
 compareJsonbBinaryValue(char *a, char *b)
@@ -1336,13 +1331,13 @@ lengthCompareJsonbStringValue(const void *a, const void *b, void *binequal)
  * Pairs with equals keys are ordered such that the order field is respected.
  */
 static int
-lengthCompareJsonbPair(const void *a, const void *b, void *arg)
+lengthCompareJsonbPair(const void *a, const void *b, void *binequal)
 {
-	const JsonbPair *pa = a;
-	const JsonbPair *pb = b;
+	const JsonbPair *pa = (const JsonbPair *) a;
+	const JsonbPair *pb = (const JsonbPair *) b;
 	int			res;
 
-	res = lengthCompareJsonbStringValue(&pa->key, &pb->key, arg);
+	res = lengthCompareJsonbStringValue(&pa->key, &pb->key, binequal);
 
 	/*
 	 * Guarantee keeping order of equal pair. Unique algorithm will prefer
