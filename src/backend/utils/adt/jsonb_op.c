@@ -364,7 +364,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 			}
 			else if (v->type >= jbvNull && v->type < jbvArray)
 			{
-				if (!compareJsonbValue(v, &v2))
+				if (!compareJsonbScalarValue(v, &v2))
 				{
 					res = false;
 					break;

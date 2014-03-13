@@ -140,7 +140,7 @@ JsonbValueToJsonb(JsonbValue * v)
 }
 
 /*
- * Are two JsonbValues a and b equal?
+ * Are two scalar JsonbValues a and b equal?
  *
  * Does not use lexical comparisons.  Therefore, it is essentially that this
  * never be used for anything other than searching for values within a single
@@ -150,10 +150,8 @@ JsonbValueToJsonb(JsonbValue * v)
  * this for sorting.  This is just for "contains" style searching.
  */
 bool
-compareJsonbValue(JsonbValue * a, JsonbValue * b)
+compareJsonbScalarValue(JsonbValue * a, JsonbValue * b)
 {
-	int			i;
-
 	check_stack_depth();
 
 	if (a->type == b->type)
@@ -170,33 +168,6 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 				return DatumGetBool(DirectFunctionCall2(numeric_eq,
 														PointerGetDatum(a->numeric),
 														PointerGetDatum(b->numeric)));
-			case jbvArray:
-				if (a->array.nElems == b->array.nElems)
-				{
-					for (i = 0; i < a->array.nElems; i++)
-						if (compareJsonbValue(a->array.elems + i,
-											  b->array.elems + i))
-							return true;
-				}
-				break;
-			case jbvObject:
-				if (a->object.nPairs == b->object.nPairs)
-				{
-					for (i = 0; i < a->object.nPairs; i++)
-					{
-						if (lengthCompareJsonbStringValue(&a->object.pairs[i].key,
-														  &b->object.pairs[i].key,
-														  NULL) == 0)
-							return true;
-						if (compareJsonbValue(&a->object.pairs[i].value,
-											  &b->object.pairs[i].value))
-							return true;
-					}
-				}
-				break;
-			case jbvBinary:
-				/* This wastes a few cycles on unneeded lexical comparisons */
-				return compareJsonbSuperHeaderValue(a->binary.data, b->binary.data) == 0;
 			default:
 				elog(ERROR, "invalid jsonb scalar type");
 		}

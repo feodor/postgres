@@ -277,7 +277,7 @@ extern Datum gin_consistent_jsonb_hash(PG_FUNCTION_ARGS);
 /* Support functions */
 extern int	compareJsonbSuperHeaderValue(JsonbSuperHeader a,
 										 JsonbSuperHeader b);
-extern bool	compareJsonbValue(JsonbValue *a, JsonbValue *b);
+extern bool	compareJsonbScalarValue(JsonbValue *a, JsonbValue *b);
 extern JsonbValue *findJsonbValueFromSuperHeaderLen(JsonbSuperHeader sheader,
 													uint32 flags,
 													uint32 *lowbound,
