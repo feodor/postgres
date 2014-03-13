@@ -318,6 +318,8 @@ SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"array":["foo"]}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"array":["bar"]}';
+-- excercise GIN_SEARCH_MODE_ALL
+SELECT count(*) FROM testjsonb WHERE j @> '{}';
 SELECT count(*) FROM testjsonb WHERE j ? 'public';
 SELECT count(*) FROM testjsonb WHERE j ?| ARRAY['public','disabled'];
 SELECT count(*) FROM testjsonb WHERE j ?& ARRAY['public','disabled'];
@@ -363,6 +365,8 @@ SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC"}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":"CC", "public":true}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25}';
 SELECT count(*) FROM testjsonb WHERE j @> '{"age":25.0}';
+-- excercise GIN_SEARCH_MODE_ALL
+SELECT count(*) FROM testjsonb WHERE j @> '{}';
 
 RESET enable_seqscan;
 DROP INDEX jidx;
