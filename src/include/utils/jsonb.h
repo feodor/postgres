@@ -126,14 +126,14 @@ struct JsonbValue
 	enum
 	{
 		/* Scalar types (influences sort order) */
-		jbvNull = 0,
+		jbvNull = 0x0,
 		jbvString,
 		jbvNumeric,
 		jbvBool,
 		/* Composite types */
-		jbvArray = 4,
+		jbvArray = 0x10,
 		jbvObject,
-		/* Binary form of jbvArray/jbvObject */
+		/* Binary form of jbvArray/jbvObject/scalar */
 		jbvBinary
 	} type;
 
@@ -173,6 +173,7 @@ struct JsonbValue
 
 };
 
+/* Pair within an Object */
 struct JsonbPair
 {
 	JsonbValue	key;
@@ -189,45 +190,42 @@ typedef struct ToJsonbState
 } ToJsonbState;
 
 /*
- * JsonbIterator holds details of the type for each iteration. It also stores
- * an unoriginal unparsed varlena buffer, which can be directly accessed
- * without deserialization in some contexts.
+ * JsonbIterator holds details of the type for each iteration. It also stores a
+ * Jsonb varlena buffer, which can be directly accessed without deserialization
+ * in some contexts.
  */
+typedef enum
+{
+	jbi_start,
+	jbi_key,
+	jbi_value,
+	jbi_elem
+} iterState;
+
 typedef struct JsonbIterator
 {
-	/* Unparsed buffer (not necessarily root) */
+	/* Jsonb varlena buffer (may or may not be root) */
 	char	   *buffer;
 
 	/* Current item in buffer */
 	int			i;
 
 	/* Current value */
-	uint32		containerType; /* Never JB_FLAG_SCALAR
-								* scalars may appear in pseudo-arrays */
+	uint32		containerType; /* Never of value JB_FLAG_SCALAR, since
+								* scalars will appear in pseudo-arrays */
 	uint32		nElems;		   /* Number of elements in metaArray
 								* (we * 2 for pairs within objects) */
 	bool		isScalar;	   /* Pseudo-array scalar value? */
-	JEntry	   *metaArray;
+	JEntry	   *meta;
 
 	/*
-	 * Data proper.  Note that this points just past metaArray.  We use
-	 * metaArray metadata (Jentrys) with JBE_OFF() macro to find appropriate
+	 * Data proper.  Note that this points just past end of metaArray.  We use
+	 * "meta" metadata (Jentrys) with JBE_OFF() macro to find appropriate
 	 * offsets into this array.
 	 */
 	char	   *dataProper;
 
-	/*
-	 * Enum members are OR'ed with JB_FLAG_ARRAY/JB_FLAG_OBJECT.
-	 *
-	 * See optimization in JsonbIteratorNext()
-	 */
-	enum
-	{
-		jbi_start	= 0x00,
-		jbi_key		= 0x01,
-		jbi_value	= 0x02,
-		jbi_elem	= 0x04
-	} state;
+	iterState state;
 
 	struct JsonbIterator *next;
 } JsonbIterator;
