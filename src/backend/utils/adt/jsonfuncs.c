@@ -1189,9 +1189,10 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 	{
 		if (have_object)
 		{
-			jbvp = findUncompressedJsonbValue((char *) jbvp, JB_FLAG_OBJECT, NULL,
-											  VARDATA_ANY(pathtext[i]),
-											  VARSIZE_ANY_EXHDR(pathtext[i]));
+			jbvp = findJsonbValueFromSuperHeaderLen((JsonbSuperHeader) jbvp,
+													JB_FLAG_OBJECT, NULL,
+													VARDATA_ANY(pathtext[i]),
+													VARSIZE_ANY_EXHDR(pathtext[i]));
 		}
 		else if (have_array)
 		{
@@ -1204,7 +1205,8 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 			if (*endptr != '\0' || lindex > INT_MAX || lindex < 0)
 				PG_RETURN_NULL();
 			index = (uint32) lindex;
-			jbvp = getJsonbValue((char *) jbvp, JB_FLAG_ARRAY, index);
+			jbvp = getIthJsonbValueFromSuperHeader((JsonbSuperHeader) jbvp,
+												   JB_FLAG_ARRAY, index);
 		}
 		else
 		{
@@ -2223,7 +2225,9 @@ populate_record_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 			{
 				char	   *key = NameStr(tupdesc->attrs[i]->attname);
 
-				v = findUncompressedJsonbValue(VARDATA(jb), JB_FLAG_OBJECT, NULL, key, strlen(key));
+				v = findJsonbValueFromSuperHeaderLen(VARDATA(jb),
+													 JB_FLAG_OBJECT, NULL, key,
+													 strlen(key));
 			}
 		}
 
@@ -2516,7 +2520,9 @@ make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state)
 		{
 			char	   *key = NameStr(tupdesc->attrs[i]->attname);
 
-			v = findUncompressedJsonbValue(VARDATA(element), JB_FLAG_OBJECT, NULL, key, strlen(key));
+			v = findJsonbValueFromSuperHeaderLen(VARDATA(element),
+												 JB_FLAG_OBJECT, NULL, key,
+												 strlen(key));
 		}
 
 		/*

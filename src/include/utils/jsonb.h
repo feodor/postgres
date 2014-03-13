@@ -49,7 +49,7 @@
 #define WJB_END_OBJECT		(0x040)
 
 /* Macros give offset  */
-#define JBE_ENDPOS(he_) ((he_).entry & JENTRY_POSMASK)
+#define JBE_ENDPOS(he_) ((he_).header & JENTRY_POSMASK)
 #define JBE_OFF(he_) (JBE_ISFIRST(he_) ? 0 : JBE_ENDPOS((&(he_))[-1]))
 #define JBE_LEN(he_) (JBE_ISFIRST(he_)	\
 					  ? JBE_ENDPOS(he_) \
@@ -82,6 +82,32 @@
 
 typedef struct JsonbPair JsonbPair;
 typedef struct JsonbValue JsonbValue;
+typedef	char*  JsonbSuperHeader;
+
+/*
+ * We have an abstraction called a "superheader".  This is a pointer that
+ * conventionally points to the first item after our 4-byte uncompressed
+ * varlena header, from which we can read uint32 values through bitwise
+ * operations.
+ *
+ * Sometimes we pass a superheader reference to a function, and it doesn't
+ * matter if it points to just after the start of a Jsonb, or to a Jentry.
+ * Either way, the type punning works and the superheader/header metadata is
+ * used to operate on an underlying JsonbValue.
+ *
+ * In a few contexts, when passing a superheader, there actually is an
+ * assumption that it really does point to just past vl_len_ in a Jsonb.  We
+ * assert that it's "superheader sane" in those contexts.  In general, this is
+ * expected to work just fine, as care has been taken to make the nested layout
+ * consistent to the extent that it matters between the least nested level
+ * (Jsonb), and deeper nested levels (Jentry).
+ */
+typedef struct
+{
+	int32		vl_len_;		/* varlena header (do not touch directly!) */
+	/* (uint32/Jsonb superheader of top-level Jsonb object/array follows) */
+	/* (array of JEntry follows, size determined using uint32 header) */
+} Jsonb;
 
 /*
  * JEntry: there is one of these for each key _and_ value in a jsonb object
@@ -92,15 +118,8 @@ typedef struct JsonbValue JsonbValue;
  */
 typedef struct
 {
-	uint32		entry;
+	uint32		header;			/* May be accessed as superheader */
 }	JEntry;
-
-typedef struct
-{
-	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	/* header of jsonb object or array */
-	/* array of JEntry follows */
-} Jsonb;
 
 struct JsonbValue
 {
@@ -244,15 +263,21 @@ extern Datum gin_extract_jsonb_query_hash(PG_FUNCTION_ARGS);
 extern Datum gin_consistent_jsonb_hash(PG_FUNCTION_ARGS);
 
 /* Support functions */
-extern int	compareJsonbBinaryValue(char *a, char *b);
+extern int	compareJsonbSuperHeaderValue(JsonbSuperHeader a,
+										 JsonbSuperHeader b);
 extern bool	compareJsonbValue(JsonbValue *a, JsonbValue *b);
-extern JsonbValue *findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
-								  uint32 *lowbound, JsonbValue *key);
-extern JsonbValue *findUncompressedJsonbValue(char *buffer, uint32 flags,
-						   uint32 *lowbound, char *key, uint32 keylen);
-extern JsonbValue *getJsonbValue(char *buffer, uint32 flags, int32 i);
+extern JsonbValue *findJsonbValueFromSuperHeaderLen(JsonbSuperHeader sheader,
+													uint32 flags,
+													uint32 *lowbound,
+													char *key, uint32 keylen);
+extern JsonbValue *findJsonbValueFromSuperHeader(JsonbSuperHeader sheader,
+												 uint32 flags,
+												 uint32 *lowbound,
+												 JsonbValue *key);
+extern JsonbValue *getIthJsonbValueFromSuperHeader(JsonbSuperHeader sheader,
+												   uint32 flags, int32 i);
 extern JsonbValue *pushJsonbValue(ToJsonbState ** state, int r, JsonbValue *v);
-extern JsonbIterator *JsonbIteratorInit(char *buffer);
+extern JsonbIterator *JsonbIteratorInit(JsonbSuperHeader buffer);
 extern int JsonbIteratorNext(JsonbIterator **it, JsonbValue *v, bool skipNested);
 extern Jsonb *JsonbValueToJsonb(JsonbValue *v);
 extern JsonbValue *arrayToJsonbSortedArray(ArrayType *a);

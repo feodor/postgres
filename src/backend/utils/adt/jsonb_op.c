@@ -27,11 +27,11 @@ jsonb_exists(PG_FUNCTION_ARGS)
 	JsonbValue *v = NULL;
 
 	if (!JB_ISEMPTY(jb))
-		v = findUncompressedJsonbValue(VARDATA(jb),
-									   JB_FLAG_OBJECT | JB_FLAG_ARRAY,
-									   NULL,
-									   VARDATA_ANY(key),
-									   VARSIZE_ANY_EXHDR(key));
+		v = findJsonbValueFromSuperHeaderLen(VARDATA(jb),
+											 JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+											 NULL,
+											 VARDATA_ANY(key),
+											 VARSIZE_ANY_EXHDR(key));
 
 	PG_RETURN_BOOL(v != NULL);
 }
@@ -60,10 +60,10 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nElems; i++)
 	{
-		if (findUncompressedJsonbValueByValue(VARDATA(jb),
-											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
-											  plowbound,
-											  v->array.elems + i) != NULL)
+		if (findJsonbValueFromSuperHeader(VARDATA(jb),
+										  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+										  plowbound,
+										  v->array.elems + i) != NULL)
 			PG_RETURN_BOOL(true);
 	}
 
@@ -99,10 +99,10 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nElems; i++)
 	{
-		if (findUncompressedJsonbValueByValue(VARDATA(js),
-											  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
-											  plowbound,
-											  v->array.elems + i) == NULL)
+		if (findJsonbValueFromSuperHeader(VARDATA(js),
+										  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+										  plowbound,
+										  v->array.elems + i) == NULL)
 			PG_RETURN_BOOL(false);
 	}
 
@@ -235,7 +235,7 @@ jsonb_cmp(PG_FUNCTION_ARGS)
 		/*
 		 * TODO: Think harder about the memory leaked here
 		 */
-		res = compareJsonbBinaryValue(VARDATA(jb1), VARDATA(jb2));
+		res = compareJsonbSuperHeaderValue(VARDATA(jb1), VARDATA(jb2));
 	}
 
 	/*
@@ -348,9 +348,10 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 
 			Assert(r2 == WJB_KEY);
 
-			v = findUncompressedJsonbValueByValue((*it1)->buffer,
-												  JB_FLAG_OBJECT,
-												  &lowbound, &v2);
+			v = findJsonbValueFromSuperHeader((*it1)->buffer,
+											  JB_FLAG_OBJECT,
+											  &lowbound,
+											  &v2);
 
 			if (v == NULL)
 			{
@@ -406,9 +407,10 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 
 			if (v2.type >= jbvNull && v2.type < jbvArray)
 			{
-				v = findUncompressedJsonbValueByValue((*it1)->buffer,
-													  JB_FLAG_ARRAY, NULL,
-													  &v2);
+				v = findJsonbValueFromSuperHeader((*it1)->buffer,
+												  JB_FLAG_ARRAY,
+												  NULL,
+												  &v2);
 				if (v == NULL)
 				{
 					res = false;

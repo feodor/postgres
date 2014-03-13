@@ -27,19 +27,24 @@
 #define JENTRY_ISTRUE		(0x10000000 | 0x20000000 | 0x40000000)
 
 /* Note possible multiple evaluations, also access to prior array element */
-#define JBE_ISFIRST(he_)		(((he_).entry & JENTRY_ISFIRST) != 0)
-#define JBE_ISSTRING(he_)		(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISSTRING)
-#define JBE_ISNUMERIC(he_)		(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISNUMERIC)
-#define JBE_ISNEST(he_)			(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISNEST)
-#define JBE_ISNULL(he_)			(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISNULL)
-#define JBE_ISBOOL(he_)			(((he_).entry & JENTRY_TYPEMASK & JENTRY_ISBOOL) == JENTRY_ISBOOL)
-#define JBE_ISBOOL_TRUE(he_)	(((he_).entry & JENTRY_TYPEMASK) == JENTRY_ISTRUE)
+#define JBE_ISFIRST(he_)		(((he_).header & JENTRY_ISFIRST) != 0)
+#define JBE_ISSTRING(he_)		(((he_).header & JENTRY_TYPEMASK) == JENTRY_ISSTRING)
+#define JBE_ISNUMERIC(he_)		(((he_).header & JENTRY_TYPEMASK) == JENTRY_ISNUMERIC)
+#define JBE_ISNEST(he_)			(((he_).header & JENTRY_TYPEMASK) == JENTRY_ISNEST)
+#define JBE_ISNULL(he_)			(((he_).header & JENTRY_TYPEMASK) == JENTRY_ISNULL)
+#define JBE_ISBOOL(he_)			(((he_).header & JENTRY_TYPEMASK & JENTRY_ISBOOL) == JENTRY_ISBOOL)
+#define JBE_ISBOOL_TRUE(he_)	(((he_).header & JENTRY_TYPEMASK) == JENTRY_ISTRUE)
 #define JBE_ISBOOL_FALSE(he_)	(JBE_ISBOOL(he_) && !JBE_ISBOOL_TRUE(he_))
 
+/*
+ * State used while rolling up an arbitrary JsonbValue into a varlena/Jsonb
+ * value
+ */
 typedef struct CompressState
 {
-	char	   *begin;
-	char	   *ptr;
+	/* Preallocated buffer in which to form varlena/Jsonb value */
+	char			   *buffer;
+	JsonbSuperHeader	ptr;
 
 	struct
 	{
@@ -54,6 +59,7 @@ typedef struct CompressState
 }	CompressState;
 
 static int lexicalCompareJsonbStringValue(const void *a, const void *b);
+static uint32 compressJsonb(JsonbValue * v, JsonbSuperHeader sheader);
 static void walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 								  uint32 nestlevel);
 static void parseBuffer(JsonbIterator * it, char *buffer);
@@ -64,7 +70,6 @@ static void compressJsonbValue(CompressState * state, JsonbValue * value,
 							   uint32 flags, uint32 level);
 static void putJEntryString(CompressState * state, JsonbValue * value,
 							uint32 level, uint32 i);
-static uint32 compressJsonb(JsonbValue * v, char *buffer);
 static ToJsonbState *pushState(ToJsonbState ** state);
 static void appendKey(ToJsonbState * state, JsonbValue * v);
 static void appendValue(ToJsonbState * state, JsonbValue * v);
@@ -86,8 +91,7 @@ JsonbValueToJsonb(JsonbValue * v)
 	{
 		out = NULL;
 	}
-	else if (v->type == jbvString || v->type == jbvBool ||
-			 v->type == jbvNumeric || v->type == jbvNull)
+	else if (v->type >= jbvNull && v->type < jbvArray)
 	{
 		/* Scalar value */
 		ToJsonbState *state = NULL;
@@ -119,9 +123,9 @@ JsonbValueToJsonb(JsonbValue * v)
 	}
 	else
 	{
-		out = palloc(VARHDRSZ + v->binary.len);
-
 		Assert(v->type == jbvBinary);
+
+		out = palloc(VARHDRSZ + v->binary.len);
 		SET_VARSIZE(out, VARHDRSZ + v->binary.len);
 		memcpy(VARDATA(out), v->binary.data, v->binary.len);
 	}
@@ -186,7 +190,7 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
 				break;
 			case jbvBinary:
 				/* This wastes a few cycles on unneeded lexical comparisons */
-				return compareJsonbBinaryValue(a->binary.data, b->binary.data) == 0;
+				return compareJsonbSuperHeaderValue(a->binary.data, b->binary.data) == 0;
 			default:
 				elog(ERROR, "invalid jsonb scalar type");
 		}
@@ -203,7 +207,7 @@ compareJsonbValue(JsonbValue * a, JsonbValue * b)
  * This is called from B-Tree support function 1.
  */
 int
-compareJsonbBinaryValue(char *a, char *b)
+compareJsonbSuperHeaderValue(JsonbSuperHeader a, JsonbSuperHeader b)
 {
 	JsonbIterator *it1,
 			   *it2;
@@ -273,11 +277,11 @@ compareJsonbBinaryValue(char *a, char *b)
 }
 
 /*
- * findUncompressedJsonbValueByValue() wrapper that sets up JsonbValue key.
+ * findJsonbValueFromSuperHeader() wrapper that sets up JsonbValue key.
  */
 JsonbValue *
-findUncompressedJsonbValue(char *buffer, uint32 flags, uint32 *lowbound,
-						   char *key, uint32 keylen)
+findJsonbValueFromSuperHeaderLen(JsonbSuperHeader sheader, uint32 flags, uint32 *lowbound,
+								 char *key, uint32 keylen)
 {
 	JsonbValue	v;
 
@@ -292,29 +296,29 @@ findUncompressedJsonbValue(char *buffer, uint32 flags, uint32 *lowbound,
 		v.string.len = keylen;
 	}
 
-	return findUncompressedJsonbValueByValue(buffer, flags, lowbound, &v);
+	return findJsonbValueFromSuperHeader(sheader, flags, lowbound, &v);
 }
 
 /*
- * Find string key in object or element by value in array (packed format)
+ * Find string key in object or element by value in array
  */
 JsonbValue *
-findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
-								  uint32 *lowbound, JsonbValue * key)
+findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
+							  uint32 *lowbound, JsonbValue * key)
 {
-	uint32		header = *(uint32 *) buffer;
+	uint32		superheader = *(uint32 *) sheader;
+	JEntry	   *array = (JEntry *) (sheader + sizeof(uint32));
 	static JsonbValue r;
 
-	Assert((header & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
+	Assert((superheader & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
 		   (JB_FLAG_ARRAY | JB_FLAG_OBJECT));
 
-	if (flags & JB_FLAG_ARRAY & header)
+	if (flags & JB_FLAG_ARRAY & superheader)
 	{
-		JEntry	   *array = (JEntry *) (buffer + sizeof(header));
-		char	   *data = (char *) (array + (header & JB_COUNT_MASK));
+		char	   *data = (char *) (array + (superheader & JB_COUNT_MASK));
 		int			i;
 
-		for (i = (lowbound) ? *lowbound : 0; i < (header & JB_COUNT_MASK); i++)
+		for (i = (lowbound) ? *lowbound : 0; i < (superheader & JB_COUNT_MASK); i++)
 		{
 			JEntry	   *e = array + i;
 
@@ -376,12 +380,11 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
 			}
 		}
 	}
-	else if (flags & JB_FLAG_OBJECT & header)
+	else if (flags & JB_FLAG_OBJECT & superheader)
 	{
-		JEntry	   *array = (JEntry *) (buffer + sizeof(header));
-		char	   *data = (char *) (array + (header & JB_COUNT_MASK) * 2);
+		char	   *data = (char *) (array + (superheader & JB_COUNT_MASK) * 2);
 		uint32		stopLow = lowbound ? *lowbound : 0,
-					stopHigh = (header & JB_COUNT_MASK),
+					stopHigh = (superheader & JB_COUNT_MASK),
 					stopMiddle;
 
 		/* Object keys must be strings */
@@ -472,33 +475,34 @@ findUncompressedJsonbValueByValue(char *buffer, uint32 flags,
  * Note: returns pointer to statically allocated JsonbValue.
  */
 JsonbValue *
-getJsonbValue(char *buffer, uint32 flags, int32 i)
+getIthJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
+								int32 i)
 {
-	uint32		header = *(uint32 *) buffer;
+	uint32		superheader = *(uint32 *) sheader;
 	static JsonbValue r;
 	JEntry	   *array,
 			   *e;
 	char	   *data;
 
-	Assert((header & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
+	Assert((superheader & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
 		   (JB_FLAG_ARRAY | JB_FLAG_OBJECT));
 
 	Assert(i >= 0);
 
-	if (i >= (header & JB_COUNT_MASK))
+	if (i >= (superheader & JB_COUNT_MASK))
 		return NULL;
 
-	array = (JEntry *) (buffer + sizeof(header));
+	array = (JEntry *) (sheader + sizeof(uint32));
 
-	if (flags & JB_FLAG_ARRAY & header)
+	if (flags & JB_FLAG_ARRAY & superheader)
 	{
 		e = array + i;
-		data = (char *) (array + (header & JB_COUNT_MASK));
+		data = (char *) (array + (superheader & JB_COUNT_MASK));
 	}
-	else if (flags & JB_FLAG_OBJECT & header)
+	else if (flags & JB_FLAG_OBJECT & superheader)
 	{
 		e = array + i * 2 + 1;
-		data = (char *) (array + (header & JB_COUNT_MASK) * 2);
+		data = (char *) (array + (superheader & JB_COUNT_MASK) * 2);
 	}
 	else
 	{
@@ -639,14 +643,15 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 }
 
 /*
- * Given an unparsed varlena buffer, expand to JsonbIterator.
+ * Given a varlena buffer, expand to JsonbIterator to iterate over items fully
+ * expanded to in-memory representation for manipulation.
  */
 JsonbIterator *
-JsonbIteratorInit(char *buffer)
+JsonbIteratorInit(JsonbSuperHeader sheader)
 {
-	JsonbIterator *it = palloc(sizeof(*it));
+	JsonbIterator *it = palloc(sizeof(JsonbIterator));
 
-	parseBuffer(it, buffer);
+	parseBuffer(it, sheader);
 	it->next = NULL;
 
 	return it;
@@ -806,6 +811,30 @@ lexicalCompareJsonbStringValue(const void *a, const void *b)
 }
 
 /*
+ * puts JsonbValue tree into a preallocated buffer
+ */
+static uint32
+compressJsonb(JsonbValue * v, char *buffer)
+{
+	uint32		l = 0;
+	CompressState state;
+
+	/* Should not already have binary representation */
+	Assert(v->type != jbvBinary);
+
+	state.buffer = state.ptr = buffer;
+	state.maxlevel = 8;
+	state.levelstate = palloc(sizeof(*state.levelstate) * state.maxlevel);
+
+	walkUncompressedJsonb(v, &state, 0);
+
+	l = state.ptr - buffer;
+	Assert(l <= v->size);
+
+	return l;
+}
+
+/*
  * Walk the tree representation of jsonb
  */
 static void
@@ -813,6 +842,8 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 					  uint32 nestlevel)
 {
 	int			i;
+
+	check_stack_depth();
 
 	if (!value)
 		return;
@@ -862,19 +893,19 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
  */
 
 /*
- * Initialize iterator from buffer
+ * Initialize iterator from superheader
  */
 static void
-parseBuffer(JsonbIterator * it, char *buffer)
+parseBuffer(JsonbIterator * it, JsonbSuperHeader sheader)
 {
-	uint32		header = *(uint32 *) buffer;
+	uint32		superheader = *(uint32 *) sheader;
 
-	it->containerType = header & (JB_FLAG_ARRAY | JB_FLAG_OBJECT);
-	it->nElems = header & JB_COUNT_MASK;
-	it->buffer = buffer;
+	it->containerType = superheader & (JB_FLAG_ARRAY | JB_FLAG_OBJECT);
+	it->nElems = superheader & JB_COUNT_MASK;
+	it->buffer = sheader;
 
 	/* Array starts just after header */
-	it->metaArray = (JEntry *) (buffer + sizeof(uint32));
+	it->metaArray = (JEntry *) (sheader + sizeof(uint32));
 	it->state = jbi_start;
 
 	switch (it->containerType)
@@ -882,7 +913,7 @@ parseBuffer(JsonbIterator * it, char *buffer)
 		case JB_FLAG_ARRAY:
 			it->dataProper =
 				(char *) it->metaArray + it->nElems * sizeof(JEntry);
-			it->isScalar = (header & JB_FLAG_SCALAR) != 0;
+			it->isScalar = (superheader & JB_FLAG_SCALAR) != 0;
 			/* This is either a "raw scalar", or an array */
 			Assert(!it->isScalar || it->nElems == 1);
 			break;
@@ -995,8 +1026,8 @@ compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
 
 		curLevelState->begin = state->ptr;
 
-		padlen = INTALIGN(state->ptr - state->begin) - (state->ptr -
-														state->begin);
+		padlen = INTALIGN(state->ptr - state->buffer) - (state->ptr -
+														 state->buffer);
 		/*
 		 * Add padding as necessary
 		 */
@@ -1064,22 +1095,22 @@ compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
 		{
 			i = prevLevelState->i;
 
-			prevLevelState->array[i].entry = JENTRY_ISNEST;
+			prevLevelState->array[i].header = JENTRY_ISNEST;
 
 			if (i == 0)
-				prevLevelState->array[0].entry |= JENTRY_ISFIRST | len;
+				prevLevelState->array[0].header |= JENTRY_ISFIRST | len;
 			else
-				prevLevelState->array[i].entry |=
-					(prevLevelState->array[i - 1].entry & JENTRY_POSMASK) + len;
+				prevLevelState->array[i].header |=
+					(prevLevelState->array[i - 1].header & JENTRY_POSMASK) + len;
 		}
 		else if (*prevLevelState->header & JB_FLAG_OBJECT)
 		{
 			i = 2 * prevLevelState->i + 1;		/* VALUE, not a KEY */
 
-			prevLevelState->array[i].entry = JENTRY_ISNEST;
+			prevLevelState->array[i].header = JENTRY_ISNEST;
 
-			prevLevelState->array[i].entry |=
-				(prevLevelState->array[i - 1].entry & JENTRY_POSMASK) + len;
+			prevLevelState->array[i].header |=
+				(prevLevelState->array[i - 1].header & JENTRY_POSMASK) + len;
 		}
 		else
 		{
@@ -1096,51 +1127,52 @@ compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
 }
 
 static void
-putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 i)
+putJEntryString(CompressState * state, JsonbValue * value, uint32 level,
+				uint32 i)
 {
 	short		p, padlen;
 
 	curLevelState = state->levelstate + level;
 
 	if (i == 0)
-		curLevelState->array[0].entry = JENTRY_ISFIRST;
+		curLevelState->array[0].header = JENTRY_ISFIRST;
 	else
-		curLevelState->array[i].entry = 0;
+		curLevelState->array[i].header = 0;
 
 	switch (value->type)
 	{
 		case jbvNull:
-			curLevelState->array[i].entry |= JENTRY_ISNULL;
+			curLevelState->array[i].header |= JENTRY_ISNULL;
 
 			if (i > 0)
-				curLevelState->array[i].entry |=
-					curLevelState->array[i - 1].entry & JENTRY_POSMASK;
+				curLevelState->array[i].header |=
+					curLevelState->array[i - 1].header & JENTRY_POSMASK;
 			break;
 		case jbvString:
 			memcpy(state->ptr, value->string.val, value->string.len);
 			state->ptr += value->string.len;
 
 			if (i == 0)
-				curLevelState->array[i].entry |= value->string.len;
+				curLevelState->array[i].header |= value->string.len;
 			else
-				curLevelState->array[i].entry |=
-					(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
+				curLevelState->array[i].header |=
+					(curLevelState->array[i - 1].header & JENTRY_POSMASK) +
 					value->string.len;
 			break;
 		case jbvBool:
-			curLevelState->array[i].entry |= (value->boolean) ?
+			curLevelState->array[i].header |= (value->boolean) ?
 				JENTRY_ISTRUE : JENTRY_ISFALSE;
 
 			if (i > 0)
-				curLevelState->array[i].entry |=
-					curLevelState->array[i - 1].entry & JENTRY_POSMASK;
+				curLevelState->array[i].header |=
+					curLevelState->array[i - 1].header & JENTRY_POSMASK;
 			break;
 		case jbvNumeric:
 			{
 				int numlen = VARSIZE_ANY(value->numeric);
 
-				padlen = INTALIGN(state->ptr - state->begin) -
-					(state->ptr - state->begin);
+				padlen = INTALIGN(state->ptr - state->buffer) -
+					(state->ptr - state->buffer);
 
 				/*
 				 * Add padding as necessary
@@ -1154,19 +1186,19 @@ putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 
 				memcpy(state->ptr, value->numeric, numlen);
 				state->ptr += numlen;
 
-				curLevelState->array[i].entry |= JENTRY_ISNUMERIC;
+				curLevelState->array[i].header |= JENTRY_ISNUMERIC;
 				if (i == 0)
-					curLevelState->array[i].entry |= padlen + numlen;
+					curLevelState->array[i].header |= padlen + numlen;
 				else
-					curLevelState->array[i].entry |=
-						(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
+					curLevelState->array[i].header |=
+						(curLevelState->array[i - 1].header & JENTRY_POSMASK) +
 						padlen + numlen;
 				break;
 			}
 		case jbvBinary:
 			{
-				padlen = INTALIGN(state->ptr - state->begin) - (state->ptr -
-																state->begin);
+				padlen = INTALIGN(state->ptr - state->buffer) - (state->ptr -
+																state->buffer);
 				/*
 				 * Add padding as necessary
 				 */
@@ -1179,13 +1211,13 @@ putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 
 				memcpy(state->ptr, value->binary.data, value->binary.len);
 				state->ptr += value->binary.len;
 
-				curLevelState->array[i].entry |= JENTRY_ISNEST;
+				curLevelState->array[i].header |= JENTRY_ISNEST;
 
 				if (i == 0)
-					curLevelState->array[i].entry |= value->binary.len + padlen;
+					curLevelState->array[i].header |= value->binary.len + padlen;
 				else
-					curLevelState->array[i].entry |=
-						(curLevelState->array[i - 1].entry & JENTRY_POSMASK) +
+					curLevelState->array[i].header |=
+						(curLevelState->array[i - 1].header & JENTRY_POSMASK) +
 						value->binary.len + padlen;
 			}
 			break;
@@ -1195,33 +1227,12 @@ putJEntryString(CompressState * state, JsonbValue * value, uint32 level, uint32 
 }
 
 /*
- * puts JsonbValue tree into preallocated buffer
- */
-static uint32
-compressJsonb(JsonbValue * v, char *buffer)
-{
-	uint32		l = 0;
-	CompressState state;
-
-	state.begin = state.ptr = buffer;
-	state.maxlevel = 8;
-	state.levelstate = palloc(sizeof(*state.levelstate) * state.maxlevel);
-
-	walkUncompressedJsonb(v, &state, 0);
-
-	l = state.ptr - buffer;
-	Assert(l <= v->size);
-
-	return l;
-}
-
-/*
  * Iteration-like forming jsonb
  */
 static ToJsonbState *
 pushState(ToJsonbState ** state)
 {
-	ToJsonbState *ns = palloc(sizeof(*ns));
+	ToJsonbState *ns = palloc(sizeof(ToJsonbState));
 
 	ns->next = *state;
 	return ns;
