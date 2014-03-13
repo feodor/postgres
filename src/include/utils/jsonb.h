@@ -16,45 +16,50 @@
 #include "utils/array.h"
 #include "utils/numeric.h"
 
-#define JENTRY_POSMASK	(0x0FFFFFFF)
-#define JENTRY_ISFIRST	(0x80000000)
-#define JENTRY_TYPEMASK (~(JENTRY_POSMASK | JENTRY_ISFIRST))
+#define JENTRY_POSMASK			0x0FFFFFFF
+#define JENTRY_ISFIRST			0x80000000
+#define JENTRY_TYPEMASK 		(~(JENTRY_POSMASK | JENTRY_ISFIRST))
 
 /*
  * determined by the size of "endpos" (ie JENTRY_POSMASK)
  */
-#define JSONB_MAX_STRING_LEN		JENTRY_POSMASK
+#define JSONB_MAX_STRING_LEN	JENTRY_POSMASK
 
 /*
  * it's not possible to get more than 2^28 items into an jsonb.
  */
-#define JB_FLAG_ARRAY			0x40000000
-#define JB_FLAG_OBJECT			0x20000000
-#define JB_FLAG_SCALAR			0x10000000
-
 #define JB_COUNT_MASK			0x0FFFFFFF
 
+#define JB_FLAG_SCALAR			0x10000000
+#define JB_FLAG_OBJECT			0x20000000
+#define JB_FLAG_ARRAY			0x40000000
+
+/* Get information on varlena Jsonb */
 #define JB_ISEMPTY(jbp_)		(VARSIZE(jbp_) <= VARHDRSZ)
-#define JB_ROOT_COUNT(jbp_)		(JB_ISEMPTY(jbp_) ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_COUNT_MASK))
-#define JB_ROOT_IS_OBJECT(jbp_) (JB_ISEMPTY(jbp_) ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_OBJECT))
-#define JB_ROOT_IS_ARRAY(jbp_)	(JB_ISEMPTY(jbp_) ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_ARRAY))
-#define JB_ROOT_IS_SCALAR(jbp_) (JB_ISEMPTY(jbp_) ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_SCALAR))
+#define JB_ROOT_COUNT(jbp_)		(JB_ISEMPTY(jbp_) \
+								 ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_COUNT_MASK))
+#define JB_ROOT_IS_OBJECT(jbp_) (JB_ISEMPTY(jbp_) \
+								 ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_OBJECT))
+#define JB_ROOT_IS_ARRAY(jbp_)	(JB_ISEMPTY(jbp_) \
+								 ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_ARRAY))
+#define JB_ROOT_IS_SCALAR(jbp_) (JB_ISEMPTY(jbp_) \
+								 ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_SCALAR))
 
-/* Flags indicate a stage of sequential Jsonb processing */
-#define WJB_KEY				(0x001)
-#define WJB_VALUE			(0x002)
-#define WJB_ELEM			(0x004)
-#define WJB_BEGIN_ARRAY		(0x008)
-#define WJB_END_ARRAY		(0x010)
-#define WJB_BEGIN_OBJECT	(0x020)
-#define WJB_END_OBJECT		(0x040)
+/* Flags indicating a stage of sequential Jsonb processing */
+#define WJB_KEY					0x001
+#define WJB_VALUE				0x002
+#define WJB_ELEM				0x004
+#define WJB_BEGIN_ARRAY			0x008
+#define WJB_END_ARRAY			0x010
+#define WJB_BEGIN_OBJECT		0x020
+#define WJB_END_OBJECT			0x040
 
-/* Macros give offset  */
-#define JBE_ENDPOS(he_) ((he_).header & JENTRY_POSMASK)
-#define JBE_OFF(he_) (JBE_ISFIRST(he_) ? 0 : JBE_ENDPOS((&(he_))[-1]))
-#define JBE_LEN(he_) (JBE_ISFIRST(he_)	\
-					  ? JBE_ENDPOS(he_) \
-					  : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
+/* Get offset for Jentry  */
+#define JBE_ENDPOS(he_) 		((he_).header & JENTRY_POSMASK)
+#define JBE_OFF(he_) 			(JBE_ISFIRST(he_) ? 0 : JBE_ENDPOS((&(he_))[-1]))
+#define JBE_LEN(he_) 			(JBE_ISFIRST(he_)	\
+								  ? JBE_ENDPOS(he_) \
+								  : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
 
 /*
  * When using a GIN index for jsonb, we choose to index both keys and values.
