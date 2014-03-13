@@ -73,7 +73,7 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 Datum
 jsonb_exists_all(PG_FUNCTION_ARGS)
 {
-	Jsonb	   *js = PG_GETARG_JSONB(0);
+	Jsonb	   *jb = PG_GETARG_JSONB(0);
 	ArrayType  *keys = PG_GETARG_ARRAYTYPE_P(1);
 	JsonbValue *v = arrayToJsonbSortedArray(keys);
 	uint32	   *plowbound = NULL;
@@ -83,7 +83,7 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	if (v == NULL || v->array.nElems == 0)
 		PG_RETURN_BOOL(true);
 
-	if (JB_ROOT_IS_OBJECT(js))
+	if (JB_ROOT_IS_OBJECT(jb))
 		plowbound = &lowbound;
 
 	/*
@@ -94,7 +94,7 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	 */
 	for (i = 0; i < v->array.nElems; i++)
 	{
-		if (findJsonbValueFromSuperHeader(VARDATA(js),
+		if (findJsonbValueFromSuperHeader(VARDATA(jb),
 										  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
 										  plowbound,
 										  v->array.elems + i) == NULL)
