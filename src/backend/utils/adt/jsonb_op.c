@@ -80,13 +80,8 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	uint32		lowbound = 0;
 	int			i;
 
-	if (JB_ISEMPTY(js) || v == NULL || v->array.nElems == 0)
-	{
-		if (v == NULL || v->array.nElems == 0)
-			PG_RETURN_BOOL(true);		/* compatibility */
-		else
-			PG_RETURN_BOOL(false);
-	}
+	if (v == NULL || v->array.nElems == 0)
+		PG_RETURN_BOOL(true);
 
 	if (JB_ROOT_IS_OBJECT(js))
 		plowbound = &lowbound;
