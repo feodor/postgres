@@ -302,16 +302,22 @@ findJsonbValueFromSuperHeaderLen(JsonbSuperHeader sheader, uint32 flags,
 /*
  * Find string key in object or element by value in array.
  *
- * Returns palloc()'d copy of value.
+ * In order to proceed with the search, it is necessary for callers to have
+ * both specified an interest in a particular container type with an
+ * appropriate flag, as well as having the pointed-to Jsonb superheader be of
+ * that same container type at the top level.  If both of those conditions
+ * don't hold, immediately fall through and return NULL.  Otherwise, return
+ * palloc()'d copy of value.
  */
 JsonbValue *
 findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 							  uint32 *lowbound, JsonbValue * key)
 {
-	uint32		superheader = *(uint32 *) sheader;
-	JEntry	   *array = (JEntry *) (sheader + sizeof(uint32));
-	JsonbValue *r = palloc(sizeof(JsonbValue));
+	uint32			superheader = *(uint32 *) sheader;
+	JEntry		   *array = (JEntry *) (sheader + sizeof(uint32));
+	JsonbValue	   *r = palloc(sizeof(JsonbValue));
 
+	/* No contradictory requests */
 	Assert((superheader & (JB_FARRAY | JB_FOBJECT)) !=
 		   (JB_FARRAY | JB_FOBJECT));
 
@@ -394,27 +400,28 @@ findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 		Assert(key->type == jbvString);
 
 		/*
-		 * Binary search for matching jsonb value
+		 * Binary search for matching jsonb value using "inner comparator"
+		 * logic (i.e. not doing lexical comparisons).
 		 */
 		while (stopLow < stopHigh)
 		{
-			JEntry *e;
-			int		difference;
+			JEntry	   *entry;
+			int			difference;
 
 			stopMiddle = stopLow + (stopHigh - stopLow) / 2;
 
-			e = array + stopMiddle * 2;
+			entry = array + stopMiddle * 2;
 
 			/* Equivalent to lengthCompareJsonbStringValue() */
-			if (key->string.len == JBE_LEN(*e))
-				difference = memcmp(data + JBE_OFF(*e), key->string.val,
+			if (key->string.len == JBE_LEN(*entry))
+				difference = memcmp(data + JBE_OFF(*entry), key->string.val,
 									key->string.len);
 			else
-				difference = (JBE_LEN(*e) > key->string.len) ? 1 : -1;
+				difference = (JBE_LEN(*entry) > key->string.len) ? 1 : -1;
 
 			if (difference == 0)
 			{
-				JEntry	   *v = e + 1;
+				JEntry	   *v = entry + 1;
 
 				if (lowbound)
 					*lowbound = stopMiddle + 1;
@@ -429,7 +436,7 @@ findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 				else if (JBE_ISBOOL(*v))
 				{
 					r->type = jbvBool;
-					r->boolean = (JBE_ISBOOL_TRUE(*v)) != 0;
+					r->boolean = JBE_ISBOOL_TRUE(*v) != 0;
 					r->size = sizeof(JEntry);
 				}
 				else if (JBE_ISNUMERIC(*v))
@@ -455,13 +462,12 @@ findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 
 				return r;
 			}
-			else if (difference < 0)
-			{
-				stopLow = stopMiddle + 1;
-			}
 			else
 			{
-				stopHigh = stopMiddle;
+				if (difference < 0)
+					stopLow = stopMiddle + 1;
+				else
+					stopHigh = stopMiddle;
 			}
 		}
 
@@ -475,11 +481,11 @@ findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 /*
  * Get i-th value of array or object.
  *
- * Returns palloc()'d copy of value.
+ * Returns palloc()'d copy of value, or NULL if it cannot be found.
  */
 JsonbValue *
 getIthJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
-								int32 i)
+								uint32 i)
 {
 	uint32		superheader = *(uint32 *) sheader;
 	JsonbValue *r;
@@ -491,8 +497,6 @@ getIthJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 
 	Assert((superheader & (JB_FARRAY | JB_FOBJECT)) !=
 		   (JB_FARRAY | JB_FOBJECT));
-
-	Assert(i >= 0);
 
 	if (i >= (superheader & JB_CMASK))
 		return NULL;
@@ -524,7 +528,7 @@ getIthJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 	else if (JBE_ISBOOL(*e))
 	{
 		r->type = jbvBool;
-		r->boolean = (JBE_ISBOOL_TRUE(*e)) != 0;
+		r->boolean = JBE_ISBOOL_TRUE(*e) != 0;
 		r->size = sizeof(JEntry);
 	}
 	else if (JBE_ISNUMERIC(*e))
@@ -745,7 +749,7 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 		}
 	}
 
-	elog(ERROR, "unknown iterator res");
+	elog(ERROR, "invalid iterator state");
 }
 
 /*
@@ -828,8 +832,8 @@ lexicalCompareJsonbStringValue(const void *a, const void *b)
 static Size
 convertJsonb(JsonbValue * v, Jsonb *buffer)
 {
-	uint32		l = 0;
-	ConvertState state;
+	ConvertState	state;
+	Size			len = 0;
 
 	/* Should not already have binary representation */
 	Assert(v->type != jbvBinary);
@@ -842,10 +846,10 @@ convertJsonb(JsonbValue * v, Jsonb *buffer)
 
 	walkJsonbValueConversion(v, &state, 0);
 
-	l = state.ptr - VARDATA(state.buffer);
+	len = state.ptr - VARDATA(state.buffer);
 
-	Assert(l <= v->size);
-	return l;
+	Assert(len <= v->size);
+	return len;
 }
 
 /*
