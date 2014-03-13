@@ -1190,7 +1190,7 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 		if (have_object)
 		{
 			jbvp = findJsonbValueFromSuperHeaderLen((JsonbSuperHeader) jbvp,
-													JB_FLAG_OBJECT, NULL,
+													JB_FOBJECT, NULL,
 													VARDATA_ANY(pathtext[i]),
 													VARSIZE_ANY_EXHDR(pathtext[i]));
 		}
@@ -1206,7 +1206,7 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 				PG_RETURN_NULL();
 			index = (uint32) lindex;
 			jbvp = getIthJsonbValueFromSuperHeader((JsonbSuperHeader) jbvp,
-												   JB_FLAG_ARRAY, index);
+												   JB_FARRAY, index);
 		}
 		else
 		{
@@ -2226,7 +2226,7 @@ populate_record_worker(FunctionCallInfo fcinfo, bool have_record_arg)
 				char	   *key = NameStr(tupdesc->attrs[i]->attname);
 
 				v = findJsonbValueFromSuperHeaderLen(VARDATA(jb),
-													 JB_FLAG_OBJECT, NULL, key,
+													 JB_FOBJECT, NULL, key,
 													 strlen(key));
 			}
 		}
@@ -2521,7 +2521,7 @@ make_row_from_rec_and_jsonb(Jsonb * element, PopulateRecordsetState *state)
 			char	   *key = NameStr(tupdesc->attrs[i]->attname);
 
 			v = findJsonbValueFromSuperHeaderLen(VARDATA(element),
-												 JB_FLAG_OBJECT, NULL, key,
+												 JB_FOBJECT, NULL, key,
 												 strlen(key));
 		}
 

@@ -28,7 +28,7 @@ jsonb_exists(PG_FUNCTION_ARGS)
 
 	if (!JB_ISEMPTY(jb))
 		v = findJsonbValueFromSuperHeaderLen(VARDATA(jb),
-											 JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+											 JB_FOBJECT | JB_FARRAY,
 											 NULL,
 											 VARDATA_ANY(key),
 											 VARSIZE_ANY_EXHDR(key));
@@ -61,7 +61,7 @@ jsonb_exists_any(PG_FUNCTION_ARGS)
 	for (i = 0; i < v->array.nElems; i++)
 	{
 		if (findJsonbValueFromSuperHeader(VARDATA(jb),
-										  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+										  JB_FOBJECT | JB_FARRAY,
 										  plowbound,
 										  v->array.elems + i) != NULL)
 			PG_RETURN_BOOL(true);
@@ -95,7 +95,7 @@ jsonb_exists_all(PG_FUNCTION_ARGS)
 	for (i = 0; i < v->array.nElems; i++)
 	{
 		if (findJsonbValueFromSuperHeader(VARDATA(jb),
-										  JB_FLAG_OBJECT | JB_FLAG_ARRAY,
+										  JB_FOBJECT | JB_FARRAY,
 										  plowbound,
 										  v->array.elems + i) == NULL)
 			PG_RETURN_BOOL(false);
@@ -344,7 +344,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 			Assert(r2 == WJB_KEY);
 
 			v = findJsonbValueFromSuperHeader((*it1)->buffer,
-											  JB_FLAG_OBJECT,
+											  JB_FOBJECT,
 											  &lowbound,
 											  &v2);
 
@@ -403,7 +403,7 @@ deepContains(JsonbIterator ** it1, JsonbIterator ** it2)
 			if (v2.type >= jbvNull && v2.type < jbvArray)
 			{
 				v = findJsonbValueFromSuperHeader((*it1)->buffer,
-												  JB_FLAG_ARRAY,
+												  JB_FARRAY,
 												  NULL,
 												  &v2);
 				if (v == NULL)

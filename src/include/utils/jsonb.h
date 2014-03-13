@@ -27,23 +27,25 @@
 
 /*
  * it's not possible to get more than 2^28 items into an jsonb.
+ *
+ * JB_CMASK is count mask
  */
-#define JB_COUNT_MASK			0x0FFFFFFF
+#define JB_CMASK				0x0FFFFFFF
 
-#define JB_FLAG_SCALAR			0x10000000
-#define JB_FLAG_OBJECT			0x20000000
-#define JB_FLAG_ARRAY			0x40000000
+#define JB_FSCALAR				0x10000000
+#define JB_FOBJECT				0x20000000
+#define JB_FARRAY				0x40000000
 
 /* Get information on varlena Jsonb */
-#define JB_ISEMPTY(jbp_)		(VARSIZE(jbp_) <= VARHDRSZ)
+#define JB_ISEMPTY(jbp_)		(VARSIZE(jbp_) == 0)
 #define JB_ROOT_COUNT(jbp_)		(JB_ISEMPTY(jbp_) \
-								 ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_COUNT_MASK))
-#define JB_ROOT_IS_OBJECT(jbp_) (JB_ISEMPTY(jbp_) \
-								 ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_OBJECT))
-#define JB_ROOT_IS_ARRAY(jbp_)	(JB_ISEMPTY(jbp_) \
-								 ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_ARRAY))
+								 ? 0: ( *(uint32*) VARDATA(jbp_) & JB_CMASK))
 #define JB_ROOT_IS_SCALAR(jbp_) (JB_ISEMPTY(jbp_) \
-								 ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_SCALAR))
+								 ? 0: ( *(uint32*) VARDATA(jbp_) & JB_FSCALAR))
+#define JB_ROOT_IS_OBJECT(jbp_) (JB_ISEMPTY(jbp_) \
+								 ? 0: ( *(uint32*) VARDATA(jbp_) & JB_FOBJECT))
+#define JB_ROOT_IS_ARRAY(jbp_)	(JB_ISEMPTY(jbp_) \
+								 ? 0: ( *(uint32*) VARDATA(jbp_) & JB_FARRAY))
 
 /* Flags indicating a stage of sequential Jsonb processing */
 #define WJB_KEY					0x001
@@ -90,7 +92,12 @@ typedef struct JsonbPair JsonbPair;
 typedef struct JsonbValue JsonbValue;
 typedef	char*  JsonbSuperHeader;
 
+
 /*
+ * Jsonbs are varlena objects, so must meet the varlena convention that the
+ * first int32 of the object contains the total object size in bytes.  Be sure
+ * to use VARSIZE() and SET_VARSIZE() to access it, though!
+ *
  * We have an abstraction called a "superheader".  This is a pointer that
  * conventionally points to the first item after our 4-byte uncompressed
  * varlena header, from which we can read uint32 values through bitwise
@@ -108,10 +115,11 @@ typedef	char*  JsonbSuperHeader;
  * consistent to the extent that it matters between the least nested level
  * (Jsonb), and deeper nested levels (Jentry).
  */
+
 typedef struct
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
-	/* (uint32/Jsonb superheader of top-level Jsonb object/array follows) */
+	uint32		superheader;
 	/* (array of JEntry follows, size determined using uint32 superheader) */
 } Jsonb;
 

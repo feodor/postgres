@@ -312,15 +312,15 @@ findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 	JEntry	   *array = (JEntry *) (sheader + sizeof(uint32));
 	JsonbValue *r = palloc(sizeof(JsonbValue));
 
-	Assert((superheader & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
-		   (JB_FLAG_ARRAY | JB_FLAG_OBJECT));
+	Assert((superheader & (JB_FARRAY | JB_FOBJECT)) !=
+		   (JB_FARRAY | JB_FOBJECT));
 
-	if (flags & JB_FLAG_ARRAY & superheader)
+	if (flags & JB_FARRAY & superheader)
 	{
-		char	   *data = (char *) (array + (superheader & JB_COUNT_MASK));
+		char	   *data = (char *) (array + (superheader & JB_CMASK));
 		int			i;
 
-		for (i = (lowbound) ? *lowbound : 0; i < (superheader & JB_COUNT_MASK); i++)
+		for (i = (lowbound) ? *lowbound : 0; i < (superheader & JB_CMASK); i++)
 		{
 			JEntry	   *e = array + i;
 
@@ -383,11 +383,11 @@ findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 			}
 		}
 	}
-	else if (flags & JB_FLAG_OBJECT & superheader)
+	else if (flags & JB_FOBJECT & superheader)
 	{
-		char	   *data = (char *) (array + (superheader & JB_COUNT_MASK) * 2);
+		char	   *data = (char *) (array + (superheader & JB_CMASK) * 2);
 		uint32		stopLow = lowbound ? *lowbound : 0,
-					stopHigh = (superheader & JB_COUNT_MASK),
+					stopHigh = (superheader & JB_CMASK),
 					stopMiddle;
 
 		/* Object keys must be strings */
@@ -489,25 +489,25 @@ getIthJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 
 	r = palloc(sizeof(JsonbValue));
 
-	Assert((superheader & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
-		   (JB_FLAG_ARRAY | JB_FLAG_OBJECT));
+	Assert((superheader & (JB_FARRAY | JB_FOBJECT)) !=
+		   (JB_FARRAY | JB_FOBJECT));
 
 	Assert(i >= 0);
 
-	if (i >= (superheader & JB_COUNT_MASK))
+	if (i >= (superheader & JB_CMASK))
 		return NULL;
 
 	array = (JEntry *) (sheader + sizeof(uint32));
 
-	if (flags & JB_FLAG_ARRAY & superheader)
+	if (flags & JB_FARRAY & superheader)
 	{
 		e = array + i;
-		data = (char *) (array + (superheader & JB_COUNT_MASK));
+		data = (char *) (array + (superheader & JB_CMASK));
 	}
-	else if (flags & JB_FLAG_OBJECT & superheader)
+	else if (flags & JB_FOBJECT & superheader)
 	{
 		e = array + i * 2 + 1;
-		data = (char *) (array + (superheader & JB_COUNT_MASK) * 2);
+		data = (char *) (array + (superheader & JB_CMASK) * 2);
 	}
 	else
 	{
@@ -677,7 +677,7 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 
 	state = (*it)->state;
 
-	if ((*it)->containerType == JB_FLAG_ARRAY)
+	if ((*it)->containerType == JB_FARRAY)
 	{
 		if (state == jbi_start)
 		{
@@ -706,7 +706,7 @@ JsonbIteratorNext(JsonbIterator ** it, JsonbValue * v, bool skipNested)
 			}
 		}
 	}
-	else if ((*it)->containerType == JB_FLAG_OBJECT)
+	else if ((*it)->containerType == JB_FOBJECT)
 	{
 		if (state == jbi_start)
 		{
@@ -960,19 +960,19 @@ putJsonbValueConversion(ConvertState * state, JsonbValue * value, uint32 flags,
 
 		if (value->type == jbvArray)
 		{
-			*state->curlptr->header = value->array.nElems | JB_FLAG_ARRAY;
+			*state->curlptr->header = value->array.nElems | JB_FARRAY;
 			state->ptr += sizeof(JEntry) * value->array.nElems;
 
 			if (value->array.scalar)
 			{
 				Assert(value->array.nElems == 1);
 				Assert(level == 0);
-				*state->curlptr->header |= JB_FLAG_SCALAR;
+				*state->curlptr->header |= JB_FSCALAR;
 			}
 		}
 		else
 		{
-			*state->curlptr->header = value->object.nPairs | JB_FLAG_OBJECT;
+			*state->curlptr->header = value->object.nPairs | JB_FOBJECT;
 			state->ptr += sizeof(JEntry) * value->object.nPairs * 2;
 		}
 	}
@@ -1007,7 +1007,7 @@ putJsonbValueConversion(ConvertState * state, JsonbValue * value, uint32 flags,
 
 		state->prvlptr = state->curlptr - 1;
 
-		if (*state->prvlptr->header & JB_FLAG_ARRAY)
+		if (*state->prvlptr->header & JB_FARRAY)
 		{
 			i = state->prvlptr->i;
 
@@ -1019,7 +1019,7 @@ putJsonbValueConversion(ConvertState * state, JsonbValue * value, uint32 flags,
 				state->prvlptr->meta[i].header |=
 					(state->prvlptr->meta[i - 1].header & JENTRY_POSMASK) + len;
 		}
-		else if (*state->prvlptr->header & JB_FLAG_OBJECT)
+		else if (*state->prvlptr->header & JB_FOBJECT)
 		{
 			i = 2 * state->prvlptr->i + 1;		/* Value, not key */
 
@@ -1137,8 +1137,8 @@ parseBuffer(JsonbIterator * it, JsonbSuperHeader sheader)
 {
 	uint32		superheader = *(uint32 *) sheader;
 
-	it->containerType = superheader & (JB_FLAG_ARRAY | JB_FLAG_OBJECT);
-	it->nElems = superheader & JB_COUNT_MASK;
+	it->containerType = superheader & (JB_FARRAY | JB_FOBJECT);
+	it->nElems = superheader & JB_CMASK;
 	it->buffer = sheader;
 
 	/* Array starts just after header */
@@ -1147,14 +1147,14 @@ parseBuffer(JsonbIterator * it, JsonbSuperHeader sheader)
 
 	switch (it->containerType)
 	{
-		case JB_FLAG_ARRAY:
+		case JB_FARRAY:
 			it->dataProper =
 				(char *) it->meta + it->nElems * sizeof(JEntry);
-			it->isScalar = (superheader & JB_FLAG_SCALAR) != 0;
+			it->isScalar = (superheader & JB_FSCALAR) != 0;
 			/* This is either a "raw scalar", or an array */
 			Assert(!it->isScalar || it->nElems == 1);
 			break;
-		case JB_FLAG_OBJECT:
+		case JB_FOBJECT:
 			/*
 			 * Offset reflects that nElems indicates JsonbPairs in an object
 			 *
