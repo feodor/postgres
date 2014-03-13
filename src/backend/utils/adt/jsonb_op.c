@@ -264,12 +264,12 @@ jsonb_hash(PG_FUNCTION_ARGS)
 		{
 			case WJB_BEGIN_ARRAY:
 				COMP_CRC32(crc, "ab", 3);
-				COMP_CRC32(crc, &v.array.nElems, sizeof(v.array.nElems));
-				COMP_CRC32(crc, &v.array.scalar, sizeof(v.array.scalar));
+				COMP_CRC32(crc, &v.array.nElems, sizeof(int));
+				COMP_CRC32(crc, &v.array.scalar, sizeof(bool));
 				break;
 			case WJB_BEGIN_OBJECT:
 				COMP_CRC32(crc, "hb", 3);
-				COMP_CRC32(crc, &v.object.nPairs, sizeof(v.object.nPairs));
+				COMP_CRC32(crc, &v.object.nPairs, sizeof(int));
 				break;
 			case WJB_KEY:
 				COMP_CRC32(crc, "k", 2);
@@ -284,7 +284,7 @@ jsonb_hash(PG_FUNCTION_ARGS)
 						COMP_CRC32(crc, "N", 2);
 						break;
 					case jbvBool:
-						COMP_CRC32(crc, &v.boolean, sizeof(v.boolean));
+						COMP_CRC32(crc, &v.boolean, sizeof(bool));
 						break;
 					case jbvNumeric:
 						crc ^= DatumGetInt32(DirectFunctionCall1(hash_numeric,

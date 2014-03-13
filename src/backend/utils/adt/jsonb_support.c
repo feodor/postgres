@@ -40,37 +40,43 @@
  * State used while converting an arbitrary JsonbValue into a Jsonb value
  * (4-byte varlena uncompressed representation of a Jsonb)
  */
-typedef struct ConvertState
+
+/*
+ * ConvertLevel: Bookkeeping around current level when converting.
+ */
+typedef struct convertLevel
+{
+	uint32		i;
+	uint32	   *header;
+	JEntry	   *meta;
+	char	   *begin;
+} convertLevel;
+
+typedef struct convertState
 {
 	/* Preallocated buffer in which to form varlena/Jsonb value */
 	Jsonb			   *buffer;
 	/* Pointer into buffer */
 	char			   *ptr;
 
-	struct
-	{
-		uint32		i;
-		uint32	   *header;
-		JEntry	   *meta;
-		char	   *begin;
-	}		   *levelstate,
-		*curlptr,
-		*prvlptr;
+	convertLevel	   *levelstate,
+					   *curlptr,
+					   *prvlptr;
 
 	/* Current size of buffer holding levelstate array */
 	Size		levelSz;
 
-}	ConvertState;
+}	convertState;
 
 static int lexicalCompareJsonbStringValue(const void *a, const void *b);
 static Size convertJsonb(JsonbValue * v, Jsonb* buffer);
-static void walkJsonbValueConversion(JsonbValue * value, ConvertState * state,
+static void walkJsonbValueConversion(JsonbValue * value, convertState * state,
 									 uint32 nestlevel);
-static void putJsonbValueConversion(ConvertState * state, JsonbValue * value,
+static void putJsonbValueConversion(convertState * state, JsonbValue * value,
 									uint32 flags, uint32 level);
-static void putStringConversion(ConvertState * state, JsonbValue * value,
+static void putStringConversion(convertState * state, JsonbValue * value,
 								uint32 level, uint32 i);
-static void parseBuffer(JsonbIterator * it, char *buffer);
+static void iteratorFromBuf(JsonbIterator * it, char *buffer);
 static bool formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e,
 					   bool skipNested);
 static JsonbIterator *freeAndGetNext(JsonbIterator * it);
@@ -495,6 +501,7 @@ getIthJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 
 	r = palloc(sizeof(JsonbValue));
 
+	/* No contradictory requests */
 	Assert((superheader & (JB_FARRAY | JB_FOBJECT)) !=
 		   (JB_FARRAY | JB_FOBJECT));
 
@@ -579,7 +586,7 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 			(*state)->v.array.scalar = (v && v->array.scalar) != 0;
 			(*state)->size = (v && v->type == jbvArray && v->array.nElems > 0)
 				? v->array.nElems : 4;
-			(*state)->v.array.elems = palloc(sizeof(*(*state)->v.array.elems) *
+			(*state)->v.array.elems = palloc(sizeof(JsonbValue) *
 											 (*state)->size);
 			break;
 		case WJB_BEGIN_OBJECT:
@@ -590,7 +597,7 @@ pushJsonbValue(ToJsonbState ** state, int r, JsonbValue * v)
 			(*state)->v.object.nPairs = 0;
 			(*state)->size = (v && v->type == jbvObject && v->object.nPairs > 0) ?
 				v->object.nPairs : 4;
-			(*state)->v.object.pairs = palloc(sizeof(*(*state)->v.object.pairs) *
+			(*state)->v.object.pairs = palloc(sizeof(JsonbPair) *
 											  (*state)->size);
 			break;
 		case WJB_KEY:
@@ -660,7 +667,7 @@ JsonbIteratorInit(JsonbSuperHeader sheader)
 {
 	JsonbIterator *it = palloc(sizeof(JsonbIterator));
 
-	parseBuffer(it, sheader);
+	iteratorFromBuf(it, sheader);
 	it->next = NULL;
 
 	return it;
@@ -789,7 +796,7 @@ arrayToJsonbSortedArray(ArrayType *a)
 	result = palloc(sizeof(JsonbValue));
 	result->type = jbvArray;
 	result->array.scalar = false;
-	result->array.elems = palloc(sizeof(*result->object.pairs) * key_count);
+	result->array.elems = palloc(sizeof(JsonbPair) * key_count);
 
 	for (i = 0, j = 0; i < key_count; i++)
 	{
@@ -832,7 +839,7 @@ lexicalCompareJsonbStringValue(const void *a, const void *b)
 static Size
 convertJsonb(JsonbValue * v, Jsonb *buffer)
 {
-	ConvertState	state;
+	convertState	state;
 	Size			len = 0;
 
 	/* Should not already have binary representation */
@@ -842,7 +849,7 @@ convertJsonb(JsonbValue * v, Jsonb *buffer)
 	/* Start from superheader */
 	state.ptr = VARDATA(state.buffer);
 	state.levelSz = 8;
-	state.levelstate = palloc(sizeof(*state.levelstate) * state.levelSz);
+	state.levelstate = palloc(sizeof(convertLevel) * state.levelSz);
 
 	walkJsonbValueConversion(v, &state, 0);
 
@@ -857,7 +864,7 @@ convertJsonb(JsonbValue * v, Jsonb *buffer)
  * a JsonbValue to a Jsonb
  */
 static void
-walkJsonbValueConversion(JsonbValue * value, ConvertState * state,
+walkJsonbValueConversion(JsonbValue * value, convertState * state,
 						 uint32 nestlevel)
 {
 	int			i;
@@ -922,14 +929,14 @@ walkJsonbValueConversion(JsonbValue * value, ConvertState * state,
  * This is a worker function for walkJsonbValueConversion().
  */
 static void
-putJsonbValueConversion(ConvertState * state, JsonbValue * value, uint32 flags,
+putJsonbValueConversion(convertState * state, JsonbValue * value, uint32 flags,
 						uint32 level)
 {
 	if (level == state->levelSz)
 	{
 		state->levelSz *= 2;
 		state->levelstate = repalloc(state->levelstate,
-							   sizeof(*state->levelstate) * state->levelSz);
+									 sizeof(convertLevel) * state->levelSz);
 	}
 
 	state->curlptr = state->levelstate + level;
@@ -957,7 +964,7 @@ putJsonbValueConversion(ConvertState * state, JsonbValue * value, uint32 flags,
 
 		state->curlptr->header = (uint32 *) state->ptr;
 		/* Advance past header */
-		state->ptr += sizeof(* state->curlptr->header);
+		state->ptr += sizeof(uint32);
 
 		state->curlptr->meta = (JEntry *) state->ptr;
 		state->curlptr->i = 0;
@@ -1056,7 +1063,7 @@ putJsonbValueConversion(ConvertState * state, JsonbValue * value, uint32 flags,
  * within convert state.
  */
 static void
-putStringConversion(ConvertState * state, JsonbValue * value,
+putStringConversion(convertState * state, JsonbValue * value,
 					uint32 level, uint32 i)
 {
 	short		p, padlen;
@@ -1134,10 +1141,10 @@ putStringConversion(ConvertState * state, JsonbValue * value,
  */
 
 /*
- * Initialize iterator from superheader
+ * Initialize iterator from superheader pointer into buffer.
  */
 static void
-parseBuffer(JsonbIterator * it, JsonbSuperHeader sheader)
+iteratorFromBuf(JsonbIterator * it, JsonbSuperHeader sheader)
 {
 	uint32		superheader = *(uint32 *) sheader;
 
@@ -1221,7 +1228,7 @@ formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e, bool skipNested)
 	{
 		JsonbIterator *nit = palloc(sizeof(*nit));
 
-		parseBuffer(nit, (*it)->dataProper + INTALIGN(JBE_OFF(*e)));
+		iteratorFromBuf(nit, (*it)->dataProper + INTALIGN(JBE_OFF(*e)));
 		nit->next = *it;
 		*it = nit;
 
@@ -1238,7 +1245,6 @@ freeAndGetNext(JsonbIterator * it)
 	JsonbIterator *v = it->next;
 
 	pfree(it);
-
 	return v;
 }
 
@@ -1257,33 +1263,32 @@ pushState(ToJsonbState ** state)
 static void
 appendKey(ToJsonbState * state, JsonbValue * v)
 {
-	JsonbValue *h = &state->v;
+	JsonbValue *a = &state->v;
 
-	Assert(h->type == jbvObject);
+	Assert(a->type == jbvObject);
 
-	if (h->object.nPairs >= state->size)
+	if (a->object.nPairs >= state->size)
 	{
 		state->size *= 2;
-		h->object.pairs = repalloc(h->object.pairs,
-								   sizeof(*h->object.pairs) * state->size);
+		a->object.pairs = repalloc(a->object.pairs,
+								   sizeof(JsonbPair) * state->size);
 	}
 
-	h->object.pairs[h->object.nPairs].key = *v;
-	h->object.pairs[h->object.nPairs].order = h->object.nPairs;
+	a->object.pairs[a->object.nPairs].key = *v;
+	a->object.pairs[a->object.nPairs].order = a->object.nPairs;
 
-	h->size += v->size;
+	a->size += v->size;
 }
 
 static void
 appendValue(ToJsonbState * state, JsonbValue * v)
 {
-	JsonbValue *h = &state->v;
+	JsonbValue *a = &state->v;
 
-	Assert(h->type == jbvObject);
+	Assert(a->type == jbvObject);
 
-	h->object.pairs[h->object.nPairs++].value = *v;
-
-	h->size += v->size;
+	a->object.pairs[a->object.nPairs++].value = *v;
+	a->size += v->size;
 }
 
 static void
@@ -1297,11 +1302,10 @@ appendElement(ToJsonbState * state, JsonbValue * v)
 	{
 		state->size *= 2;
 		a->array.elems = repalloc(a->array.elems,
-								  sizeof(*a->array.elems) * state->size);
+								  sizeof(JsonbValue) * state->size);
 	}
 
 	a->array.elems[a->array.nElems++] = *v;
-
 	a->size += v->size;
 }
 
@@ -1365,7 +1369,7 @@ lengthCompareJsonbPair(const void *a, const void *b, void *binequal)
 	res = lengthCompareJsonbStringValue(&pa->key, &pb->key, binequal);
 
 	/*
-	 * Guarantee keeping order of equal pair. Unique algorithm will prefer
+	 * Guarantee keeping order of equal pair.  Unique algorithm will prefer
 	 * first element as value.
 	 */
 	if (res == 0)
@@ -1386,7 +1390,7 @@ uniqueifyJsonbObject(JsonbValue * v)
 	Assert(v->type == jbvObject);
 
 	if (v->object.nPairs > 1)
-		qsort_arg(v->object.pairs, v->object.nPairs, sizeof(*v->object.pairs),
+		qsort_arg(v->object.pairs, v->object.nPairs, sizeof(JsonbPair),
 				  lengthCompareJsonbPair, &hasNonUniq);
 
 	if (hasNonUniq)
@@ -1405,7 +1409,7 @@ uniqueifyJsonbObject(JsonbValue * v)
 			{
 				res++;
 				if (ptr != res)
-					memcpy(res, ptr, sizeof(*res));
+					memcpy(res, ptr, sizeof(JsonbPair));
 			}
 			ptr++;
 		}
@@ -1430,7 +1434,7 @@ uniqueifyJsonbArray(JsonbValue * v)
 	 */
 	if (v->array.nElems > 1)
 		qsort_arg(v->array.elems, v->array.nElems,
-				  sizeof(*v->array.elems), lengthCompareJsonbStringValue,
+				  sizeof(JsonbValue), lengthCompareJsonbStringValue,
 				  &hasNonUniq);
 
 	if (hasNonUniq)

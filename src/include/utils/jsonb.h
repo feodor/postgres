@@ -151,7 +151,7 @@ struct JsonbValue
 		jbvBinary
 	} type;
 
-	uint32		size;			/* Estimation size of node (including
+	Size		size;			/* Estimation size of node (including
 								 * subnodes) */
 
 	union
@@ -184,7 +184,6 @@ struct JsonbValue
 			char	   *data;
 		} binary;
 	};
-
 };
 
 /* Pair within an Object */
@@ -199,7 +198,7 @@ struct JsonbPair
 typedef struct ToJsonbState
 {
 	JsonbValue	v;
-	uint32		size;
+	Size		size;
 	struct ToJsonbState *next;
 } ToJsonbState;
 
@@ -210,7 +209,7 @@ typedef struct ToJsonbState
  */
 typedef enum
 {
-	jbi_start,
+	jbi_start = 0x0,
 	jbi_key,
 	jbi_value,
 	jbi_elem
