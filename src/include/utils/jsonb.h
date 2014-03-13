@@ -26,9 +26,9 @@
 #define JSONB_MAX_STRING_LEN	JENTRY_POSMASK
 
 /*
- * it's not possible to get more than 2^28 items into an jsonb.
+ * It's not possible to get more than 2^28 items into an Jsonb.
  *
- * JB_CMASK is count mask
+ * JB_CMASK is count of items mask
  */
 #define JB_CMASK				0x0FFFFFFF
 
@@ -38,14 +38,14 @@
 
 /* Get information on varlena Jsonb */
 #define JB_ISEMPTY(jbp_)		(VARSIZE(jbp_) == 0)
-#define JB_ROOT_COUNT(jbp_)		(JB_ISEMPTY(jbp_) \
-								 ? 0: ( *(uint32*) VARDATA(jbp_) & JB_CMASK))
-#define JB_ROOT_IS_SCALAR(jbp_) (JB_ISEMPTY(jbp_) \
-								 ? 0: ( *(uint32*) VARDATA(jbp_) & JB_FSCALAR))
-#define JB_ROOT_IS_OBJECT(jbp_) (JB_ISEMPTY(jbp_) \
-								 ? 0: ( *(uint32*) VARDATA(jbp_) & JB_FOBJECT))
-#define JB_ROOT_IS_ARRAY(jbp_)	(JB_ISEMPTY(jbp_) \
-								 ? 0: ( *(uint32*) VARDATA(jbp_) & JB_FARRAY))
+#define JB_ROOT_COUNT(jbp_)		(JB_ISEMPTY(jbp_) ? \
+								 0: ( *(uint32*) VARDATA(jbp_) & JB_CMASK))
+#define JB_ROOT_IS_SCALAR(jbp_) (JB_ISEMPTY(jbp_) ? \
+								 0: ( *(uint32*) VARDATA(jbp_) & JB_FSCALAR))
+#define JB_ROOT_IS_OBJECT(jbp_) (JB_ISEMPTY(jbp_) ? \
+								 0: ( *(uint32*) VARDATA(jbp_) & JB_FOBJECT))
+#define JB_ROOT_IS_ARRAY(jbp_)	(JB_ISEMPTY(jbp_) ? \
+								 0: ( *(uint32*) VARDATA(jbp_) & JB_FARRAY))
 
 /* Flags indicating a stage of sequential Jsonb processing */
 #define WJB_KEY					0x001
@@ -59,9 +59,9 @@
 /* Get offset for Jentry  */
 #define JBE_ENDPOS(he_) 		((he_).header & JENTRY_POSMASK)
 #define JBE_OFF(he_) 			(JBE_ISFIRST(he_) ? 0 : JBE_ENDPOS((&(he_))[-1]))
-#define JBE_LEN(he_) 			(JBE_ISFIRST(he_)	\
-								  ? JBE_ENDPOS(he_) \
-								  : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
+#define JBE_LEN(he_) 			(JBE_ISFIRST(he_) ? \
+								 JBE_ENDPOS(he_) \
+								 : JBE_ENDPOS(he_) - JBE_ENDPOS((&(he_))[-1]))
 
 /*
  * When using a GIN index for jsonb, we choose to index both keys and values.
