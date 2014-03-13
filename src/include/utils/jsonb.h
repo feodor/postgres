@@ -106,7 +106,7 @@ typedef struct
 {
 	int32		vl_len_;		/* varlena header (do not touch directly!) */
 	/* (uint32/Jsonb superheader of top-level Jsonb object/array follows) */
-	/* (array of JEntry follows, size determined using uint32 header) */
+	/* (array of JEntry follows, size determined using uint32 superheader) */
 } Jsonb;
 
 /*
@@ -180,6 +180,7 @@ struct JsonbPair
 	uint32		order;			/* preserves order of pairs with equal keys */
 };
 
+/* Conversion state used when parsing Jsonb from text, or for type coercion */
 typedef struct ToJsonbState
 {
 	JsonbValue	v;

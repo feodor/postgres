@@ -37,39 +37,43 @@
 #define JBE_ISBOOL_FALSE(he_)	(JBE_ISBOOL(he_) && !JBE_ISBOOL_TRUE(he_))
 
 /*
- * State used while rolling up an arbitrary JsonbValue into a varlena/Jsonb
- * value
+ * State used while converting an arbitrary JsonbValue into a Jsonb value
+ * (4-byte varlena uncompressed representation of a Jsonb)
  */
-typedef struct CompressState
+typedef struct ConvertState
 {
 	/* Preallocated buffer in which to form varlena/Jsonb value */
-	char			   *buffer;
-	JsonbSuperHeader	ptr;
+	Jsonb			   *buffer;
+	/* Pointer into buffer */
+	char			   *ptr;
 
 	struct
 	{
 		uint32		i;
 		uint32	   *header;
-		JEntry	   *array;
+		JEntry	   *metaArray;
 		char	   *begin;
-	}		   *levelstate, *lptr, *pptr;
+	}		   *levelstate,
+		*curlptr,
+		*prvlptr;
 
-	uint32		maxlevel;
+	/* Current size of buffer holding levelstate */
+	Size		levelSz;
 
-}	CompressState;
+}	ConvertState;
 
 static int lexicalCompareJsonbStringValue(const void *a, const void *b);
-static uint32 compressJsonb(JsonbValue * v, JsonbSuperHeader sheader);
-static void walkUncompressedJsonb(JsonbValue * value, CompressState * state,
-								  uint32 nestlevel);
+static Size convertJsonb(JsonbValue * v, Jsonb* buffer);
+static void walkJsonbValueConversion(JsonbValue * value, ConvertState * state,
+									 uint32 nestlevel);
+static void putJsonbValueConversion(ConvertState * state, JsonbValue * value,
+									uint32 flags, uint32 level);
+static void putStringConversion(ConvertState * state, JsonbValue * value,
+								uint32 level, uint32 i);
 static void parseBuffer(JsonbIterator * it, char *buffer);
 static bool formAnswer(JsonbIterator ** it, JsonbValue * v, JEntry * e,
 					   bool skipNested);
 static JsonbIterator *up(JsonbIterator * it);
-static void compressJsonbValue(CompressState * state, JsonbValue * value,
-							   uint32 flags, uint32 level);
-static void putJEntryString(CompressState * state, JsonbValue * value,
-							uint32 level, uint32 i);
 static ToJsonbState *pushState(ToJsonbState ** state);
 static void appendKey(ToJsonbState * state, JsonbValue * v);
 static void appendValue(ToJsonbState * state, JsonbValue * v);
@@ -96,7 +100,7 @@ JsonbValueToJsonb(JsonbValue * v)
 		/* Scalar value */
 		ToJsonbState *state = NULL;
 		JsonbValue *res;
-		uint32		sz;
+		Size		sz;
 		JsonbValue	scalarArray;
 
 		scalarArray.type = jbvArray;
@@ -108,7 +112,7 @@ JsonbValueToJsonb(JsonbValue * v)
 		res = pushJsonbValue(&state, WJB_END_ARRAY, NULL);
 
 		out = palloc(VARHDRSZ + res->size);
-		sz = compressJsonb(res, VARDATA(out));
+		sz = convertJsonb(res, out);
 		Assert(sz <= res->size);
 		SET_VARSIZE(out, sz + VARHDRSZ);
 	}
@@ -117,7 +121,7 @@ JsonbValueToJsonb(JsonbValue * v)
 		uint32		sz;
 
 		out = palloc(VARHDRSZ + v->size);
-		sz = compressJsonb(v, VARDATA(out));
+		sz = convertJsonb(v, out);
 		Assert(sz <= v->size);
 		SET_VARSIZE(out, VARHDRSZ + sz);
 	}
@@ -811,35 +815,38 @@ lexicalCompareJsonbStringValue(const void *a, const void *b)
 }
 
 /*
- * puts JsonbValue tree into a preallocated buffer
+ * Put JsonbValue tree into a preallocated buffer Jsonb buffer
  */
-static uint32
-compressJsonb(JsonbValue * v, char *buffer)
+static Size
+convertJsonb(JsonbValue * v, Jsonb *buffer)
 {
 	uint32		l = 0;
-	CompressState state;
+	ConvertState state;
 
 	/* Should not already have binary representation */
 	Assert(v->type != jbvBinary);
 
-	state.buffer = state.ptr = buffer;
-	state.maxlevel = 8;
-	state.levelstate = palloc(sizeof(*state.levelstate) * state.maxlevel);
+	state.buffer = buffer;
+	/* Start from superheader */
+	state.ptr = VARDATA(state.buffer);
+	state.levelSz = 8;
+	state.levelstate = palloc(sizeof(*state.levelstate) * state.levelSz);
 
-	walkUncompressedJsonb(v, &state, 0);
+	walkJsonbValueConversion(v, &state, 0);
 
-	l = state.ptr - buffer;
+	l = state.ptr - VARDATA(state.buffer);
 	Assert(l <= v->size);
 
 	return l;
 }
 
 /*
- * Walk the tree representation of jsonb
+ * Walk the tree representation of Jsonb, as part of the process of converting
+ * a JsonbValue to a Jsonb
  */
 static void
-walkUncompressedJsonb(JsonbValue * value, CompressState * state,
-					  uint32 nestlevel)
+walkJsonbValueConversion(JsonbValue * value, ConvertState * state,
+						 uint32 nestlevel)
 {
 	int			i;
 
@@ -851,40 +858,288 @@ walkUncompressedJsonb(JsonbValue * value, CompressState * state,
 	switch (value->type)
 	{
 		case jbvArray:
-			compressJsonbValue(state, value, WJB_BEGIN_ARRAY, nestlevel);
+			putJsonbValueConversion(state, value, WJB_BEGIN_ARRAY, nestlevel);
 			for (i = 0; i < value->array.nElems; i++)
 			{
 				if ((value->array.elems[i].type >= jbvNull &&
 					value->array.elems[i].type < jbvArray) ||
 					value->array.elems[i].type == jbvBinary)
-					compressJsonbValue(state, value->array.elems + i, WJB_ELEM, nestlevel);
+					putJsonbValueConversion(state, value->array.elems + i,
+											WJB_ELEM, nestlevel);
 				else
-					walkUncompressedJsonb(value->array.elems + i, state,
+					walkJsonbValueConversion(value->array.elems + i, state,
 										  nestlevel + 1);
 			}
-			compressJsonbValue(state, value, WJB_END_ARRAY, nestlevel);
+			putJsonbValueConversion(state, value, WJB_END_ARRAY, nestlevel);
 			break;
 		case jbvObject:
-			compressJsonbValue(state, value, WJB_BEGIN_OBJECT, nestlevel);
+			putJsonbValueConversion(state, value, WJB_BEGIN_OBJECT, nestlevel);
 
 			for (i = 0; i < value->object.nPairs; i++)
 			{
-				compressJsonbValue(state, &value->object.pairs[i].key, WJB_KEY, nestlevel);
+				putJsonbValueConversion(state, &value->object.pairs[i].key,
+										WJB_KEY, nestlevel);
 
 				if ((value->object.pairs[i].value.type >= jbvNull &&
 					value->object.pairs[i].value.type < jbvArray) ||
 					value->object.pairs[i].value.type == jbvBinary)
-					compressJsonbValue(state, &value->object.pairs[i].value,
+					putJsonbValueConversion(state,
+											&value->object.pairs[i].value,
 									   WJB_VALUE, nestlevel);
 				else
-					walkUncompressedJsonb(&value->object.pairs[i].value,
+					walkJsonbValueConversion(&value->object.pairs[i].value,
 										  state, nestlevel + 1);
 			}
 
-			compressJsonbValue(state, value, WJB_END_OBJECT, nestlevel);
+			putJsonbValueConversion(state, value, WJB_END_OBJECT, nestlevel);
 			break;
 		default:
 			elog(ERROR, "unknown type of jsonb container");
+	}
+}
+
+/*
+ * As part of the process of converting an arbitrary JsonbValue to a Jsonb,
+ * copy an arbitrary individual JsonbValue.  This function may copy over any
+ * type of value, even containers (Objects/arrays).  However, it is not
+ * responsible for recursive aspects of walking the tree (so only top-level
+ * Object/array details are handled).  No details about their
+ * keys/values/elements are touched.  The function is called separately for the
+ * start of an Object/Array, and the end.
+ *
+ * This is a worker function for walkJsonbValueConversion.
+ */
+static void
+putJsonbValueConversion(ConvertState * state, JsonbValue * value, uint32 flags,
+						uint32 level)
+{
+	if (level == state->levelSz)
+	{
+		state->levelSz *= 2;
+		state->levelstate = repalloc(state->levelstate,
+							   sizeof(*state->levelstate) * state->levelSz);
+	}
+
+	state->curlptr = state->levelstate + level;
+
+	if (flags & (WJB_BEGIN_ARRAY | WJB_BEGIN_OBJECT))
+	{
+		short		padlen, p;
+
+		Assert(((flags & WJB_BEGIN_ARRAY) && value->type == jbvArray) ||
+			   ((flags & WJB_BEGIN_OBJECT) && value->type == jbvObject));
+
+		state->curlptr->begin = state->ptr;
+
+		padlen = INTALIGN(state->ptr - VARDATA(state->buffer)) -
+			(state->ptr - VARDATA(state->buffer));
+
+		/*
+		 * Add padding as necessary
+		 */
+		for (p = padlen; p > 0; p--)
+		{
+			*state->ptr = '\0';
+			state->ptr++;
+		}
+
+		state->curlptr->header = (uint32 *) state->ptr;
+		/* Advance past header */
+		state->ptr += sizeof(* state->curlptr->header);
+
+		state->curlptr->metaArray = (JEntry *) state->ptr;
+		state->curlptr->i = 0;
+
+		if (value->type == jbvArray)
+		{
+			*state->curlptr->header = value->array.nElems | JB_FLAG_ARRAY;
+			state->ptr += sizeof(JEntry) * value->array.nElems;
+
+			if (value->array.scalar)
+			{
+				Assert(value->array.nElems == 1);
+				Assert(level == 0);
+				*state->curlptr->header |= JB_FLAG_SCALAR;
+			}
+		}
+		else
+		{
+			*state->curlptr->header = value->object.nPairs | JB_FLAG_OBJECT;
+			state->ptr += sizeof(JEntry) * value->object.nPairs * 2;
+		}
+	}
+	else if (flags & WJB_ELEM)
+	{
+		putStringConversion(state, value, level, state->curlptr->i);
+		state->curlptr->i++;
+	}
+	else if (flags & WJB_KEY)
+	{
+		Assert(value->type == jbvString);
+
+		putStringConversion(state, value, level, state->curlptr->i * 2);
+	}
+	else if (flags & WJB_VALUE)
+	{
+		putStringConversion(state, value, level, state->curlptr->i * 2 + 1);
+		state->curlptr->i++;
+	}
+	else if (flags & (WJB_END_ARRAY | WJB_END_OBJECT))
+	{
+		uint32		len,
+					i;
+
+		Assert(((flags & WJB_END_ARRAY) && value->type == jbvArray) ||
+			   ((flags & WJB_END_OBJECT) && value->type == jbvObject));
+
+		if (level == 0)
+			return;
+
+		len = state->ptr - (char *) state->curlptr->begin;
+
+		state->prvlptr = state->curlptr - 1;
+
+		if (*state->prvlptr->header & JB_FLAG_ARRAY)
+		{
+			i = state->prvlptr->i;
+
+			state->prvlptr->metaArray[i].header = JENTRY_ISNEST;
+
+			if (i == 0)
+				state->prvlptr->metaArray[0].header |= JENTRY_ISFIRST | len;
+			else
+				state->prvlptr->metaArray[i].header |=
+					(state->prvlptr->metaArray[i - 1].header & JENTRY_POSMASK) + len;
+		}
+		else if (*state->prvlptr->header & JB_FLAG_OBJECT)
+		{
+			i = 2 * state->prvlptr->i + 1;		/* Value, not key */
+
+			state->prvlptr->metaArray[i].header = JENTRY_ISNEST;
+
+			state->prvlptr->metaArray[i].header |=
+				(state->prvlptr->metaArray[i - 1].header & JENTRY_POSMASK) + len;
+		}
+		else
+		{
+			elog(ERROR, "invalid jsonb container type");
+		}
+
+		Assert(state->ptr - state->curlptr->begin <= value->size);
+		state->prvlptr->i++;
+	}
+	else
+	{
+		elog(ERROR, "unknown flag encountered during jsonb tree walk");
+	}
+}
+
+/*
+ * As part of the process of converting an arbitrary JsonbValue to a Jsonb,
+ * copy a string.
+ *
+ * This is a worker function for putJsonbValueConversion(), handling aspects of
+ * copying strings in respect of all scalar values.  It handles the details
+ * with regard to Jentry meta-data within convert state.
+ */
+static void
+putStringConversion(ConvertState * state, JsonbValue * value,
+					uint32 level, uint32 i)
+{
+	short		p, padlen;
+
+	state->curlptr = state->levelstate + level;
+
+	if (i == 0)
+		state->curlptr->metaArray[0].header = JENTRY_ISFIRST;
+	else
+		state->curlptr->metaArray[i].header = 0;
+
+	switch (value->type)
+	{
+		case jbvNull:
+			state->curlptr->metaArray[i].header |= JENTRY_ISNULL;
+
+			if (i > 0)
+				state->curlptr->metaArray[i].header |=
+					state->curlptr->metaArray[i - 1].header & JENTRY_POSMASK;
+			break;
+		case jbvString:
+			memcpy(state->ptr, value->string.val, value->string.len);
+			state->ptr += value->string.len;
+
+			if (i == 0)
+				state->curlptr->metaArray[i].header |= value->string.len;
+			else
+				state->curlptr->metaArray[i].header |=
+					(state->curlptr->metaArray[i - 1].header & JENTRY_POSMASK) +
+					value->string.len;
+			break;
+		case jbvBool:
+			state->curlptr->metaArray[i].header |= (value->boolean) ?
+				JENTRY_ISTRUE : JENTRY_ISFALSE;
+
+			if (i > 0)
+				state->curlptr->metaArray[i].header |=
+					state->curlptr->metaArray[i - 1].header & JENTRY_POSMASK;
+			break;
+		case jbvNumeric:
+			{
+				int numlen = VARSIZE_ANY(value->numeric);
+
+				padlen = INTALIGN(state->ptr - VARDATA(state->buffer)) -
+					(state->ptr - VARDATA(state->buffer));
+
+				/*
+				 * Add padding as necessary
+				 */
+				for (p = padlen; p > 0; p--)
+				{
+					*state->ptr = '\0';
+					state->ptr++;
+				}
+
+				memcpy(state->ptr, value->numeric, numlen);
+				state->ptr += numlen;
+
+				state->curlptr->metaArray[i].header |= JENTRY_ISNUMERIC;
+				if (i == 0)
+					state->curlptr->metaArray[i].header |= padlen + numlen;
+				else
+					state->curlptr->metaArray[i].header |=
+						(state->curlptr->metaArray[i - 1].header & JENTRY_POSMASK) +
+						padlen + numlen;
+				break;
+			}
+		case jbvBinary:
+			{
+				padlen = INTALIGN(state->ptr - VARDATA(state->buffer)) -
+					(state->ptr - VARDATA(state->buffer));
+
+				/*
+				 * Add padding as necessary
+				 */
+				for (p = padlen; p > 0; p--)
+				{
+					*state->ptr = '\0';
+					state->ptr++;
+				}
+
+				memcpy(state->ptr, value->binary.data, value->binary.len);
+				state->ptr += value->binary.len;
+
+				state->curlptr->metaArray[i].header |= JENTRY_ISNEST;
+
+				if (i == 0)
+					state->curlptr->metaArray[i].header |= value->binary.len + padlen;
+				else
+					state->curlptr->metaArray[i].header |=
+						(state->curlptr->metaArray[i - 1].header & JENTRY_POSMASK) +
+						value->binary.len + padlen;
+			}
+			break;
+		default:
+			elog(ERROR, "invalid jsonb scalar type");
 	}
 }
 
@@ -996,234 +1251,6 @@ up(JsonbIterator * it)
 	pfree(it);
 
 	return v;
-}
-
-/*
- * Transformation from tree to binary representation of jsonb
- */
-#define curLevelState	(state->lptr)
-#define prevLevelState	(state->pptr)
-
-static void
-compressJsonbValue(CompressState * state, JsonbValue * value, uint32 flags,
-				   uint32 level)
-{
-	if (level == state->maxlevel)
-	{
-		state->maxlevel *= 2;
-		state->levelstate = repalloc(state->levelstate,
-							   sizeof(*state->levelstate) * state->maxlevel);
-	}
-
-	curLevelState = state->levelstate + level;
-
-	if (flags & (WJB_BEGIN_ARRAY | WJB_BEGIN_OBJECT))
-	{
-		short		padlen, p;
-
-		Assert(((flags & WJB_BEGIN_ARRAY) && value->type == jbvArray) ||
-			   ((flags & WJB_BEGIN_OBJECT) && value->type == jbvObject));
-
-		curLevelState->begin = state->ptr;
-
-		padlen = INTALIGN(state->ptr - state->buffer) - (state->ptr -
-														 state->buffer);
-		/*
-		 * Add padding as necessary
-		 */
-		for (p = padlen; p > 0; p--)
-		{
-			*state->ptr = '\0';
-			state->ptr++;
-		}
-
-		curLevelState->header = (uint32 *) state->ptr;
-		state->ptr += sizeof(*curLevelState->header);
-
-		curLevelState->array = (JEntry *) state->ptr;
-		curLevelState->i = 0;
-
-		if (value->type == jbvArray)
-		{
-			*curLevelState->header = value->array.nElems | JB_FLAG_ARRAY;
-			state->ptr += sizeof(JEntry) * value->array.nElems;
-
-			if (value->array.scalar)
-			{
-				Assert(value->array.nElems == 1);
-				Assert(level == 0);
-				*curLevelState->header |= JB_FLAG_SCALAR;
-			}
-		}
-		else
-		{
-			*curLevelState->header = value->object.nPairs | JB_FLAG_OBJECT;
-			state->ptr += sizeof(JEntry) * value->object.nPairs * 2;
-		}
-	}
-	else if (flags & WJB_ELEM)
-	{
-		putJEntryString(state, value, level, curLevelState->i);
-		curLevelState->i++;
-	}
-	else if (flags & WJB_KEY)
-	{
-		Assert(value->type == jbvString);
-
-		putJEntryString(state, value, level, curLevelState->i * 2);
-	}
-	else if (flags & WJB_VALUE)
-	{
-		putJEntryString(state, value, level, curLevelState->i * 2 + 1);
-		curLevelState->i++;
-	}
-	else if (flags & (WJB_END_ARRAY | WJB_END_OBJECT))
-	{
-		uint32		len,
-					i;
-
-		Assert(((flags & WJB_END_ARRAY) && value->type == jbvArray) ||
-			   ((flags & WJB_END_OBJECT) && value->type == jbvObject));
-		if (level == 0)
-			return;
-
-		len = state->ptr - (char *) curLevelState->begin;
-
-		prevLevelState = curLevelState - 1;
-
-		if (*prevLevelState->header & JB_FLAG_ARRAY)
-		{
-			i = prevLevelState->i;
-
-			prevLevelState->array[i].header = JENTRY_ISNEST;
-
-			if (i == 0)
-				prevLevelState->array[0].header |= JENTRY_ISFIRST | len;
-			else
-				prevLevelState->array[i].header |=
-					(prevLevelState->array[i - 1].header & JENTRY_POSMASK) + len;
-		}
-		else if (*prevLevelState->header & JB_FLAG_OBJECT)
-		{
-			i = 2 * prevLevelState->i + 1;		/* VALUE, not a KEY */
-
-			prevLevelState->array[i].header = JENTRY_ISNEST;
-
-			prevLevelState->array[i].header |=
-				(prevLevelState->array[i - 1].header & JENTRY_POSMASK) + len;
-		}
-		else
-		{
-			elog(ERROR, "invalid jsonb container type");
-		}
-
-		Assert(state->ptr - curLevelState->begin <= value->size);
-		prevLevelState->i++;
-	}
-	else
-	{
-		elog(ERROR, "unknown flag in tree walk");
-	}
-}
-
-static void
-putJEntryString(CompressState * state, JsonbValue * value, uint32 level,
-				uint32 i)
-{
-	short		p, padlen;
-
-	curLevelState = state->levelstate + level;
-
-	if (i == 0)
-		curLevelState->array[0].header = JENTRY_ISFIRST;
-	else
-		curLevelState->array[i].header = 0;
-
-	switch (value->type)
-	{
-		case jbvNull:
-			curLevelState->array[i].header |= JENTRY_ISNULL;
-
-			if (i > 0)
-				curLevelState->array[i].header |=
-					curLevelState->array[i - 1].header & JENTRY_POSMASK;
-			break;
-		case jbvString:
-			memcpy(state->ptr, value->string.val, value->string.len);
-			state->ptr += value->string.len;
-
-			if (i == 0)
-				curLevelState->array[i].header |= value->string.len;
-			else
-				curLevelState->array[i].header |=
-					(curLevelState->array[i - 1].header & JENTRY_POSMASK) +
-					value->string.len;
-			break;
-		case jbvBool:
-			curLevelState->array[i].header |= (value->boolean) ?
-				JENTRY_ISTRUE : JENTRY_ISFALSE;
-
-			if (i > 0)
-				curLevelState->array[i].header |=
-					curLevelState->array[i - 1].header & JENTRY_POSMASK;
-			break;
-		case jbvNumeric:
-			{
-				int numlen = VARSIZE_ANY(value->numeric);
-
-				padlen = INTALIGN(state->ptr - state->buffer) -
-					(state->ptr - state->buffer);
-
-				/*
-				 * Add padding as necessary
-				 */
-				for (p = padlen; p > 0; p--)
-				{
-					*state->ptr = '\0';
-					state->ptr++;
-				}
-
-				memcpy(state->ptr, value->numeric, numlen);
-				state->ptr += numlen;
-
-				curLevelState->array[i].header |= JENTRY_ISNUMERIC;
-				if (i == 0)
-					curLevelState->array[i].header |= padlen + numlen;
-				else
-					curLevelState->array[i].header |=
-						(curLevelState->array[i - 1].header & JENTRY_POSMASK) +
-						padlen + numlen;
-				break;
-			}
-		case jbvBinary:
-			{
-				padlen = INTALIGN(state->ptr - state->buffer) - (state->ptr -
-																state->buffer);
-				/*
-				 * Add padding as necessary
-				 */
-				for (p = padlen; p > 0; p--)
-				{
-					*state->ptr = '\0';
-					state->ptr++;
-				}
-
-				memcpy(state->ptr, value->binary.data, value->binary.len);
-				state->ptr += value->binary.len;
-
-				curLevelState->array[i].header |= JENTRY_ISNEST;
-
-				if (i == 0)
-					curLevelState->array[i].header |= value->binary.len + padlen;
-				else
-					curLevelState->array[i].header |=
-						(curLevelState->array[i - 1].header & JENTRY_POSMASK) +
-						value->binary.len + padlen;
-			}
-			break;
-		default:
-			elog(ERROR, "invalid jsonb scalar type");
-	}
 }
 
 /*
