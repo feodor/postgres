@@ -40,6 +40,7 @@
 #define JB_ROOT_IS_ARRAY(jbp_)	(JB_ISEMPTY(jbp_) ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_ARRAY))
 #define JB_ROOT_IS_SCALAR(jbp_) (JB_ISEMPTY(jbp_) ? 0 : ( *(uint32*)VARDATA(jbp_) & JB_FLAG_SCALAR))
 
+/* Flags indicate a stage of sequential Jsonb processing */
 #define WJB_KEY				(0x001)
 #define WJB_VALUE			(0x002)
 #define WJB_ELEM			(0x004)

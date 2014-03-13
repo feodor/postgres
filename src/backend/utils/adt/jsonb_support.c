@@ -284,8 +284,8 @@ compareJsonbSuperHeaderValue(JsonbSuperHeader a, JsonbSuperHeader b)
  * findJsonbValueFromSuperHeader() wrapper that sets up JsonbValue key.
  */
 JsonbValue *
-findJsonbValueFromSuperHeaderLen(JsonbSuperHeader sheader, uint32 flags, uint32 *lowbound,
-								 char *key, uint32 keylen)
+findJsonbValueFromSuperHeaderLen(JsonbSuperHeader sheader, uint32 flags,
+								 uint32 *lowbound, char *key, uint32 keylen)
 {
 	JsonbValue	v;
 
@@ -314,7 +314,7 @@ findJsonbValueFromSuperHeader(JsonbSuperHeader sheader, uint32 flags,
 {
 	uint32		superheader = *(uint32 *) sheader;
 	JEntry	   *array = (JEntry *) (sheader + sizeof(uint32));
-	JsonbValue  *r = palloc(sizeof(JsonbValue));
+	JsonbValue *r = palloc(sizeof(JsonbValue));
 
 	Assert((superheader & (JB_FLAG_ARRAY | JB_FLAG_OBJECT)) !=
 		   (JB_FLAG_ARRAY | JB_FLAG_OBJECT));
@@ -1048,7 +1048,7 @@ putJsonbValueConversion(ConvertState * state, JsonbValue * value, uint32 flags,
 
 /*
  * As part of the process of converting an arbitrary JsonbValue to a Jsonb,
- * copy a string.
+ * copy a string associated with a scalar value.
  *
  * This is a worker function for putJsonbValueConversion() (itself a worker for
  * walkJsonbValueConversion()), handling aspects of copying strings in respect
@@ -1124,33 +1124,6 @@ putStringConversion(ConvertState * state, JsonbValue * value,
 						padlen + numlen;
 				break;
 			}
-		case jbvBinary:
-			{
-				padlen = INTALIGN(state->ptr - VARDATA(state->buffer)) -
-					(state->ptr - VARDATA(state->buffer));
-
-				/*
-				 * Add padding as necessary
-				 */
-				for (p = padlen; p > 0; p--)
-				{
-					*state->ptr = '\0';
-					state->ptr++;
-				}
-
-				memcpy(state->ptr, value->binary.data, value->binary.len);
-				state->ptr += value->binary.len;
-
-				state->curlptr->meta[i].header |= JENTRY_ISNEST;
-
-				if (i == 0)
-					state->curlptr->meta[i].header |= value->binary.len + padlen;
-				else
-					state->curlptr->meta[i].header |=
-						(state->curlptr->meta[i - 1].header & JENTRY_POSMASK) +
-						value->binary.len + padlen;
-			}
-			break;
 		default:
 			elog(ERROR, "invalid jsonb scalar type");
 	}
