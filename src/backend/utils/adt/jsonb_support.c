@@ -91,11 +91,7 @@ JsonbValueToJsonb(JsonbValue * v)
 {
 	Jsonb	   *out;
 
-	if (v == NULL)
-	{
-		out = NULL;
-	}
-	else if (v->type >= jbvNull && v->type < jbvArray)
+	if (v->type >= jbvNull && v->type < jbvArray)
 	{
 		/* Scalar value */
 		ToJsonbState *state = NULL;

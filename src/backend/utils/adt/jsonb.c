@@ -314,8 +314,7 @@ jsonb_in_scalar(void *state, char *token, JsonTokenType tokentype)
 			v.type = jbvNull;
 			break;
 		default:
-			/* nothing else should be here in fact */
-			Assert(false);
+			elog(ERROR, "invalid json token type");
 			break;
 	}
 
