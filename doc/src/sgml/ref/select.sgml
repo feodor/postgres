@@ -4,19 +4,6 @@ PostgreSQL documentation
 -->
 
 <refentry id="SQL-SELECT">
- <refmeta>
-  <refentrytitle>SELECT</refentrytitle>
-  <manvolnum>7</manvolnum>
-  <refmiscinfo>SQL - Language Statements</refmiscinfo>
- </refmeta>
-
- <refnamediv>
-  <refname>SELECT</refname>
-  <refname>TABLE</refname>
-  <refname>WITH</refname>
-  <refpurpose>retrieve rows from a table or view</refpurpose>
- </refnamediv>
-
  <indexterm zone="sql-select">
   <primary>SELECT</primary>
  </indexterm>
@@ -29,6 +16,19 @@ PostgreSQL documentation
   <primary>WITH</primary>
   <secondary>in SELECT</secondary>
  </indexterm>
+
+ <refmeta>
+  <refentrytitle>SELECT</refentrytitle>
+  <manvolnum>7</manvolnum>
+  <refmiscinfo>SQL - Language Statements</refmiscinfo>
+ </refmeta>
+
+ <refnamediv>
+  <refname>SELECT</refname>
+  <refname>TABLE</refname>
+  <refname>WITH</refname>
+  <refpurpose>retrieve rows from a table or view</refpurpose>
+ </refnamediv>
 
  <refsynopsisdiv>
 <synopsis>
@@ -214,7 +214,7 @@ TABLE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
     subqueries that can be referenced by name in the primary query.
     The subqueries effectively act as temporary tables or views
     for the duration of the primary query.
-    Each subquery can be a <command>SELECT</command>, <command>VALUES</command>,
+    Each subquery can be a <command>SELECT</command>, <command>TABLE</>, <command>VALUES</command>,
     <command>INSERT</command>, <command>UPDATE</command> or
     <command>DELETE</command> statement.
     When writing a data-modifying statement (<command>INSERT</command>,
@@ -654,6 +654,12 @@ GROUP BY <replaceable class="parameter">expression</replaceable> [, ...]
     the grouped columns (or a subset thereof) are the primary key of
     the table containing the ungrouped column.
    </para>
+
+   <para>
+    Currently, <literal>FOR NO KEY UPDATE</>, <literal>FOR UPDATE</>,
+    <literal>FOR SHARE</> and <literal>FOR KEY SHARE</> cannot be
+    specified with <literal>GROUP BY</literal>.
+   </para>
   </refsect2>
 
   <refsect2 id="SQL-HAVING">
@@ -689,6 +695,12 @@ HAVING <replaceable class="parameter">condition</replaceable>
     <literal>HAVING</literal> clause can only reference table columns from
     within aggregate functions.  Such a query will emit a single row if the
     <literal>HAVING</literal> condition is true, zero rows if it is not true.
+   </para>
+
+   <para>
+    Currently, <literal>FOR NO KEY UPDATE</>, <literal>FOR UPDATE</>,
+    <literal>FOR SHARE</> and <literal>FOR KEY SHARE</> cannot be
+    specified with <literal>HAVING</literal>.
    </para>
   </refsect2>
 
@@ -825,6 +837,12 @@ UNBOUNDED FOLLOWING
    </para>
 
    <para>
+    Currently, <literal>FOR NO KEY UPDATE</>, <literal>FOR UPDATE</>,
+    <literal>FOR SHARE</> and <literal>FOR KEY SHARE</> cannot be
+    specified with <literal>WINDOW</literal>.
+   </para>
+
+   <para>
     Window functions are described in detail in
     <xref linkend="tutorial-window">,
     <xref linkend="syntax-window-functions">, and
@@ -919,6 +937,12 @@ SELECT DISTINCT ON (location) location, time, report
     <literal>ORDER BY</> expression(s).  The <literal>ORDER BY</> clause
     will normally contain additional expression(s) that determine the
     desired precedence of rows within each <literal>DISTINCT ON</> group.
+   </para>
+
+   <para>
+    Currently, <literal>FOR NO KEY UPDATE</>, <literal>FOR UPDATE</>,
+    <literal>FOR SHARE</> and <literal>FOR KEY SHARE</> cannot be
+    specified with <literal>DISTINCT</literal>.
    </para>
   </refsect2>
 
@@ -1465,12 +1489,18 @@ SELECT * FROM (SELECT * FROM mytable FOR UPDATE) ss ORDER BY column1;
 <programlisting>
 TABLE <replaceable class="parameter">name</replaceable>
 </programlisting>
-    is completely equivalent to
+    is equivalent to
 <programlisting>
 SELECT * FROM <replaceable class="parameter">name</replaceable>
 </programlisting>
     It can be used as a top-level command or as a space-saving syntax
-    variant in parts of complex queries.
+    variant in parts of complex queries. Only the <literal>WITH</>,
+    <literal>UNION</>, <literal>INTERSECT</>, <literal>EXCEPT</>,
+    <literal>ORDER BY</>, <literal>LIMIT</>, <literal>OFFSET</>,
+    <literal>FETCH</> and <literal>FOR</> locking clauses can be used
+    with <command>TABLE</>; the <literal>WHERE</> clause and any form of
+    aggregation cannot
+    be used.
    </para>
   </refsect2>
  </refsect1>

@@ -462,7 +462,7 @@ percentile_disc_final(PG_FUNCTION_ARGS)
 
 	/*
 	 * Note: we *cannot* clean up the tuplesort object here, because the value
-	 * to be returned is allocated inside its sortcontext.	We could use
+	 * to be returned is allocated inside its sortcontext.  We could use
 	 * datumCopy to copy it out of there, but it doesn't seem worth the
 	 * trouble, since the cleanup callback will clear the tuplesort later.
 	 */
@@ -580,15 +580,12 @@ percentile_cont_final_common(FunctionCallInfo fcinfo,
 
 	/*
 	 * Note: we *cannot* clean up the tuplesort object here, because the value
-	 * to be returned may be allocated inside its sortcontext.	We could use
+	 * to be returned may be allocated inside its sortcontext.  We could use
 	 * datumCopy to copy it out of there, but it doesn't seem worth the
 	 * trouble, since the cleanup callback will clear the tuplesort later.
 	 */
 
-	if (isnull)
-		PG_RETURN_NULL();
-	else
-		PG_RETURN_DATUM(val);
+	PG_RETURN_DATUM(val);
 }
 
 /*
@@ -1089,7 +1086,7 @@ mode_final(PG_FUNCTION_ARGS)
 
 	/*
 	 * Note: we *cannot* clean up the tuplesort object here, because the value
-	 * to be returned is allocated inside its sortcontext.	We could use
+	 * to be returned is allocated inside its sortcontext.  We could use
 	 * datumCopy to copy it out of there, but it doesn't seem worth the
 	 * trouble, since the cleanup callback will clear the tuplesort later.
 	 */
@@ -1334,7 +1331,7 @@ hypothetical_dense_rank_final(PG_FUNCTION_ARGS)
 
 	/*
 	 * We alternate fetching into tupslot and extraslot so that we have the
-	 * previous row available for comparisons.	This is accomplished by
+	 * previous row available for comparisons.  This is accomplished by
 	 * swapping the slot pointer variables after each row.
 	 */
 	extraslot = MakeSingleTupleTableSlot(osastate->qstate->tupdesc);

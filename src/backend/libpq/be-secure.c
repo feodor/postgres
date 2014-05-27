@@ -30,13 +30,13 @@
  *	  impersonations.
  *
  *	  Another benefit of EDH is that it allows the backend and
- *	  clients to use DSA keys.	DSA keys can only provide digital
+ *	  clients to use DSA keys.  DSA keys can only provide digital
  *	  signatures, not encryption, and are often acceptable in
  *	  jurisdictions where RSA keys are unacceptable.
  *
  *	  The downside to EDH is that it makes it impossible to
  *	  use ssldump(1) if there's a problem establishing an SSL
- *	  session.	In this case you'll need to temporarily disable
+ *	  session.  In this case you'll need to temporarily disable
  *	  EDH by commenting out the callback.
  *
  *	  ...
@@ -119,7 +119,7 @@ char	   *SSLCipherSuites = NULL;
 char	   *SSLECDHCurve;
 
 /* GUC variable: if false, prefer client ciphers */
-bool	   SSLPreferServerCiphers;
+bool		SSLPreferServerCiphers;
 
 /* ------------------------------------------------------------ */
 /*						 Hardcoded values						*/
@@ -371,7 +371,7 @@ secure_write(Port *port, void *ptr, size_t len)
 				 * A handshake can fail, so be prepared to retry it, but only
 				 * a few times.
 				 */
-				for (retries = 0; retries++;)
+				for (retries = 0;; retries++)
 				{
 					if (SSL_do_handshake(port->ssl) > 0)
 						break;	/* done */
@@ -822,6 +822,13 @@ initialize_SSL(void)
 #endif
 		SSL_library_init();
 		SSL_load_error_strings();
+
+		/*
+		 * We use SSLv23_method() because it can negotiate use of the highest
+		 * mutually supported protocol version, while alternatives like
+		 * TLSv1_2_method() permit only one specific version.  Note that we
+		 * don't actually allow SSL v2 or v3, only TLS protocols (see below).
+		 */
 		SSL_context = SSL_CTX_new(SSLv23_method());
 		if (!SSL_context)
 			ereport(FATAL,
@@ -880,9 +887,11 @@ initialize_SSL(void)
 							SSLerrmessage())));
 	}
 
-	/* set up ephemeral DH keys, and disallow SSL v2 while at it */
+	/* set up ephemeral DH keys, and disallow SSL v2/v3 while at it */
 	SSL_CTX_set_tmp_dh_callback(SSL_context, tmp_dh_cb);
-	SSL_CTX_set_options(SSL_context, SSL_OP_SINGLE_DH_USE | SSL_OP_NO_SSLv2);
+	SSL_CTX_set_options(SSL_context,
+						SSL_OP_SINGLE_DH_USE |
+						SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
 
 	/* set up ephemeral ECDH keys */
 	initialize_ecdh();

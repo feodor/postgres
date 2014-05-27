@@ -450,7 +450,7 @@ static void getRelationIdentity(StringInfo buffer, Oid relid);
  * sub-object is looked up, the parent object will be locked instead.
  *
  * If the object is a relation or a child object of a relation (e.g. an
- * attribute or contraint), the relation is also opened and *relp receives
+ * attribute or constraint), the relation is also opened and *relp receives
  * the open relcache entry pointer; otherwise, *relp is set to NULL.  This
  * is a bit grotty but it makes life simpler, since the caller will
  * typically need the relcache entry too.  Caller must close the relcache
@@ -458,9 +458,20 @@ static void getRelationIdentity(StringInfo buffer, Oid relid);
  * if the target object is the relation itself or an attribute, but for other
  * child objects, only AccessShareLock is acquired on the relation.
  *
+ * If the object is not found, an error is thrown, unless missing_ok is
+ * true.  In this case, no lock is acquired, relp is set to NULL, and the
+ * returned address has objectId set to InvalidOid.
+ *
  * We don't currently provide a function to release the locks acquired here;
  * typically, the lock must be held until commit to guard against a concurrent
  * drop operation.
+ *
+ * Note: If the object is not found, we don't give any indication of the
+ * reason.  (It might have been a missing schema if the name was qualified, or
+ * an inexistant type name in case of a cast, function or operator; etc).
+ * Currently there is only one caller that might be interested in such info, so
+ * we don't spend much effort here.  If more callers start to care, it might be
+ * better to add some support for that in this function.
  */
 ObjectAddress
 get_object_address(ObjectType objtype, List *objname, List *objargs,
@@ -580,9 +591,11 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 				{
 					TypeName   *sourcetype = (TypeName *) linitial(objname);
 					TypeName   *targettype = (TypeName *) linitial(objargs);
-					Oid			sourcetypeid = typenameTypeId(NULL, sourcetype);
-					Oid			targettypeid = typenameTypeId(NULL, targettype);
+					Oid			sourcetypeid;
+					Oid			targettypeid;
 
+					sourcetypeid = LookupTypeNameOid(NULL, sourcetype, missing_ok);
+					targettypeid = LookupTypeNameOid(NULL, targettype, missing_ok);
 					address.classId = CastRelationId;
 					address.objectId =
 						get_cast_oid(sourcetypeid, targettypeid, missing_ok);
@@ -652,7 +665,7 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 
 		/*
 		 * If we're dealing with a relation or attribute, then the relation is
-		 * already locked.	Otherwise, we lock it now.
+		 * already locked.  Otherwise, we lock it now.
 		 */
 		if (address.classId != RelationRelationId)
 		{
@@ -942,26 +955,31 @@ get_object_address_relobject(ObjectType objtype, List *objname,
 
 		/* Extract relation name and open relation. */
 		relname = list_truncate(list_copy(objname), nnames - 1);
-		relation = heap_openrv(makeRangeVarFromNameList(relname),
-							   AccessShareLock);
-		reloid = RelationGetRelid(relation);
+		relation = heap_openrv_extended(makeRangeVarFromNameList(relname),
+										AccessShareLock,
+										missing_ok);
+
+		reloid = relation ? RelationGetRelid(relation) : InvalidOid;
 
 		switch (objtype)
 		{
 			case OBJECT_RULE:
 				address.classId = RewriteRelationId;
-				address.objectId = get_rewrite_oid(reloid, depname, missing_ok);
+				address.objectId = relation ?
+					get_rewrite_oid(reloid, depname, missing_ok) : InvalidOid;
 				address.objectSubId = 0;
 				break;
 			case OBJECT_TRIGGER:
 				address.classId = TriggerRelationId;
-				address.objectId = get_trigger_oid(reloid, depname, missing_ok);
+				address.objectId = relation ?
+					get_trigger_oid(reloid, depname, missing_ok) : InvalidOid;
 				address.objectSubId = 0;
 				break;
 			case OBJECT_CONSTRAINT:
 				address.classId = ConstraintRelationId;
-				address.objectId =
-					get_relation_constraint_oid(reloid, depname, missing_ok);
+				address.objectId = relation ?
+					get_relation_constraint_oid(reloid, depname, missing_ok) :
+					InvalidOid;
 				address.objectSubId = 0;
 				break;
 			default:
@@ -975,7 +993,9 @@ get_object_address_relobject(ObjectType objtype, List *objname,
 		/* Avoid relcache leak when object not found. */
 		if (!OidIsValid(address.objectId))
 		{
-			heap_close(relation, AccessShareLock);
+			if (relation != NULL)
+				heap_close(relation, AccessShareLock);
+
 			relation = NULL;	/* department of accident prevention */
 			return address;
 		}
@@ -1008,6 +1028,7 @@ get_object_address_attribute(ObjectType objtype, List *objname,
 				 errmsg("column name must be qualified")));
 	attname = strVal(lfirst(list_tail(objname)));
 	relname = list_truncate(list_copy(objname), list_length(objname) - 1);
+	/* XXX no missing_ok support here */
 	relation = relation_openrv(makeRangeVarFromNameList(relname), lockmode);
 	reloid = RelationGetRelid(relation);
 
@@ -1024,6 +1045,7 @@ get_object_address_attribute(ObjectType objtype, List *objname,
 		address.classId = RelationRelationId;
 		address.objectId = InvalidOid;
 		address.objectSubId = InvalidAttrNumber;
+		relation_close(relation, lockmode);
 		return address;
 	}
 
@@ -1052,7 +1074,7 @@ get_object_address_type(ObjectType objtype,
 	address.objectId = InvalidOid;
 	address.objectSubId = 0;
 
-	tup = LookupTypeName(NULL, typename, NULL);
+	tup = LookupTypeName(NULL, typename, NULL, missing_ok);
 	if (!HeapTupleIsValid(tup))
 	{
 		if (!missing_ok)
@@ -1089,6 +1111,7 @@ get_object_address_opcf(ObjectType objtype,
 	ObjectAddress address;
 
 	Assert(list_length(objargs) == 1);
+	/* XXX no missing_ok support here */
 	amoid = get_am_oid(strVal(linitial(objargs)), false);
 
 	switch (objtype)
@@ -2694,12 +2717,12 @@ getObjectIdentity(const ObjectAddress *object)
 
 		case OCLASS_PROC:
 			appendStringInfoString(&buffer,
-							 format_procedure_qualified(object->objectId));
+							   format_procedure_qualified(object->objectId));
 			break;
 
 		case OCLASS_TYPE:
 			appendStringInfoString(&buffer,
-							 format_type_be_qualified(object->objectId));
+								 format_type_be_qualified(object->objectId));
 			break;
 
 		case OCLASS_CAST:
@@ -2793,7 +2816,7 @@ getObjectIdentity(const ObjectAddress *object)
 						 object->objectId);
 				conForm = (Form_pg_conversion) GETSTRUCT(conTup);
 				appendStringInfoString(&buffer,
-								 quote_identifier(NameStr(conForm->conname)));
+								quote_identifier(NameStr(conForm->conname)));
 				ReleaseSysCache(conTup);
 				break;
 			}
@@ -2861,7 +2884,7 @@ getObjectIdentity(const ObjectAddress *object)
 
 		case OCLASS_OPERATOR:
 			appendStringInfoString(&buffer,
-							 format_operator_qualified(object->objectId));
+								format_operator_qualified(object->objectId));
 			break;
 
 		case OCLASS_OPCLASS:
@@ -2888,7 +2911,7 @@ getObjectIdentity(const ObjectAddress *object)
 				amForm = (Form_pg_am) GETSTRUCT(amTup);
 
 				appendStringInfoString(&buffer,
-								 quote_qualified_identifier(schema,
+									   quote_qualified_identifier(schema,
 												 NameStr(opcForm->opcname)));
 				appendStringInfo(&buffer, " for %s",
 								 quote_identifier(NameStr(amForm->amname)));
@@ -3047,7 +3070,7 @@ getObjectIdentity(const ObjectAddress *object)
 					elog(ERROR, "cache lookup failed for namespace %u",
 						 object->objectId);
 				appendStringInfoString(&buffer,
-								 quote_identifier(nspname));
+									   quote_identifier(nspname));
 				break;
 			}
 
@@ -3055,6 +3078,7 @@ getObjectIdentity(const ObjectAddress *object)
 			{
 				HeapTuple	tup;
 				Form_pg_ts_parser formParser;
+				char	   *schema;
 
 				tup = SearchSysCache1(TSPARSEROID,
 									  ObjectIdGetDatum(object->objectId));
@@ -3062,8 +3086,10 @@ getObjectIdentity(const ObjectAddress *object)
 					elog(ERROR, "cache lookup failed for text search parser %u",
 						 object->objectId);
 				formParser = (Form_pg_ts_parser) GETSTRUCT(tup);
+				schema = get_namespace_name(formParser->prsnamespace);
 				appendStringInfoString(&buffer,
-							 quote_identifier(NameStr(formParser->prsname)));
+									   quote_qualified_identifier(schema,
+											  NameStr(formParser->prsname)));
 				ReleaseSysCache(tup);
 				break;
 			}
@@ -3072,6 +3098,7 @@ getObjectIdentity(const ObjectAddress *object)
 			{
 				HeapTuple	tup;
 				Form_pg_ts_dict formDict;
+				char	   *schema;
 
 				tup = SearchSysCache1(TSDICTOID,
 									  ObjectIdGetDatum(object->objectId));
@@ -3079,8 +3106,10 @@ getObjectIdentity(const ObjectAddress *object)
 					elog(ERROR, "cache lookup failed for text search dictionary %u",
 						 object->objectId);
 				formDict = (Form_pg_ts_dict) GETSTRUCT(tup);
+				schema = get_namespace_name(formDict->dictnamespace);
 				appendStringInfoString(&buffer,
-							  quote_identifier(NameStr(formDict->dictname)));
+									   quote_qualified_identifier(schema,
+											   NameStr(formDict->dictname)));
 				ReleaseSysCache(tup);
 				break;
 			}
@@ -3089,6 +3118,7 @@ getObjectIdentity(const ObjectAddress *object)
 			{
 				HeapTuple	tup;
 				Form_pg_ts_template formTmpl;
+				char	   *schema;
 
 				tup = SearchSysCache1(TSTEMPLATEOID,
 									  ObjectIdGetDatum(object->objectId));
@@ -3096,8 +3126,11 @@ getObjectIdentity(const ObjectAddress *object)
 					elog(ERROR, "cache lookup failed for text search template %u",
 						 object->objectId);
 				formTmpl = (Form_pg_ts_template) GETSTRUCT(tup);
+				schema = get_namespace_name(formTmpl->tmplnamespace);
 				appendStringInfoString(&buffer,
-							  quote_identifier(NameStr(formTmpl->tmplname)));
+									   quote_qualified_identifier(schema,
+											   NameStr(formTmpl->tmplname)));
+				pfree(schema);
 				ReleaseSysCache(tup);
 				break;
 			}
@@ -3106,6 +3139,7 @@ getObjectIdentity(const ObjectAddress *object)
 			{
 				HeapTuple	tup;
 				Form_pg_ts_config formCfg;
+				char	   *schema;
 
 				tup = SearchSysCache1(TSCONFIGOID,
 									  ObjectIdGetDatum(object->objectId));
@@ -3113,8 +3147,10 @@ getObjectIdentity(const ObjectAddress *object)
 					elog(ERROR, "cache lookup failed for text search configuration %u",
 						 object->objectId);
 				formCfg = (Form_pg_ts_config) GETSTRUCT(tup);
+				schema = get_namespace_name(formCfg->cfgnamespace);
 				appendStringInfoString(&buffer,
-								 quote_identifier(NameStr(formCfg->cfgname)));
+									   quote_qualified_identifier(schema,
+												 NameStr(formCfg->cfgname)));
 				ReleaseSysCache(tup);
 				break;
 			}
@@ -3125,7 +3161,7 @@ getObjectIdentity(const ObjectAddress *object)
 
 				username = GetUserNameFromId(object->objectId);
 				appendStringInfoString(&buffer,
-								 quote_identifier(username));
+									   quote_identifier(username));
 				break;
 			}
 
@@ -3138,7 +3174,7 @@ getObjectIdentity(const ObjectAddress *object)
 					elog(ERROR, "cache lookup failed for database %u",
 						 object->objectId);
 				appendStringInfoString(&buffer,
-								 quote_identifier(datname));
+									   quote_identifier(datname));
 				break;
 			}
 
@@ -3151,7 +3187,7 @@ getObjectIdentity(const ObjectAddress *object)
 					elog(ERROR, "cache lookup failed for tablespace %u",
 						 object->objectId);
 				appendStringInfoString(&buffer,
-								 quote_identifier(tblspace));
+									   quote_identifier(tblspace));
 				break;
 			}
 
@@ -3170,7 +3206,7 @@ getObjectIdentity(const ObjectAddress *object)
 
 				srv = GetForeignServer(object->objectId);
 				appendStringInfoString(&buffer,
-								 quote_identifier(srv->servername));
+									   quote_identifier(srv->servername));
 				break;
 			}
 
@@ -3354,8 +3390,8 @@ getRelationIdentity(StringInfo buffer, Oid relid)
 
 	schema = get_namespace_name(relForm->relnamespace);
 	appendStringInfoString(buffer,
-					 quote_qualified_identifier(schema,
-												NameStr(relForm->relname)));
+						   quote_qualified_identifier(schema,
+												 NameStr(relForm->relname)));
 
 	ReleaseSysCache(relTup);
 }

@@ -87,6 +87,8 @@ extern Datum pg_stat_get_db_temp_bytes(PG_FUNCTION_ARGS);
 extern Datum pg_stat_get_db_blk_read_time(PG_FUNCTION_ARGS);
 extern Datum pg_stat_get_db_blk_write_time(PG_FUNCTION_ARGS);
 
+extern Datum pg_stat_get_archiver(PG_FUNCTION_ARGS);
+
 extern Datum pg_stat_get_bgwriter_timed_checkpoints(PG_FUNCTION_ARGS);
 extern Datum pg_stat_get_bgwriter_requested_checkpoints(PG_FUNCTION_ARGS);
 extern Datum pg_stat_get_checkpoint_write_time(PG_FUNCTION_ARGS);
@@ -534,7 +536,7 @@ pg_stat_get_activity(PG_FUNCTION_ARGS)
 
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		tupdesc = CreateTemplateTupleDesc(14, false);
+		tupdesc = CreateTemplateTupleDesc(16, false);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "datid",
 						   OIDOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "pid",
@@ -563,6 +565,10 @@ pg_stat_get_activity(PG_FUNCTION_ARGS)
 						   TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 14, "client_port",
 						   INT4OID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 15, "backend_xid",
+						   XIDOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 16, "backend_xmin",
+						   XIDOID, -1, 0);
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -614,9 +620,10 @@ pg_stat_get_activity(PG_FUNCTION_ARGS)
 	if (funcctx->call_cntr < funcctx->max_calls)
 	{
 		/* for each row */
-		Datum		values[14];
-		bool		nulls[14];
+		Datum		values[16];
+		bool		nulls[16];
 		HeapTuple	tuple;
+		LocalPgBackendStatus *local_beentry;
 		PgBackendStatus *beentry;
 
 		MemSet(values, 0, sizeof(values));
@@ -625,12 +632,14 @@ pg_stat_get_activity(PG_FUNCTION_ARGS)
 		if (*(int *) (funcctx->user_fctx) > 0)
 		{
 			/* Get specific pid slot */
-			beentry = pgstat_fetch_stat_beentry(*(int *) (funcctx->user_fctx));
+			local_beentry = pgstat_fetch_stat_local_beentry(*(int *) (funcctx->user_fctx));
+			beentry = &local_beentry->backendStatus;
 		}
 		else
 		{
 			/* Get the next one in the list */
-			beentry = pgstat_fetch_stat_beentry(funcctx->call_cntr + 1);		/* 1-based index */
+			local_beentry = pgstat_fetch_stat_local_beentry(funcctx->call_cntr + 1);	/* 1-based index */
+			beentry = &local_beentry->backendStatus;
 		}
 		if (!beentry)
 		{
@@ -654,6 +663,16 @@ pg_stat_get_activity(PG_FUNCTION_ARGS)
 			values[3] = CStringGetTextDatum(beentry->st_appname);
 		else
 			nulls[3] = true;
+
+		if (TransactionIdIsValid(local_beentry->backend_xid))
+			values[14] = TransactionIdGetDatum(local_beentry->backend_xid);
+		else
+			nulls[14] = true;
+
+		if (TransactionIdIsValid(local_beentry->backend_xmin))
+			values[15] = TransactionIdGetDatum(local_beentry->backend_xmin);
+		else
+			nulls[15] = true;
 
 		/* Values only available to same user or superuser */
 		if (superuser() || beentry->st_userid == GetUserId())
@@ -741,7 +760,8 @@ pg_stat_get_activity(PG_FUNCTION_ARGS)
 						clean_ipv6_addr(beentry->st_clientaddr.addr.ss_family, remote_host);
 						values[11] = DirectFunctionCall1(inet_in,
 											   CStringGetDatum(remote_host));
-						if (beentry->st_clienthostname)
+						if (beentry->st_clienthostname &&
+							beentry->st_clienthostname[0])
 							values[12] = CStringGetTextDatum(beentry->st_clienthostname);
 						else
 							nulls[12] = true;
@@ -1711,4 +1731,71 @@ pg_stat_reset_single_function_counters(PG_FUNCTION_ARGS)
 	pgstat_reset_single_counter(funcoid, RESET_FUNCTION);
 
 	PG_RETURN_VOID();
+}
+
+Datum
+pg_stat_get_archiver(PG_FUNCTION_ARGS)
+{
+	TupleDesc	tupdesc;
+	Datum		values[7];
+	bool		nulls[7];
+	PgStat_ArchiverStats *archiver_stats;
+
+	/* Initialise values and NULL flags arrays */
+	MemSet(values, 0, sizeof(values));
+	MemSet(nulls, 0, sizeof(nulls));
+
+	/* Initialise attributes information in the tuple descriptor */
+	tupdesc = CreateTemplateTupleDesc(7, false);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "archived_count",
+					   INT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "last_archived_wal",
+					   TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "last_archived_time",
+					   TIMESTAMPTZOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 4, "failed_count",
+					   INT8OID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 5, "last_failed_wal",
+					   TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 6, "last_failed_time",
+					   TIMESTAMPTZOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 7, "stats_reset",
+					   TIMESTAMPTZOID, -1, 0);
+
+	BlessTupleDesc(tupdesc);
+
+	/* Get statistics about the archiver process */
+	archiver_stats = pgstat_fetch_stat_archiver();
+
+	/* Fill values and NULLs */
+	values[0] = Int64GetDatum(archiver_stats->archived_count);
+	if (*(archiver_stats->last_archived_wal) == '\0')
+		nulls[1] = true;
+	else
+		values[1] = CStringGetTextDatum(archiver_stats->last_archived_wal);
+
+	if (archiver_stats->last_archived_timestamp == 0)
+		nulls[2] = true;
+	else
+		values[2] = TimestampTzGetDatum(archiver_stats->last_archived_timestamp);
+
+	values[3] = Int64GetDatum(archiver_stats->failed_count);
+	if (*(archiver_stats->last_failed_wal) == '\0')
+		nulls[4] = true;
+	else
+		values[4] = CStringGetTextDatum(archiver_stats->last_failed_wal);
+
+	if (archiver_stats->last_failed_timestamp == 0)
+		nulls[5] = true;
+	else
+		values[5] = TimestampTzGetDatum(archiver_stats->last_failed_timestamp);
+
+	if (archiver_stats->stat_reset_timestamp == 0)
+		nulls[6] = true;
+	else
+		values[6] = TimestampTzGetDatum(archiver_stats->stat_reset_timestamp);
+
+	/* Returns the record as Datum */
+	PG_RETURN_DATUM(HeapTupleGetDatum(
+								   heap_form_tuple(tupdesc, values, nulls)));
 }

@@ -4,7 +4,7 @@
  *	  Copy functions for Postgres tree nodes.
  *
  * NOTE: we currently support copying all node types found in parse and
- * plan trees.	We do not support copying executor state trees; there
+ * plan trees.  We do not support copying executor state trees; there
  * is no need for that, and no point in maintaining all the code that
  * would be needed.  We also do not support copying Path trees, mainly
  * because the circular linkages between RelOptInfo and Path nodes can't
@@ -30,7 +30,7 @@
 
 /*
  * Macros to simplify copying of different kinds of fields.  Use these
- * wherever possible to reduce the chance for silly typos.	Note that these
+ * wherever possible to reduce the chance for silly typos.  Note that these
  * hard-wire the convention that the local variables in a Copy routine are
  * named 'newnode' and 'from'.
  */
@@ -1040,7 +1040,7 @@ _copyIntoClause(const IntoClause *from)
 
 /*
  * We don't need a _copyExpr because Expr is an abstract supertype which
- * should never actually get instantiated.	Also, since it has no common
+ * should never actually get instantiated.  Also, since it has no common
  * fields except NodeTag, there's no need for a helper routine to factor
  * out copying the common fields...
  */
@@ -2000,6 +2000,7 @@ _copyRangeTblEntry(const RangeTblEntry *from)
 	COPY_SCALAR_FIELD(checkAsUser);
 	COPY_BITMAPSET_FIELD(selectedCols);
 	COPY_BITMAPSET_FIELD(modifiedCols);
+	COPY_NODE_FIELD(securityQuals);
 
 	return newnode;
 }
@@ -2413,6 +2414,7 @@ _copyConstraint(const Constraint *from)
 	COPY_SCALAR_FIELD(fk_upd_action);
 	COPY_SCALAR_FIELD(fk_del_action);
 	COPY_NODE_FIELD(old_conpfeqop);
+	COPY_SCALAR_FIELD(old_pktable_oid);
 	COPY_SCALAR_FIELD(skip_validation);
 	COPY_SCALAR_FIELD(initially_valid);
 
@@ -3244,6 +3246,8 @@ _copyVacuumStmt(const VacuumStmt *from)
 	COPY_SCALAR_FIELD(options);
 	COPY_SCALAR_FIELD(freeze_min_age);
 	COPY_SCALAR_FIELD(freeze_table_age);
+	COPY_SCALAR_FIELD(multixact_freeze_min_age);
+	COPY_SCALAR_FIELD(multixact_freeze_table_age);
 	COPY_NODE_FIELD(relation);
 	COPY_NODE_FIELD(va_cols);
 
@@ -3298,7 +3302,7 @@ _copyReplicaIdentityStmt(const ReplicaIdentityStmt *from)
 }
 
 static AlterSystemStmt *
-_copyAlterSystemStmt(const AlterSystemStmt * from)
+_copyAlterSystemStmt(const AlterSystemStmt *from)
 {
 	AlterSystemStmt *newnode = makeNode(AlterSystemStmt);
 
@@ -3406,6 +3410,9 @@ _copyAlterTableSpaceMoveStmt(const AlterTableSpaceMoveStmt *from)
 	AlterTableSpaceMoveStmt *newnode = makeNode(AlterTableSpaceMoveStmt);
 
 	COPY_STRING_FIELD(orig_tablespacename);
+	COPY_SCALAR_FIELD(objtype);
+	COPY_SCALAR_FIELD(move_all);
+	COPY_NODE_FIELD(roles);
 	COPY_STRING_FIELD(new_tablespacename);
 	COPY_SCALAR_FIELD(nowait);
 

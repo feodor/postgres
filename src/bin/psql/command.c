@@ -264,14 +264,15 @@ exec_command(const char *cmd,
 		{
 #ifndef WIN32
 			struct passwd *pw;
+			uid_t		user_id = geteuid();
 
-			errno = 0;	/* clear errno before call */
-			pw = getpwuid(geteuid());
+			errno = 0;			/* clear errno before call */
+			pw = getpwuid(user_id);
 			if (!pw)
 			{
-				psql_error("could not get home directory for user id %d: %s\n",
-						   (int) geteuid(), errno ?
-						   strerror(errno) : "user does not exist");
+				psql_error("could not get home directory for user id %ld: %s\n",
+						   (long) user_id,
+						 errno ? strerror(errno) : _("user does not exist"));
 				exit(EXIT_FAILURE);
 			}
 			dir = pw->pw_dir;
@@ -300,7 +301,7 @@ exec_command(const char *cmd,
 	else if (strcmp(cmd, "conninfo") == 0)
 	{
 		char	   *db = PQdb(pset.db);
-		char	   *host = PQhost(pset.db);
+		char	   *host = (PQhostaddr(pset.db) != NULL) ? PQhostaddr(pset.db) : PQhost(pset.db);
 
 		if (db == NULL)
 			printf(_("You are currently not connected to a database.\n"));
@@ -763,6 +764,7 @@ exec_command(const char *cmd,
 			/* we must set a non-NULL prefix to trigger storing */
 			pset.gset_prefix = pg_strdup("");
 		}
+		/* gset_prefix is freed later */
 		status = PSQL_CMD_SEND;
 	}
 
@@ -1046,7 +1048,7 @@ exec_command(const char *cmd,
 		{
 			/* list all variables */
 
-			int i;
+			int			i;
 			static const char *const my_list[] = {
 				"border", "columns", "expanded", "fieldsep",
 				"footer", "format", "linestyle", "null",
@@ -1798,8 +1800,8 @@ printSSLInfo(void)
 		return;					/* no SSL */
 
 	SSL_get_cipher_bits(ssl, &sslbits);
-	printf(_("SSL connection (cipher: %s, bits: %d)\n"),
-		   SSL_get_cipher(ssl), sslbits);
+	printf(_("SSL connection (protocol: %s, cipher: %s, bits: %d)\n"),
+		   SSL_get_version(ssl), SSL_get_cipher(ssl), sslbits);
 #else
 
 	/*
@@ -1928,17 +1930,17 @@ editFile(const char *fname, int lineno)
 #ifndef WIN32
 	if (lineno > 0)
 		sys = psprintf("exec %s %s%d '%s'",
-					editorName, editor_lineno_arg, lineno, fname);
+					   editorName, editor_lineno_arg, lineno, fname);
 	else
 		sys = psprintf("exec %s '%s'",
-					editorName, fname);
+					   editorName, fname);
 #else
 	if (lineno > 0)
-		sys = psprintf(SYSTEMQUOTE "\"%s\" %s%d \"%s\"" SYSTEMQUOTE,
-				editorName, editor_lineno_arg, lineno, fname);
+		sys = psprintf("\"%s\" %s%d \"%s\"",
+					   editorName, editor_lineno_arg, lineno, fname);
 	else
-		sys = psprintf(SYSTEMQUOTE "\"%s\" \"%s\"" SYSTEMQUOTE,
-					editorName, fname);
+		sys = psprintf("\"%s\" \"%s\"",
+					   editorName, fname);
 #endif
 	result = system(sys);
 	if (result == -1)
@@ -2025,14 +2027,20 @@ do_edit(const char *filename_arg, PQExpBuffer query_buf,
 			if (fwrite(query_buf->data, 1, ql, stream) != ql)
 			{
 				psql_error("%s: %s\n", fname, strerror(errno));
-				fclose(stream);
-				remove(fname);
+
+				if (fclose(stream) != 0)
+					psql_error("%s: %s\n", fname, strerror(errno));
+
+				if (remove(fname) != 0)
+					psql_error("%s: %s\n", fname, strerror(errno));
+
 				error = true;
 			}
 			else if (fclose(stream) != 0)
 			{
 				psql_error("%s: %s\n", fname, strerror(errno));
-				remove(fname);
+				if (remove(fname) != 0)
+					psql_error("%s: %s\n", fname, strerror(errno));
 				error = true;
 			}
 		}
@@ -2455,7 +2463,7 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 			printf(_("Border style (%s) unset.\n"), param);
 		else
 			printf(_("Border style (%s) is %d.\n"), param,
-				popt->topt.border);
+				   popt->topt.border);
 	}
 
 	/* show the target width for the wrapped format */
@@ -2465,7 +2473,7 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 			printf(_("Target width (%s) unset.\n"), param);
 		else
 			printf(_("Target width (%s) is %d.\n"), param,
-				popt->topt.columns);
+				   popt->topt.columns);
 	}
 
 	/* show expanded/vertical mode */
@@ -2486,7 +2494,7 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 			printf(_("Field separator (%s) is zero byte.\n"), param);
 		else
 			printf(_("Field separator (%s) is \"%s\".\n"), param,
-				popt->topt.fieldSep.separator);
+				   popt->topt.fieldSep.separator);
 	}
 
 	else if (strcmp(param, "fieldsep_zero") == 0)
@@ -2510,21 +2518,21 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 			printf(_("Output format (%s) is aligned.\n"), param);
 		else
 			printf(_("Output format (%s) is %s.\n"), param,
-				_align2string(popt->topt.format));
+				   _align2string(popt->topt.format));
 	}
 
 	/* show table line style */
 	else if (strcmp(param, "linestyle") == 0)
 	{
 		printf(_("Line style (%s) is %s.\n"), param,
-			get_line_style(&popt->topt)->name);
+			   get_line_style(&popt->topt)->name);
 	}
 
 	/* show null display */
 	else if (strcmp(param, "null") == 0)
 	{
 		printf(_("Null display (%s) is \"%s\".\n"), param,
-			popt->nullPrint ? popt->nullPrint : "");
+			   popt->nullPrint ? popt->nullPrint : "");
 	}
 
 	/* show locale-aware numeric output */
@@ -2544,7 +2552,7 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 		else if (popt->topt.pager == 2)
 			printf(_("Pager (%s) is always used.\n"), param);
 		else
-			printf(_("Pager (%s) usage is off.\n"), param);
+			printf(_("Pager usage (%s) is off.\n"), param);
 	}
 
 	/* show record separator for unaligned text */
@@ -2556,7 +2564,7 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 			printf(_("Record separator (%s) is <newline>.\n"), param);
 		else
 			printf(_("Record separator (%s) is \"%s\".\n"), param,
-				popt->topt.recordSep.separator);
+				   popt->topt.recordSep.separator);
 	}
 
 	else if (strcmp(param, "recordsep_zero") == 0)
@@ -2568,8 +2576,8 @@ printPsetInfo(const char *param, struct printQueryOpt *popt)
 	else if (strcmp(param, "T") == 0 || strcmp(param, "tableattr") == 0)
 	{
 		if (popt->topt.tableAttr)
-			printf(_("Table attribute (%s) is \"%s\".\n"), param,
-				popt->topt.tableAttr);
+			printf(_("Table attributes (%s) are \"%s\".\n"), param,
+				   popt->topt.tableAttr);
 		else
 			printf(_("Table attributes (%s) unset.\n"), param);
 	}
@@ -2635,7 +2643,7 @@ do_shell(const char *command)
 #ifndef WIN32
 		sys = psprintf("exec %s", shellName);
 #else
-		sys = psprintf(SYSTEMQUOTE "\"%s\"" SYSTEMQUOTE, shellName);
+		sys = psprintf("\"%s\"", shellName);
 #endif
 		result = system(sys);
 		free(sys);

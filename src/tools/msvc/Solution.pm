@@ -15,12 +15,14 @@ sub _new
 	my $classname = shift;
 	my $options   = shift;
 	my $self      = {
-		projects => {},
-		options  => $options,
-		numver   => '',
-		strver   => '',
-		vcver    => undef,
-		platform => undef, };
+		projects                   => {},
+		options                    => $options,
+		numver                     => '',
+		strver                     => '',
+		VisualStudioVersion        => undef,
+		MinimumVisualStudioVersion => undef,
+		vcver                      => undef,
+		platform                   => undef, };
 	bless($self, $classname);
 
 	# integer_datetimes is now the default
@@ -57,6 +59,11 @@ sub _new
 	$self->DeterminePlatform();
 
 	return $self;
+}
+
+sub GetAdditionalHeaders
+{
+	return '';
 }
 
 sub DeterminePlatform
@@ -498,10 +505,8 @@ sub AddProject
 	{
 		$proj->AddIncludeDir($self->{options}->{gss} . '\inc\krb5');
 		$proj->AddLibrary($self->{options}->{gss} . '\lib\i386\krb5_32.lib');
-		$proj->AddLibrary(
-			$self->{options}->{gss} . '\lib\i386\comerr32.lib');
-		$proj->AddLibrary(
-			$self->{options}->{gss} . '\lib\i386\gssapi32.lib');
+		$proj->AddLibrary($self->{options}->{gss} . '\lib\i386\comerr32.lib');
+		$proj->AddLibrary($self->{options}->{gss} . '\lib\i386\gssapi32.lib');
 	}
 	if ($self->{options}->{iconv})
 	{
@@ -540,6 +545,8 @@ sub Save
 Microsoft Visual Studio Solution File, Format Version $self->{solutionFileVersion}
 # $self->{visualStudioName}
 EOF
+
+	print SLN $self->GetAdditionalHeaders();
 
 	foreach my $fld (keys %{ $self->{projects} })
 	{
@@ -721,6 +728,41 @@ sub new
 	$self->{visualStudioName}    = 'Visual Studio 2012';
 
 	return $self;
+}
+
+package VS2013Solution;
+
+#
+# Package that encapsulates a Visual Studio 2013 solution file
+#
+
+use Carp;
+use strict;
+use warnings;
+use base qw(Solution);
+
+sub new
+{
+	my $classname = shift;
+	my $self      = $classname->SUPER::_new(@_);
+	bless($self, $classname);
+
+	$self->{solutionFileVersion}          = '12.00';
+	$self->{vcver}                        = '12.00';
+	$self->{visualStudioName}             = 'Visual Studio 2013';
+	$self->{VisualStudioVersion}          = '12.0.21005.1',
+	  $self->{MinimumVisualStudioVersion} = '10.0.40219.1',
+
+	  return $self;
+}
+
+sub GetAdditionalHeaders
+{
+	my ($self, $f) = @_;
+
+	return qq|VisualStudioVersion = $self->{VisualStudioVersion}
+MinimumVisualStudioVersion = $self->{MinimumVisualStudioVersion}
+|;
 }
 
 1;

@@ -187,6 +187,7 @@ void
 WalReceiverMain(void)
 {
 	char		conninfo[MAXCONNINFO];
+	char		slotname[NAMEDATALEN];
 	XLogRecPtr	startpoint;
 	TimeLineID	startpointTLI;
 	TimeLineID	primaryTLI;
@@ -241,6 +242,7 @@ WalReceiverMain(void)
 
 	/* Fetch information required to start streaming */
 	strlcpy(conninfo, (char *) walrcv->conninfo, MAXCONNINFO);
+	strlcpy(slotname, (char *) walrcv->slotname, NAMEDATALEN);
 	startpoint = walrcv->receiveStart;
 	startpointTLI = walrcv->receiveStartTLI;
 
@@ -256,7 +258,7 @@ WalReceiverMain(void)
 
 	/*
 	 * If possible, make this process a group leader, so that the postmaster
-	 * can signal any child processes too.	(walreceiver probably never has
+	 * can signal any child processes too.  (walreceiver probably never has
 	 * any child processes, but for consistency we make all postmaster child
 	 * processes do this.)
 	 */
@@ -355,7 +357,8 @@ WalReceiverMain(void)
 		 * on the new timeline.
 		 */
 		ThisTimeLineID = startpointTLI;
-		if (walrcv_startstreaming(startpointTLI, startpoint))
+		if (walrcv_startstreaming(startpointTLI, startpoint,
+								  slotname[0] != '\0' ? slotname : NULL))
 		{
 			bool		endofwal = false;
 
@@ -737,7 +740,11 @@ WalRcvSigHupHandler(SIGNAL_ARGS)
 static void
 WalRcvSigUsr1Handler(SIGNAL_ARGS)
 {
+	int			save_errno = errno;
+
 	latch_sigusr1_handler();
+
+	errno = save_errno;
 }
 
 /* SIGTERM: set flag for main loop, or shutdown immediately if safe */
@@ -779,7 +786,7 @@ WalRcvQuickDieHandler(SIGNAL_ARGS)
 	on_exit_reset();
 
 	/*
-	 * Note we do exit(2) not exit(0).	This is to force the postmaster into a
+	 * Note we do exit(2) not exit(0).  This is to force the postmaster into a
 	 * system reset cycle if some idiot DBA sends a manual SIGQUIT to a random
 	 * backend.  This is necessary precisely because we don't clean up our
 	 * shared memory state.  (The "dead man switch" mechanism in pmsignal.c
@@ -927,9 +934,9 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr)
 			if (lseek(recvFile, (off_t) startoff, SEEK_SET) < 0)
 				ereport(PANIC,
 						(errcode_for_file_access(),
-				 errmsg("could not seek in log segment %s to offset %u: %m",
-						XLogFileNameP(recvFileTLI, recvSegNo),
-						startoff)));
+				  errmsg("could not seek in log segment %s to offset %u: %m",
+						 XLogFileNameP(recvFileTLI, recvSegNo),
+						 startoff)));
 			recvOff = startoff;
 		}
 
@@ -1140,7 +1147,7 @@ XLogWalRcvSendHSFeedback(bool immed)
 	 * everything else has been checked.
 	 */
 	if (hot_standby_feedback)
-		xmin = GetOldestXmin(true, false);
+		xmin = GetOldestXmin(NULL, false);
 	else
 		xmin = InvalidTransactionId;
 
@@ -1192,9 +1199,19 @@ ProcessWalSndrMessage(XLogRecPtr walEnd, TimestampTz sendTime)
 	SpinLockRelease(&walrcv->mutex);
 
 	if (log_min_messages <= DEBUG2)
+	{
+		char	   *sendtime;
+		char	   *receipttime;
+
+		/* Copy because timestamptz_to_str returns a static buffer */
+		sendtime = pstrdup(timestamptz_to_str(sendTime));
+		receipttime = pstrdup(timestamptz_to_str(lastMsgReceiptTime));
 		elog(DEBUG2, "sendtime %s receipttime %s replication apply delay %d ms transfer latency %d ms",
-			 timestamptz_to_str(sendTime),
-			 timestamptz_to_str(lastMsgReceiptTime),
+			 sendtime,
+			 receipttime,
 			 GetReplicationApplyDelay(),
 			 GetReplicationTransferLatency());
+		pfree(sendtime);
+		pfree(receipttime);
+	}
 }

@@ -149,14 +149,6 @@ btbuild(PG_FUNCTION_ARGS)
 #endif   /* BTREE_BUILD_STATS */
 
 	/*
-	 * If we are reindexing a pre-existing index, it is critical to send out a
-	 * relcache invalidation SI message to ensure all backends re-read the
-	 * index metapage.	We expect that the caller will ensure that happens
-	 * (typically as a side effect of updating index stats, but it must happen
-	 * even if the stats don't change!)
-	 */
-
-	/*
 	 * Return statistics
 	 */
 	result = (IndexBuildResult *) palloc(sizeof(IndexBuildResult));
@@ -216,7 +208,7 @@ btbuildempty(PG_FUNCTION_ARGS)
 	metapage = (Page) palloc(BLCKSZ);
 	_bt_initmetapage(metapage, P_NONE, 0);
 
-	/* Write the page.	If archiving/streaming, XLOG it. */
+	/* Write the page.  If archiving/streaming, XLOG it. */
 	PageSetChecksumInplace(metapage, BTREE_METAPAGE);
 	smgrwrite(index->rd_smgr, INIT_FORKNUM, BTREE_METAPAGE,
 			  (char *) metapage, true);
@@ -225,9 +217,9 @@ btbuildempty(PG_FUNCTION_ARGS)
 					BTREE_METAPAGE, metapage, false);
 
 	/*
-	 * An immediate sync is require even if we xlog'd the page, because the
+	 * An immediate sync is required even if we xlog'd the page, because the
 	 * write did not go through shared_buffers and therefore a concurrent
-	 * checkpoint may have move the redo pointer past our xlog record.
+	 * checkpoint may have moved the redo pointer past our xlog record.
 	 */
 	smgrimmedsync(index->rd_smgr, INIT_FORKNUM);
 
@@ -435,7 +427,7 @@ btbeginscan(PG_FUNCTION_ARGS)
 
 	/*
 	 * We don't know yet whether the scan will be index-only, so we do not
-	 * allocate the tuple workspace arrays until btrescan.	However, we set up
+	 * allocate the tuple workspace arrays until btrescan.  However, we set up
 	 * scan->xs_itupdesc whether we'll need it or not, since that's so cheap.
 	 */
 	so->currTuples = so->markTuples = NULL;
@@ -480,7 +472,7 @@ btrescan(PG_FUNCTION_ARGS)
 
 	/*
 	 * Allocate tuple workspace arrays, if needed for an index-only scan and
-	 * not already done in a previous rescan call.	To save on palloc
+	 * not already done in a previous rescan call.  To save on palloc
 	 * overhead, both workspaces are allocated as one palloc block; only this
 	 * function and btendscan know that.
 	 *
@@ -960,7 +952,7 @@ restart:
 			vstate->lastBlockLocked = blkno;
 
 		/*
-		 * Check whether we need to recurse back to earlier pages.	What we
+		 * Check whether we need to recurse back to earlier pages.  What we
 		 * are concerned about is a page split that happened since we started
 		 * the vacuum scan.  If the split moved some tuples to a lower page
 		 * then we might have missed 'em.  If so, set up for tail recursion.
@@ -1090,7 +1082,7 @@ restart:
 		MemoryContextReset(vstate->pagedelcontext);
 		oldcontext = MemoryContextSwitchTo(vstate->pagedelcontext);
 
-		ndel = _bt_pagedel(rel, buf, NULL);
+		ndel = _bt_pagedel(rel, buf);
 
 		/* count only this page, else may double-count parent */
 		if (ndel)

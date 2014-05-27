@@ -721,8 +721,6 @@ select * from tenk1 a join tenk1 b on
 -- test placement of movable quals in a parameterized join tree
 --
 
-set effective_cache_size = '128MB';
-
 explain (costs off)
 select * from tenk1 t1 left join
   (tenk1 t2 join tenk1 t3 on t2.thousand = t3.unique2)
@@ -1133,6 +1131,14 @@ select c.*,a.*,ss1.q1,ss2.q1,ss3.* from
     lateral (select q1, coalesce(ss1.x,q2) as y from int8_tbl d) ss2
   ) on c.q2 = ss2.q1,
   lateral (select * from int4_tbl i where ss2.y > f1) ss3;
+
+-- check processing of postponed quals (bug #9041)
+explain (verbose, costs off)
+select * from
+  (select 1 as x) x cross join (select 2 as y) y
+  left join lateral (
+    select * from (select 3 as z) z where z.z = x.x
+  ) zz on zz.z = y.y;
 
 -- test some error cases where LATERAL should have been used but wasn't
 select f1,g from int4_tbl a, (select f1 as g) ss;

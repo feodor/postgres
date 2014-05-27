@@ -57,6 +57,7 @@
 #include "postmaster/postmaster.h"
 #include "postmaster/syslogger.h"
 #include "postmaster/walwriter.h"
+#include "replication/slot.h"
 #include "replication/syncrep.h"
 #include "replication/walreceiver.h"
 #include "replication/walsender.h"
@@ -64,6 +65,7 @@
 #include "storage/dsm_impl.h"
 #include "storage/standby.h"
 #include "storage/fd.h"
+#include "storage/pg_shmem.h"
 #include "storage/proc.h"
 #include "storage/predicate.h"
 #include "tcop/tcopprot.h"
@@ -82,9 +84,6 @@
 
 #ifndef PG_KRB_SRVTAB
 #define PG_KRB_SRVTAB ""
-#endif
-#ifndef PG_KRB_SRVNAM
-#define PG_KRB_SRVNAM ""
 #endif
 
 #define CONFIG_FILENAME "postgresql.conf"
@@ -388,6 +387,23 @@ static const struct config_enum_entry synchronous_commit_options[] = {
 };
 
 /*
+ * Although only "on", "off", "try" are documented, we accept all the likely
+ * variants of "on" and "off".
+ */
+static const struct config_enum_entry huge_pages_options[] = {
+	{"off", HUGE_PAGES_OFF, false},
+	{"on", HUGE_PAGES_ON, false},
+	{"try", HUGE_PAGES_TRY, false},
+	{"true", HUGE_PAGES_ON, true},
+	{"false", HUGE_PAGES_OFF, true},
+	{"yes", HUGE_PAGES_ON, true},
+	{"no", HUGE_PAGES_OFF, true},
+	{"1", HUGE_PAGES_ON, true},
+	{"0", HUGE_PAGES_OFF, true},
+	{NULL, 0, false}
+};
+
+/*
  * Options for enum values stored in other modules
  */
 extern const struct config_enum_entry wal_level_options[];
@@ -448,6 +464,12 @@ int			tcp_keepalives_interval;
 int			tcp_keepalives_count;
 
 /*
+ * This really belongs in pg_shmem.c, but is defined here so that it doesn't
+ * need to be duplicated in all the different implementations of pg_shmem.c.
+ */
+int			huge_pages;
+
+/*
  * These variables are all dummies that don't do anything, except in some
  * cases provide the value for SHOW to display.  The real state is elsewhere
  * and is kept in sync by assign_hooks.
@@ -474,7 +496,7 @@ static int	max_identifier_length;
 static int	block_size;
 static int	segment_size;
 static int	wal_block_size;
-static bool	data_checksums;
+static bool data_checksums;
 static int	wal_segment_size;
 static bool integer_datetimes;
 static int	effective_io_concurrency;
@@ -1497,7 +1519,7 @@ static struct config_bool ConfigureNamesBool[] =
 
 	{
 		{"data_checksums", PGC_INTERNAL, PRESET_OPTIONS,
-			gettext_noop("Shows whether data checksums are turned on for this cluster"),
+			gettext_noop("Shows whether data checksums are turned on for this cluster."),
 			NULL,
 			GUC_NOT_IN_SAMPLE | GUC_DISALLOW_IN_FILE
 		},
@@ -1757,7 +1779,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_KB
 		},
 		&work_mem,
-		1024, 64, MAX_KILOBYTES,
+		4096, 64, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 
@@ -1768,7 +1790,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_KB
 		},
 		&maintenance_work_mem,
-		16384, 1024, MAX_KILOBYTES,
+		65536, 1024, MAX_KILOBYTES,
 		NULL, NULL, NULL
 	},
 
@@ -1960,6 +1982,26 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
+		{"vacuum_multixact_freeze_min_age", PGC_USERSET, CLIENT_CONN_STATEMENT,
+			gettext_noop("Minimum age at which VACUUM should freeze a MultiXactId in a table row."),
+			NULL
+		},
+		&vacuum_multixact_freeze_min_age,
+		5000000, 0, 1000000000,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"vacuum_multixact_freeze_table_age", PGC_USERSET, CLIENT_CONN_STATEMENT,
+			gettext_noop("Multixact age at which VACUUM should scan whole table to freeze tuples."),
+			NULL
+		},
+		&vacuum_multixact_freeze_table_age,
+		150000000, 0, 2000000000,
+		NULL, NULL, NULL
+	},
+
+	{
 		{"vacuum_defer_cleanup_age", PGC_SIGHUP, REPLICATION_MASTER,
 			gettext_noop("Number of transactions by which VACUUM and HOT cleanup should be deferred, if any."),
 			NULL
@@ -2087,12 +2129,12 @@ static struct config_int ConfigureNamesInt[] =
 	},
 
 	{
-		{"xloginsert_slots", PGC_POSTMASTER, WAL_SETTINGS,
-			gettext_noop("Sets the number of slots for concurrent xlog insertions."),
+		{"xloginsert_locks", PGC_POSTMASTER, WAL_SETTINGS,
+			gettext_noop("Sets the number of locks used for concurrent xlog insertions."),
 			NULL,
 			GUC_NOT_IN_SAMPLE
 		},
-		&num_xloginsert_slots,
+		&num_xloginsert_locks,
 		8, 1, 1000,
 		NULL, NULL, NULL
 	},
@@ -2105,6 +2147,17 @@ static struct config_int ConfigureNamesInt[] =
 		},
 		&max_wal_senders,
 		0, 0, MAX_BACKENDS,
+		NULL, NULL, NULL
+	},
+
+	{
+		/* see max_connections */
+		{"max_replication_slots", PGC_POSTMASTER, REPLICATION_SENDING,
+			gettext_noop("Sets the maximum number of simultaneously defined replication slots."),
+			NULL
+		},
+		&max_replication_slots,
+		0, 0, MAX_BACKENDS /* XXX? */ ,
 		NULL, NULL, NULL
 	},
 
@@ -2372,6 +2425,16 @@ static struct config_int ConfigureNamesInt[] =
 		NULL, NULL, NULL
 	},
 	{
+		/* see varsup.c for why this is PGC_POSTMASTER not PGC_SIGHUP */
+		{"autovacuum_multixact_freeze_max_age", PGC_POSTMASTER, AUTOVACUUM,
+			gettext_noop("Multixact age at which to autovacuum a table to prevent multixact wraparound."),
+			NULL
+		},
+		&autovacuum_multixact_freeze_max_age,
+		400000000, 10000000, 2000000000,
+		NULL, NULL, NULL
+	},
+	{
 		/* see max_connections */
 		{"autovacuum_max_workers", PGC_POSTMASTER, AUTOVACUUM,
 			gettext_noop("Sets the maximum number of simultaneously running autovacuum worker processes."),
@@ -2458,8 +2521,8 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_BLOCKS,
 		},
 		&effective_cache_size,
-		-1, -1, INT_MAX,
-		check_effective_cache_size, NULL, NULL
+		DEFAULT_EFFECTIVE_CACHE_SIZE, 1, INT_MAX,
+		NULL, NULL, NULL
 	},
 
 	{
@@ -2489,6 +2552,11 @@ static struct config_int ConfigureNamesInt[] =
 		{"track_activity_query_size", PGC_POSTMASTER, RESOURCES_MEM,
 			gettext_noop("Sets the size reserved for pg_stat_activity.query, in bytes."),
 			NULL,
+
+			/*
+			 * There is no _bytes_ unit, so the user can't supply units for
+			 * this.
+			 */
 		},
 		&pgstat_track_activity_query_size,
 		1024, 100, 102400,
@@ -2742,16 +2810,6 @@ static struct config_string ConfigureNamesString[] =
 		},
 		&pg_krb_server_keyfile,
 		PG_KRB_SRVTAB,
-		NULL, NULL, NULL
-	},
-
-	{
-		{"krb_srvname", PGC_SIGHUP, CONN_AUTH_SECURITY,
-			gettext_noop("Sets the name of the Kerberos service."),
-			NULL
-		},
-		&pg_krb_srvnam,
-		PG_KRB_SRVNAM,
 		NULL, NULL, NULL
 	},
 
@@ -3147,7 +3205,7 @@ static struct config_string ConfigureNamesString[] =
 			GUC_SUPERUSER_ONLY
 		},
 		&pgstat_temp_directory,
-		"pg_stat_tmp",
+		PG_STAT_TMP_DIR,
 		check_canonical_path, assign_pgstat_temp_directory, NULL
 	},
 
@@ -3180,7 +3238,7 @@ static struct config_string ConfigureNamesString[] =
 		},
 		&SSLCipherSuites,
 #ifdef USE_SSL
-		"DEFAULT:!LOW:!EXP:!MD5:@STRENGTH",
+		"HIGH:MEDIUM:+3DES:!aNULL",
 #else
 		"none",
 #endif
@@ -3439,6 +3497,15 @@ static struct config_enum ConfigureNamesEnum[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"huge_pages", PGC_POSTMASTER, RESOURCES_MEM,
+			gettext_noop("Use of huge pages on Linux"),
+			NULL
+		},
+		&huge_pages,
+		HUGE_PAGES_TRY, huge_pages_options,
+		NULL, NULL, NULL
+	},
 
 	/* End-of-list marker */
 	{
@@ -3724,7 +3791,7 @@ get_guc_variables(void)
 
 
 /*
- * Build the sorted array.	This is split out so that it could be
+ * Build the sorted array.  This is split out so that it could be
  * re-executed after startup (eg, we could allow loadable modules to
  * add vars, and then we'd need to re-sort).
  */
@@ -3881,7 +3948,7 @@ add_placeholder_variable(const char *name, int elevel)
 
 	/*
 	 * The char* is allocated at the end of the struct since we have no
-	 * 'static' place to point to.	Note that the current value, as well as
+	 * 'static' place to point to.  Note that the current value, as well as
 	 * the boot and reset values, start out NULL.
 	 */
 	var->variable = (char **) (var + 1);
@@ -3923,7 +3990,7 @@ find_option(const char *name, bool create_placeholders, int elevel)
 		return *res;
 
 	/*
-	 * See if the name is an obsolete name for a variable.	We assume that the
+	 * See if the name is an obsolete name for a variable.  We assume that the
 	 * set of supported old names is short enough that a brute-force search is
 	 * the best way.
 	 */
@@ -4306,6 +4373,14 @@ SelectConfigFiles(const char *userDoption, const char *progname)
 	SetConfigOption("data_directory", DataDir, PGC_POSTMASTER, PGC_S_OVERRIDE);
 
 	/*
+	 * Now read the config file a second time, allowing any settings in
+	 * the PG_AUTOCONF_FILENAME file to take effect.  (This is pretty ugly,
+	 * but since we have to determine the DataDir before we can find the
+	 * autoconf file, the alternatives seem worse.)
+	 */
+	ProcessConfigFile(PGC_POSTMASTER);
+
+	/*
 	 * If timezone_abbreviations wasn't set in the configuration file, install
 	 * the default value.  We do it this way because we can't safely install a
 	 * "real" value until my_exec_path is set, which may not have happened
@@ -4313,8 +4388,6 @@ SelectConfigFiles(const char *userDoption, const char *progname)
 	 * be the real desired default.
 	 */
 	pg_timezone_abbrev_initialize();
-
-	set_default_effective_cache_size();
 
 	/*
 	 * Figure out where pg_hba.conf is, and make sure the path is absolute.
@@ -4581,7 +4654,7 @@ NewGUCNestLevel(void)
 /*
  * Do GUC processing at transaction or subtransaction commit or abort, or
  * when exiting a function that has proconfig settings, or when undoing a
- * transient assignment to some GUC variables.	(The name is thus a bit of
+ * transient assignment to some GUC variables.  (The name is thus a bit of
  * a misnomer; perhaps it should be ExitGUCNestLevel or some such.)
  * During abort, we discard all GUC settings that were applied at nesting
  * levels >= nestLevel.  nestLevel == 1 corresponds to the main transaction.
@@ -5276,7 +5349,7 @@ config_enum_get_options(struct config_enum * record, const char *prefix,
  *	1: the value is valid
  *	0: the name or value is invalid
  */
-bool
+static bool
 validate_conf_option(struct config_generic * record, const char *name,
 					 const char *value, GucSource source, int elevel,
 					 bool freemem, void *newval, void **newextra)
@@ -5302,7 +5375,7 @@ validate_conf_option(struct config_generic * record, const char *name,
 					{
 						ereport(elevel,
 								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("parameter \"%s\" requires a Boolean value",
+						  errmsg("parameter \"%s\" requires a Boolean value",
 								 name)));
 						return 0;
 					}
@@ -5332,8 +5405,8 @@ validate_conf_option(struct config_generic * record, const char *name,
 					{
 						ereport(elevel,
 								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("invalid value for parameter \"%s\": \"%s\"",
-								 name, value),
+						 errmsg("invalid value for parameter \"%s\": \"%s\"",
+								name, value),
 								 hintmsg ? errhint("%s", _(hintmsg)) : 0));
 						return 0;
 					}
@@ -5343,7 +5416,7 @@ validate_conf_option(struct config_generic * record, const char *name,
 						ereport(elevel,
 								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 								 errmsg("%d is outside the valid range for parameter \"%s\" (%d .. %d)",
-										*((int *) newval), name, conf->min, conf->max)));
+							*((int *) newval), name, conf->min, conf->max)));
 						return 0;
 					}
 
@@ -5370,7 +5443,7 @@ validate_conf_option(struct config_generic * record, const char *name,
 					{
 						ereport(elevel,
 								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("parameter \"%s\" requires a numeric value",
+						  errmsg("parameter \"%s\" requires a numeric value",
 								 name)));
 						return 0;
 					}
@@ -5380,7 +5453,7 @@ validate_conf_option(struct config_generic * record, const char *name,
 						ereport(elevel,
 								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 								 errmsg("%g is outside the valid range for parameter \"%s\" (%g .. %g)",
-										*((double *) newval), name, conf->min, conf->max)));
+						 *((double *) newval), name, conf->min, conf->max)));
 						return 0;
 					}
 
@@ -5457,9 +5530,9 @@ validate_conf_option(struct config_generic * record, const char *name,
 
 						ereport(ERROR,
 								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("invalid value for parameter \"%s\": \"%s\"",
-										name, value),
-										hintmsg ? errhint("%s", _(hintmsg)) : 0));
+						 errmsg("invalid value for parameter \"%s\": \"%s\"",
+								name, value),
+								 hintmsg ? errhint("%s", _(hintmsg)) : 0));
 
 						if (hintmsg != NULL)
 							pfree(hintmsg);
@@ -5612,12 +5685,26 @@ set_config_option(const char *name, const char *value,
 				 * If a PGC_BACKEND parameter is changed in the config file,
 				 * we want to accept the new value in the postmaster (whence
 				 * it will propagate to subsequently-started backends), but
-				 * ignore it in existing backends.	This is a tad klugy, but
+				 * ignore it in existing backends.  This is a tad klugy, but
 				 * necessary because we don't re-read the config file during
 				 * backend start.
+				 *
+				 * In EXEC_BACKEND builds, this works differently: we load all
+				 * nondefault settings from the CONFIG_EXEC_PARAMS file during
+				 * backend start.  In that case we must accept PGC_SIGHUP
+				 * settings, so as to have the same value as if we'd forked
+				 * from the postmaster.  We detect this situation by checking
+				 * IsInitProcessingMode, which is a bit ugly, but it doesn't
+				 * seem worth passing down an explicit flag saying we're doing
+				 * read_nondefault_variables().
 				 */
+#ifdef EXEC_BACKEND
+				if (IsUnderPostmaster && !IsInitProcessingMode())
+					return -1;
+#else
 				if (IsUnderPostmaster)
 					return -1;
+#endif
 			}
 			else if (context != PGC_POSTMASTER && context != PGC_BACKEND &&
 					 source != PGC_S_CLIENT)
@@ -5655,7 +5742,7 @@ set_config_option(const char *name, const char *value,
 	 * An exception might be made if the reset value is assumed to be "safe".
 	 *
 	 * Note: this flag is currently used for "session_authorization" and
-	 * "role".	We need to prohibit changing these inside a local userid
+	 * "role".  We need to prohibit changing these inside a local userid
 	 * context because when we exit it, GUC won't be notified, leaving things
 	 * out of sync.  (This could be fixed by forcing a new GUC nesting level,
 	 * but that would change behavior in possibly-undesirable ways.)  Also, we
@@ -6446,7 +6533,7 @@ flatten_set_variable_args(const char *name, List *args)
 				else
 				{
 					/*
-					 * Plain string literal or identifier.	For quote mode,
+					 * Plain string literal or identifier.  For quote mode,
 					 * quote it if it's not a vanilla identifier.
 					 */
 					if (flags & GUC_LIST_QUOTE)
@@ -6466,9 +6553,9 @@ flatten_set_variable_args(const char *name, List *args)
 }
 
 /*
- * Writes updated configuration parameter values into
- * postgresql.auto.conf.temp file. It traverses the list of parameters
- * and quote the string values before writing them to temporaray file.
+ * Write updated configuration parameter values into a temporary file.
+ * This function traverses the list of parameters and quotes the string
+ * values before writing them.
  */
 static void
 write_auto_conf_file(int fd, const char *filename, ConfigVariable **head_p)
@@ -6477,8 +6564,8 @@ write_auto_conf_file(int fd, const char *filename, ConfigVariable **head_p)
 	StringInfoData buf;
 
 	initStringInfo(&buf);
-	appendStringInfoString(&buf, "# Do not edit this file manually! \n");
-	appendStringInfoString(&buf, "# It will be overwritten by ALTER SYSTEM command. \n");
+	appendStringInfoString(&buf, "# Do not edit this file manually!\n");
+	appendStringInfoString(&buf, "# It will be overwritten by ALTER SYSTEM command.\n");
 
 	/*
 	 * write the file header message before contents, so that if there is no
@@ -6526,7 +6613,7 @@ write_auto_conf_file(int fd, const char *filename, ConfigVariable **head_p)
 
 /*
  * This function takes list of all configuration parameters in
- * postgresql.auto.conf and parameter to be updated as input arguments and
+ * PG_AUTOCONF_FILENAME and parameter to be updated as input arguments and
  * replace the updated configuration parameter value in a list. If the
  * parameter to be updated is new then it is appended to the list of
  * parameters.
@@ -6604,16 +6691,15 @@ replace_auto_config_value(ConfigVariable **head_p, ConfigVariable **tail_p,
  * and write them all to the automatic configuration file.
  *
  * The configuration parameters are written to a temporary
- * file then renamed to the final name. The template for the
- * temporary file is postgresql.auto.conf.temp.
+ * file then renamed to the final name.
  *
  * An LWLock is used to serialize writing to the same file.
  *
  * In case of an error, we leave the original automatic
- * configuration file (postgresql.auto.conf) intact.
+ * configuration file (PG_AUTOCONF_FILENAME) intact.
  */
 void
-AlterSystemSetConfigFile(AlterSystemStmt * altersysstmt)
+AlterSystemSetConfigFile(AlterSystemStmt *altersysstmt)
 {
 	char	   *name;
 	char	   *value;
@@ -6630,7 +6716,7 @@ AlterSystemSetConfigFile(AlterSystemStmt * altersysstmt)
 	if (!superuser())
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg("must be superuser to execute ALTER SYSTEM command"))));
+			 (errmsg("must be superuser to execute ALTER SYSTEM command"))));
 
 	/*
 	 * Validate the name and arguments [value1, value2 ... ].
@@ -6656,7 +6742,7 @@ AlterSystemSetConfigFile(AlterSystemStmt * altersysstmt)
 	if (record == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("unrecognized configuration parameter \"%s\"", name)));
+			   errmsg("unrecognized configuration parameter \"%s\"", name)));
 
 	if ((record->context == PGC_INTERNAL) ||
 		(record->flags & GUC_DISALLOW_IN_FILE))
@@ -6669,25 +6755,25 @@ AlterSystemSetConfigFile(AlterSystemStmt * altersysstmt)
 							  ERROR, true, NULL,
 							  &newextra))
 		ereport(ERROR,
-				(errmsg("invalid value for parameter \"%s\": \"%s\"", name, value)));
+		(errmsg("invalid value for parameter \"%s\": \"%s\"", name, value)));
 
 
 	/*
-	 * Use data directory as reference path for postgresql.auto.conf and it's
-	 * corresponding temp file
+	 * Use data directory as reference path for PG_AUTOCONF_FILENAME and its
+	 * corresponding temporary file.
 	 */
 	join_path_components(AutoConfFileName, data_directory, PG_AUTOCONF_FILENAME);
 	canonicalize_path(AutoConfFileName);
 	snprintf(AutoConfTmpFileName, sizeof(AutoConfTmpFileName), "%s.%s",
 			 AutoConfFileName,
-			 "temp");
+			 "tmp");
 
 	/*
-	 * one backend is allowed to operate on postgresql.auto.conf file, to
+	 * One backend is allowed to operate on file PG_AUTOCONF_FILENAME, to
 	 * ensure that we need to update the contents of the file with
 	 * AutoFileLock. To ensure crash safety, first the contents are written to
-	 * temporary file and then rename it to postgresql.auto.conf. In case
-	 * there exists a temp file from previous crash, that can be reused.
+	 * a temporary file which is then renameed to PG_AUTOCONF_FILENAME. In
+	 * case there exists a temp file from previous crash, that can be reused.
 	 */
 
 	LWLockAcquire(AutoFileLock, LW_EXCLUSIVE);
@@ -6703,14 +6789,14 @@ AlterSystemSetConfigFile(AlterSystemStmt * altersysstmt)
 	{
 		if (stat(AutoConfFileName, &st) == 0)
 		{
-			/* open postgresql.auto.conf file */
+			/* open file PG_AUTOCONF_FILENAME */
 			infile = AllocateFile(AutoConfFileName, "r");
 			if (infile == NULL)
 				ereport(ERROR,
 						(errmsg("failed to open auto conf file \"%s\": %m ",
 								AutoConfFileName)));
 
-			/* Parse the postgresql.auto.conf file */
+			/* parse it */
 			ParseConfigFp(infile, AutoConfFileName, 0, LOG, &head, &tail);
 
 			FreeFile(infile);
@@ -6722,7 +6808,7 @@ AlterSystemSetConfigFile(AlterSystemStmt * altersysstmt)
 		 */
 		replace_auto_config_value(&head, &tail, AutoConfFileName, name, value);
 
-		/* Write and sync the New contents to postgresql.auto.conf.temp file */
+		/* Write and sync the new contents to the temporary file */
 		write_auto_conf_file(Tmpfd, AutoConfTmpFileName, &head);
 
 		close(Tmpfd);
@@ -6778,6 +6864,7 @@ ExecSetVariableStmt(VariableSetStmt *stmt, bool isTopLevel)
 									 0);
 			break;
 		case VAR_SET_MULTI:
+
 			/*
 			 * Special-case SQL syntaxes.  The TRANSACTION and SESSION
 			 * CHARACTERISTICS cases effectively set more than one variable
@@ -7063,7 +7150,7 @@ define_custom_variable(struct config_generic * variable)
 	 * variable.  Essentially, we need to duplicate all the active and stacked
 	 * values, but with appropriate validation and datatype adjustment.
 	 *
-	 * If an assignment fails, we report a WARNING and keep going.	We don't
+	 * If an assignment fails, we report a WARNING and keep going.  We don't
 	 * want to throw ERROR for bad values, because it'd bollix the add-on
 	 * module that's presumably halfway through getting loaded.  In such cases
 	 * the default or previous state will become active instead.
@@ -7091,7 +7178,7 @@ define_custom_variable(struct config_generic * variable)
 	/*
 	 * Free up as much as we conveniently can of the placeholder structure.
 	 * (This neglects any stack items, so it's possible for some memory to be
-	 * leaked.	Since this can only happen once per session per variable, it
+	 * leaked.  Since this can only happen once per session per variable, it
 	 * doesn't seem worth spending much code on.)
 	 */
 	set_string_field(pHolder, pHolder->variable, NULL);
@@ -7164,7 +7251,7 @@ reapply_stacked_values(struct config_generic * variable,
 	else
 	{
 		/*
-		 * We are at the end of the stack.	If the active/previous value is
+		 * We are at the end of the stack.  If the active/previous value is
 		 * different from the reset value, it must represent a previously
 		 * committed session value.  Apply it, and then drop the stack entry
 		 * that set_config_option will have created under the impression that
@@ -8258,6 +8345,12 @@ read_nondefault_variables(void)
 	GucContext	varscontext;
 
 	/*
+	 * Assert that PGC_BACKEND case in set_config_option() will do the right
+	 * thing.
+	 */
+	Assert(IsInitProcessingMode());
+
+	/*
 	 * Open file
 	 */
 	fp = AllocateFile(CONFIG_EXEC_PARAMS, "r");
@@ -8350,7 +8443,7 @@ ParseLongOption(const char *string, char **name, char **value)
 
 /*
  * Handle options fetched from pg_db_role_setting.setconfig,
- * pg_proc.proconfig, etc.	Caller must specify proper context/source/action.
+ * pg_proc.proconfig, etc.  Caller must specify proper context/source/action.
  *
  * The array parameter must be an array of TEXT (it must not be NULL).
  */
@@ -8631,7 +8724,7 @@ GUCArrayReset(ArrayType *array)
  * Validate a proposed option setting for GUCArrayAdd/Delete/Reset.
  *
  * name is the option name.  value is the proposed value for the Add case,
- * or NULL for the Delete/Reset cases.	If skipIfNoPermissions is true, it's
+ * or NULL for the Delete/Reset cases.  If skipIfNoPermissions is true, it's
  * not an error to have no permissions to set the option.
  *
  * Returns TRUE if OK, FALSE if skipIfNoPermissions is true and user does not
@@ -8712,7 +8805,7 @@ validate_option_array_item(const char *name, const char *value,
  * ERRCODE_INVALID_PARAMETER_VALUE SQLSTATE for check hook failures.
  *
  * Note that GUC_check_errmsg() etc are just macros that result in a direct
- * assignment to the associated variables.	That is ugly, but forced by the
+ * assignment to the associated variables.  That is ugly, but forced by the
  * limitations of C's macro mechanisms.
  */
 void

@@ -15,6 +15,7 @@
 #define PROCARRAY_H
 
 #include "storage/standby.h"
+#include "utils/relcache.h"
 #include "utils/snapshot.h"
 
 
@@ -50,8 +51,9 @@ extern RunningTransactions GetRunningTransactionData(void);
 
 extern bool TransactionIdIsInProgress(TransactionId xid);
 extern bool TransactionIdIsActive(TransactionId xid);
-extern TransactionId GetOldestXmin(bool allDbs, bool ignoreVacuum);
+extern TransactionId GetOldestXmin(Relation rel, bool ignoreVacuum);
 extern TransactionId GetOldestActiveTransactionId(void);
+extern TransactionId GetOldestSafeDecodingTransactionId(void);
 
 extern VirtualTransactionId *GetVirtualXIDsDelayingChkpt(int *nvxids);
 extern bool HaveVirtualXIDsDelayingChkpt(VirtualTransactionId *vxids, int nvxids);
@@ -76,5 +78,11 @@ extern bool CountOtherDBBackends(Oid databaseId,
 extern void XidCacheRemoveRunningXids(TransactionId xid,
 						  int nxids, const TransactionId *xids,
 						  TransactionId latestXid);
+
+extern void ProcArraySetReplicationSlotXmin(TransactionId xmin,
+							TransactionId catalog_xmin, bool already_locked);
+
+extern void ProcArrayGetReplicationSlotXmin(TransactionId *xmin,
+								TransactionId *catalog_xmin);
 
 #endif   /* PROCARRAY_H */

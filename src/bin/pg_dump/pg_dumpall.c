@@ -73,6 +73,7 @@ static int	binary_upgrade = 0;
 static int	column_inserts = 0;
 static int	disable_dollar_quoting = 0;
 static int	disable_triggers = 0;
+static int	if_exists = 0;
 static int	inserts = 0;
 static int	no_tablespaces = 0;
 static int	use_setsessauth = 0;
@@ -119,6 +120,7 @@ main(int argc, char *argv[])
 		{"column-inserts", no_argument, &column_inserts, 1},
 		{"disable-dollar-quoting", no_argument, &disable_dollar_quoting, 1},
 		{"disable-triggers", no_argument, &disable_triggers, 1},
+		{"if-exists", no_argument, &if_exists, 1},
 		{"inserts", no_argument, &inserts, 1},
 		{"lock-wait-timeout", required_argument, NULL, 2},
 		{"no-tablespaces", no_argument, &no_tablespaces, 1},
@@ -193,7 +195,7 @@ main(int argc, char *argv[])
 
 	pgdumpopts = createPQExpBuffer();
 
-	while ((c = getopt_long(argc, argv, "acd:f:gh:i:l:oOp:rsS:tU:vwWx", long_options, &optindex)) != -1)
+	while ((c = getopt_long(argc, argv, "acd:f:gh:il:oOp:rsS:tU:vwWx", long_options, &optindex)) != -1)
 	{
 		switch (c)
 		{
@@ -334,6 +336,13 @@ main(int argc, char *argv[])
 		exit_nicely(1);
 	}
 
+	if (if_exists && !output_clean)
+	{
+		fprintf(stderr, _("%s: option --if-exists requires -c/--clean option\n"),
+				progname);
+		exit_nicely(1);
+	}
+
 	if (roles_only && tablespaces_only)
 	{
 		fprintf(stderr, _("%s: options -r/--roles-only and -t/--tablespaces-only cannot be used together\n"),
@@ -466,9 +475,9 @@ main(int argc, char *argv[])
 	if (!data_only)
 	{
 		/*
-		 * If asked to --clean, do that first.	We can avoid detailed
+		 * If asked to --clean, do that first.  We can avoid detailed
 		 * dependency analysis because databases never depend on each other,
-		 * and tablespaces never depend on each other.	Roles could have
+		 * and tablespaces never depend on each other.  Roles could have
 		 * grants to each other, but DROP ROLE will clean those up silently.
 		 */
 		if (output_clean)
@@ -564,6 +573,7 @@ help(void)
 	printf(_("  --column-inserts             dump data as INSERT commands with column names\n"));
 	printf(_("  --disable-dollar-quoting     disable dollar quoting, use SQL standard quoting\n"));
 	printf(_("  --disable-triggers           disable triggers during data-only restore\n"));
+	printf(_("  --if-exists                  use IF EXISTS when dropping objects\n"));
 	printf(_("  --inserts                    dump data as INSERT commands, rather than COPY\n"));
 	printf(_("  --no-security-labels         do not dump security label assignments\n"));
 	printf(_("  --no-tablespaces             do not dump tablespace assignments\n"));
@@ -624,7 +634,9 @@ dropRoles(PGconn *conn)
 
 		rolename = PQgetvalue(res, i, i_rolname);
 
-		fprintf(OPF, "DROP ROLE %s;\n", fmtId(rolename));
+		fprintf(OPF, "DROP ROLE %s%s;\n",
+				if_exists ? "IF EXISTS " : "",
+				fmtId(rolename));
 	}
 
 	PQclear(res);
@@ -760,7 +772,7 @@ dumpRoles(PGconn *conn)
 		 * will acquire the right properties even if it already exists (ie, it
 		 * won't hurt for the CREATE to fail).  This is particularly important
 		 * for the role we are connected as, since even with --clean we will
-		 * have failed to drop it.	binary_upgrade cannot generate any errors,
+		 * have failed to drop it.  binary_upgrade cannot generate any errors,
 		 * so we assume the current role is already created.
 		 */
 		if (!binary_upgrade ||
@@ -994,7 +1006,9 @@ dropTablespaces(PGconn *conn)
 	{
 		char	   *spcname = PQgetvalue(res, i, 0);
 
-		fprintf(OPF, "DROP TABLESPACE %s;\n", fmtId(spcname));
+		fprintf(OPF, "DROP TABLESPACE %s%s;\n",
+				if_exists ? "IF EXISTS " : "",
+				fmtId(spcname));
 	}
 
 	PQclear(res);
@@ -1148,7 +1162,9 @@ dropDBs(PGconn *conn)
 		if (strcmp(dbname, "template1") != 0 &&
 			strcmp(dbname, "postgres") != 0)
 		{
-			fprintf(OPF, "DROP DATABASE %s;\n", fmtId(dbname));
+			fprintf(OPF, "DROP DATABASE %s%s;\n",
+					if_exists ? "IF EXISTS " : "",
+					fmtId(dbname));
 		}
 	}
 
@@ -1186,7 +1202,7 @@ dumpCreateDB(PGconn *conn)
 	 * commands for just those databases with values different from defaults.
 	 *
 	 * We consider template0's encoding and locale (or, pre-7.1, template1's)
-	 * to define the installation default.	Pre-8.4 installations do not have
+	 * to define the installation default.  Pre-8.4 installations do not have
 	 * per-database locale settings; for them, every database must necessarily
 	 * be using the installation default, so there's no need to do anything
 	 * (which is good, since in very old versions there is no good way to find
@@ -1650,7 +1666,7 @@ runPgDump(const char *dbname)
 	PQExpBuffer cmd = createPQExpBuffer();
 	int			ret;
 
-	appendPQExpBuffer(cmd, SYSTEMQUOTE "\"%s\" %s", pg_dump_bin,
+	appendPQExpBuffer(cmd, "\"%s\" %s", pg_dump_bin,
 					  pgdumpopts->data);
 
 	/*
@@ -1670,8 +1686,6 @@ runPgDump(const char *dbname)
 	doConnStrQuoting(connstrbuf, dbname);
 
 	doShellQuoting(cmd, connstrbuf->data);
-
-	appendPQExpBufferStr(cmd, SYSTEMQUOTE);
 
 	if (verbose)
 		fprintf(stderr, _("%s: running \"%s\"\n"), progname, cmd->data);

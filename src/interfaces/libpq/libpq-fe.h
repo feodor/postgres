@@ -55,9 +55,9 @@ typedef enum
 	 * be used for user feedback or similar purposes.
 	 */
 	CONNECTION_STARTED,			/* Waiting for connection to be made.  */
-	CONNECTION_MADE,			/* Connection OK; waiting to send.	   */
+	CONNECTION_MADE,			/* Connection OK; waiting to send.     */
 	CONNECTION_AWAITING_RESPONSE,		/* Waiting for a response from the
-										 * postmaster.		  */
+										 * postmaster.        */
 	CONNECTION_AUTH_OK,			/* Received authentication; waiting for
 								 * backend startup. */
 	CONNECTION_SETENV,			/* Negotiating environment. */
@@ -301,6 +301,7 @@ extern char *PQdb(const PGconn *conn);
 extern char *PQuser(const PGconn *conn);
 extern char *PQpass(const PGconn *conn);
 extern char *PQhost(const PGconn *conn);
+extern char *PQhostaddr(const PGconn *conn);
 extern char *PQport(const PGconn *conn);
 extern char *PQtty(const PGconn *conn);
 extern char *PQoptions(const PGconn *conn);

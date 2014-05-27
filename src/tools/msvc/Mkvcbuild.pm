@@ -69,9 +69,11 @@ sub mkvcbuild
 	  srandom.c getaddrinfo.c gettimeofday.c inet_net_ntop.c kill.c open.c
 	  erand48.c snprintf.c strlcat.c strlcpy.c dirmod.c noblock.c path.c
 	  pgcheckdir.c pg_crc.c pgmkdirp.c pgsleep.c pgstrcasecmp.c pqsignal.c
-	  qsort.c qsort_arg.c quotes.c
-	  sprompt.c tar.c thread.c getopt.c getopt_long.c dirent.c rint.c
+	  qsort.c qsort_arg.c quotes.c system.c
+	  sprompt.c tar.c thread.c getopt.c getopt_long.c dirent.c
 	  win32env.c win32error.c win32setlocale.c);
+
+	push(@pgportfiles, 'rint.c') if ($vsVersion < '12.00');
 
 	our @pgcommonallfiles = qw(
 	  exec.c pgfnames.c psprintf.c relpath.c rmtree.c username.c wait_error.c);
@@ -372,6 +374,11 @@ sub mkvcbuild
 	$pgreceivexlog->{name} = 'pg_receivexlog';
 	$pgreceivexlog->AddFile('src\bin\pg_basebackup\pg_receivexlog.c');
 	$pgreceivexlog->AddLibrary('ws2_32.lib');
+
+	my $pgrecvlogical = AddSimpleFrontend('pg_basebackup', 1);
+	$pgrecvlogical->{name} = 'pg_recvlogical';
+	$pgrecvlogical->AddFile('src\bin\pg_basebackup\pg_recvlogical.c');
+	$pgrecvlogical->AddLibrary('ws2_32.lib');
 
 	my $pgconfig = AddSimpleFrontend('pg_config');
 

@@ -45,6 +45,7 @@
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "postmaster/bgwriter.h"
+#include "replication/slot.h"
 #include "storage/copydir.h"
 #include "storage/fd.h"
 #include "storage/lmgr.h"
@@ -264,7 +265,7 @@ createdb(const CreatedbStmt *stmt)
 	 * To create a database, must have createdb privilege and must be able to
 	 * become the target role (this does not imply that the target role itself
 	 * must have createdb privilege).  The latter provision guards against
-	 * "giveaway" attacks.	Note that a superuser will always have both of
+	 * "giveaway" attacks.  Note that a superuser will always have both of
 	 * these privileges a fortiori.
 	 */
 	if (!have_createdb_privilege())
@@ -396,7 +397,7 @@ createdb(const CreatedbStmt *stmt)
 		/*
 		 * If we are trying to change the default tablespace of the template,
 		 * we require that the template not have any files in the new default
-		 * tablespace.	This is necessary because otherwise the copied
+		 * tablespace.  This is necessary because otherwise the copied
 		 * database would contain pg_class rows that refer to its default
 		 * tablespace both explicitly (by OID) and implicitly (as zero), which
 		 * would cause problems.  For example another CREATE DATABASE using
@@ -432,7 +433,7 @@ createdb(const CreatedbStmt *stmt)
 	}
 
 	/*
-	 * Check for db name conflict.	This is just to give a more friendly error
+	 * Check for db name conflict.  This is just to give a more friendly error
 	 * message than "unique index violation".  There's a race condition but
 	 * we're willing to accept the less friendly message in that case.
 	 */
@@ -497,7 +498,7 @@ createdb(const CreatedbStmt *stmt)
 
 	/*
 	 * We deliberately set datacl to default (NULL), rather than copying it
-	 * from the template database.	Copying it would be a bad idea when the
+	 * from the template database.  Copying it would be a bad idea when the
 	 * owner is not the same as the template's owner.
 	 */
 	new_record_nulls[Anum_pg_database_datacl - 1] = true;
@@ -750,6 +751,8 @@ dropdb(const char *dbname, bool missing_ok)
 	HeapTuple	tup;
 	int			notherbackends;
 	int			npreparedxacts;
+	int			nslots,
+				nslots_active;
 
 	/*
 	 * Look up the target database's OID, and get exclusive lock on it. We
@@ -805,6 +808,19 @@ dropdb(const char *dbname, bool missing_ok)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_IN_USE),
 				 errmsg("cannot drop the currently open database")));
+
+	/*
+	 * Check whether there are, possibly unconnected, logical slots that refer
+	 * to the to-be-dropped database. The database lock we are holding
+	 * prevents the creation of new slots using the database.
+	 */
+	if (ReplicationSlotsCountDBSlots(db_id, &nslots, &nslots_active))
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_IN_USE),
+				 errmsg("database \"%s\" is used by a logical decoding slot",
+						dbname),
+				 errdetail("There are %d slot(s), %d of them active",
+						   nslots, nslots_active)));
 
 	/*
 	 * Check for other backends in the target database.  (Because we hold the
@@ -1145,7 +1161,7 @@ movedb(const char *dbname, const char *tblspcname)
 
 	/*
 	 * Use an ENSURE block to make sure we remove the debris if the copy fails
-	 * (eg, due to out-of-disk-space).	This is not a 100% solution, because
+	 * (eg, due to out-of-disk-space).  This is not a 100% solution, because
 	 * of the possibility of failure during transaction commit, but it should
 	 * handle most scenarios.
 	 */
@@ -1632,7 +1648,7 @@ get_db_info(const char *name, LOCKMODE lockmode,
 			LockSharedObject(DatabaseRelationId, dbOid, 0, lockmode);
 
 		/*
-		 * And now, re-fetch the tuple by OID.	If it's still there and still
+		 * And now, re-fetch the tuple by OID.  If it's still there and still
 		 * the same name, we win; else, drop the lock and loop back to try
 		 * again.
 		 */

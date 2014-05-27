@@ -38,7 +38,7 @@
  *	request, even if it was much larger than necessary.  This led to more
  *	and more wasted space in allocated chunks over time.  To fix, get rid
  *	of the midrange behavior: we now handle only "small" power-of-2-size
- *	chunks as chunks.  Anything "large" is passed off to malloc().	Change
+ *	chunks as chunks.  Anything "large" is passed off to malloc().  Change
  *	the number of freelists to change the small/large boundary.
  *
  *
@@ -54,7 +54,7 @@
  *	Thus, if someone makes the common error of writing past what they've
  *	requested, the problem is likely to go unnoticed ... until the day when
  *	there *isn't* any wasted space, perhaps because of different memory
- *	alignment on a new platform, or some other effect.	To catch this sort
+ *	alignment on a new platform, or some other effect.  To catch this sort
  *	of problem, the MEMORY_CONTEXT_CHECKING option stores 0x7E just beyond
  *	the requested space whenever the request is less than the actual chunk
  *	size, and verifies that the byte is undamaged when the chunk is freed.
@@ -189,7 +189,7 @@ typedef AllocSetContext *AllocSet;
 /*
  * AllocBlock
  *		An AllocBlock is the unit of memory that is obtained by aset.c
- *		from malloc().	It contains one or more AllocChunks, which are
+ *		from malloc().  It contains one or more AllocChunks, which are
  *		the units requested by palloc() and freed by pfree().  AllocChunks
  *		cannot be returned to malloc() individually, instead they are put
  *		on freelists by pfree() and re-used by the next palloc() that has
@@ -326,7 +326,7 @@ AllocSetFreeIndex(Size size)
 
 		/*
 		 * At this point we need to obtain log2(tsize)+1, ie, the number of
-		 * not-all-zero bits at the right.	We used to do this with a
+		 * not-all-zero bits at the right.  We used to do this with a
 		 * shift-and-count loop, but this function is enough of a hotspot to
 		 * justify micro-optimization effort.  The best approach seems to be
 		 * to use a lookup table.  Note that this code assumes that
@@ -544,7 +544,7 @@ AllocSetInit(MemoryContext context)
  * Actually, this routine has some discretion about what to do.
  * It should mark all allocated chunks freed, but it need not necessarily
  * give back all the resources the set owns.  Our actual implementation is
- * that we hang onto any "keeper" block specified for the set.	In this way,
+ * that we hang onto any "keeper" block specified for the set.  In this way,
  * we don't thrash malloc() when a context is repeatedly reset after small
  * allocations, which is typical behavior for per-tuple contexts.
  */
@@ -676,8 +676,7 @@ AllocSetAlloc(MemoryContext context, Size size)
 			ereport(ERROR,
 					(errcode(ERRCODE_OUT_OF_MEMORY),
 					 errmsg("out of memory"),
-					 errdetail("Failed on request of size %lu.",
-							   (unsigned long) size)));
+					 errdetail("Failed on request of size %zu.", size)));
 		}
 		block->aset = set;
 		block->freeptr = block->endptr = ((char *) block) + blksize;
@@ -795,7 +794,7 @@ AllocSetAlloc(MemoryContext context, Size size)
 
 				/*
 				 * In most cases, we'll get back the index of the next larger
-				 * freelist than the one we need to put this chunk on.	The
+				 * freelist than the one we need to put this chunk on.  The
 				 * exception is when availchunk is exactly a power of 2.
 				 */
 				if (availchunk != ((Size) 1 << (a_fidx + ALLOC_MINBITS)))
@@ -871,8 +870,7 @@ AllocSetAlloc(MemoryContext context, Size size)
 			ereport(ERROR,
 					(errcode(ERRCODE_OUT_OF_MEMORY),
 					 errmsg("out of memory"),
-					 errdetail("Failed on request of size %lu.",
-							   (unsigned long) size)));
+					 errdetail("Failed on request of size %zu.", size)));
 		}
 
 		block->aset = set;
@@ -955,7 +953,7 @@ AllocSetFree(MemoryContext context, void *pointer)
 	{
 		/*
 		 * Big chunks are certain to have been allocated as single-chunk
-		 * blocks.	Find the containing block and return it to malloc().
+		 * blocks.  Find the containing block and return it to malloc().
 		 */
 		AllocBlock	block = set->blocks;
 		AllocBlock	prevblock = NULL;
@@ -1082,7 +1080,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 	if (oldsize > set->allocChunkLimit)
 	{
 		/*
-		 * The chunk must have been allocated as a single-chunk block.	Find
+		 * The chunk must have been allocated as a single-chunk block.  Find
 		 * the containing block and use realloc() to make it bigger with
 		 * minimum space wastage.
 		 */
@@ -1114,8 +1112,7 @@ AllocSetRealloc(MemoryContext context, void *pointer, Size size)
 			ereport(ERROR,
 					(errcode(ERRCODE_OUT_OF_MEMORY),
 					 errmsg("out of memory"),
-					 errdetail("Failed on request of size %lu.",
-							   (unsigned long) size)));
+					 errdetail("Failed on request of size %zu.", size)));
 		}
 		block->freeptr = block->endptr = ((char *) block) + blksize;
 
@@ -1245,10 +1242,10 @@ static void
 AllocSetStats(MemoryContext context, int level)
 {
 	AllocSet	set = (AllocSet) context;
-	long		nblocks = 0;
-	long		nchunks = 0;
-	long		totalspace = 0;
-	long		freespace = 0;
+	Size		nblocks = 0;
+	Size		nchunks = 0;
+	Size		totalspace = 0;
+	Size		freespace = 0;
 	AllocBlock	block;
 	AllocChunk	chunk;
 	int			fidx;
@@ -1274,7 +1271,7 @@ AllocSetStats(MemoryContext context, int level)
 		fprintf(stderr, "  ");
 
 	fprintf(stderr,
-			"%s: %lu total in %ld blocks; %lu free (%ld chunks); %lu used\n",
+			"%s: %zu total in %zd blocks; %zu free (%zd chunks); %zu used\n",
 			set->header.name, totalspace, nblocks, freespace, nchunks,
 			totalspace - freespace);
 }
@@ -1338,8 +1335,8 @@ AllocSetCheck(MemoryContext context)
 				elog(WARNING, "problem in alloc set %s: req size > alloc size for chunk %p in block %p",
 					 name, chunk, block);
 			if (chsize < (1 << ALLOC_MINBITS))
-				elog(WARNING, "problem in alloc set %s: bad size %lu for chunk %p in block %p",
-					 name, (unsigned long) chsize, chunk, block);
+				elog(WARNING, "problem in alloc set %s: bad size %zu for chunk %p in block %p",
+					 name, chsize, chunk, block);
 
 			/* single-chunk block? */
 			if (chsize > set->allocChunkLimit &&

@@ -65,9 +65,8 @@ _hash_doinsert(Relation rel, IndexTuple itup)
 	if (itemsz > HashMaxItemSize((Page) metap))
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-				 errmsg("index row size %lu exceeds hash maximum %lu",
-						(unsigned long) itemsz,
-						(unsigned long) HashMaxItemSize((Page) metap)),
+				 errmsg("index row size %zu exceeds hash maximum %zu",
+						itemsz, HashMaxItemSize((Page) metap)),
 			errhint("Values larger than a buffer page cannot be indexed.")));
 
 	/*
@@ -90,7 +89,7 @@ _hash_doinsert(Relation rel, IndexTuple itup)
 
 		/*
 		 * If the previous iteration of this loop locked what is still the
-		 * correct target bucket, we are done.	Otherwise, drop any old lock
+		 * correct target bucket, we are done.  Otherwise, drop any old lock
 		 * and lock what now appears to be the correct bucket.
 		 */
 		if (retry)

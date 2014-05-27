@@ -15,13 +15,12 @@
  *	oids are the same between old and new clusters.  This is important
  *	because toast oids are stored as toast pointers in user tables.
  *
- *	FYI, while pg_class.oid and pg_class.relfilenode are initially the same
- *	in a cluster, but they can diverge due to CLUSTER, REINDEX, or VACUUM
- *	FULL.  The new cluster will have matching pg_class.oid and
- *	pg_class.relfilenode values and be based on the old oid value.	This can
- *	cause the old and new pg_class.relfilenode values to differ.  In summary,
- *	old and new pg_class.oid and new pg_class.relfilenode will have the
- *	same value, and old pg_class.relfilenode might differ.
+ *	While pg_class.oid and pg_class.relfilenode are initially the same
+ *	in a cluster, they can diverge due to CLUSTER, REINDEX, or VACUUM
+ *	FULL.  In the new cluster, pg_class.oid and pg_class.relfilenode will
+ *	be the same and will match the old pg_class.oid value.  Because of
+ *	this, old/new pg_class.relfilenode values will not match if CLUSTER,
+ *	REINDEX, or VACUUM FULL have been performed in the old cluster.
  *
  *	We control all assignments of pg_type.oid because these oids are stored
  *	in user composite type values.
@@ -126,7 +125,7 @@ main(int argc, char **argv)
 
 	/*
 	 * Most failures happen in create_new_objects(), which has completed at
-	 * this point.	We do this here because it is just before linking, which
+	 * this point.  We do this here because it is just before linking, which
 	 * will link the old and new cluster data files, preventing the old
 	 * cluster from being safely started once the new cluster is started.
 	 */
@@ -194,7 +193,7 @@ setup(char *argv0, bool *live_check)
 	{
 		/*
 		 * If we have a postmaster.pid file, try to start the server.  If it
-		 * starts, the pid file was stale, so stop the server.	If it doesn't
+		 * starts, the pid file was stale, so stop the server.  If it doesn't
 		 * start, assume the server is running.  If the pid file is left over
 		 * from a server crash, this also allows any committed transactions
 		 * stored in the WAL to be replayed so they are not lost, because WAL
@@ -206,7 +205,7 @@ setup(char *argv0, bool *live_check)
 		{
 			if (!user_opts.check)
 				pg_fatal("There seems to be a postmaster servicing the old cluster.\n"
-					   "Please shutdown that postmaster and try again.\n");
+						 "Please shutdown that postmaster and try again.\n");
 			else
 				*live_check = true;
 		}
@@ -219,7 +218,7 @@ setup(char *argv0, bool *live_check)
 			stop_postmaster(false);
 		else
 			pg_fatal("There seems to be a postmaster servicing the new cluster.\n"
-				   "Please shutdown that postmaster and try again.\n");
+					 "Please shutdown that postmaster and try again.\n");
 	}
 
 	/* get path to pg_upgrade executable */
@@ -280,8 +279,8 @@ prepare_new_databases(void)
 
 	/*
 	 * Install support functions in the global-object restore database to
-	 * preserve pg_authid.oid.	pg_dumpall uses 'template0' as its template
-	 * database so objects we add into 'template1' are not propogated.	They
+	 * preserve pg_authid.oid.  pg_dumpall uses 'template0' as its template
+	 * database so objects we add into 'template1' are not propogated.  They
 	 * are removed on pg_upgrade exit.
 	 */
 	install_support_functions_in_new_db("template1");
