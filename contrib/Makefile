@@ -6,6 +6,7 @@ include $(top_builddir)/src/Makefile.global
 
 SUBDIRS = \
 		adminpack	\
+		anyarray	\
 		auth_delay	\
 		auto_explain	\
 		btree_gin	\
