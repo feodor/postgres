@@ -203,8 +203,27 @@ uniqSimpleArray(SimpleArray *s)
 	}
 }
 
+PG_FUNCTION_INFO_V1(aa_set);
+Datum
+aa_set(PG_FUNCTION_ARGS)
+{
+	Datum 				a = PG_GETARG_DATUM(0);
+	Oid 				typid = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	AnyArrayTypeInfo	info;
+	SimpleArray			s;
+	ArrayType			*r;
 
-Datum aa_icount(PG_FUNCTION_ARGS);
+	getAnyArrayTypeInfo(&info, typid);
+	s.nelems = 1;
+	s.elems = &a;
+	s.info = &info;
+
+	r = SimpleArray2Array(&s);
+
+	PG_RETURN_POINTER(r);
+}
+
+PG_FUNCTION_INFO_V1(aa_icount);
 Datum
 aa_icount(PG_FUNCTION_ARGS)
 {
@@ -218,7 +237,7 @@ aa_icount(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(count);
 }
 
-Datum aa_sort(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(aa_sort);
 Datum
 aa_sort(PG_FUNCTION_ARGS)
 {
@@ -265,7 +284,7 @@ aa_sort(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(r);
 }
 
-Datum aa_sort_asc(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(aa_sort_asc);
 Datum
 aa_sort_asc(PG_FUNCTION_ARGS)
 {
@@ -295,7 +314,7 @@ aa_sort_asc(PG_FUNCTION_ARGS)
 
 }
 
-Datum aa_sort_desc(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(aa_sort_desc);
 Datum
 aa_sort_desc(PG_FUNCTION_ARGS)
 {
@@ -317,14 +336,14 @@ aa_sort_desc(PG_FUNCTION_ARGS)
 	}
 
 	s = Array2SimpleArray(info, a);
-	sortSimpleArray(s, 1);
+	sortSimpleArray(s, -1);
 	r = SimpleArray2Array(s);
 
 	PG_FREE_IF_COPY(a, 0);
 	PG_RETURN_POINTER(r);
 }
 
-Datum aa_uniq(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(aa_uniq);
 Datum
 aa_uniq(PG_FUNCTION_ARGS)
 {
@@ -353,7 +372,7 @@ aa_uniq(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(r);
 }
 
-Datum aa_idx(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(aa_idx);
 Datum
 aa_idx(PG_FUNCTION_ARGS)
 {
@@ -409,7 +428,7 @@ aa_idx(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32( (i < s->nelems) ? (i+1) : 0 );
 }
 
-Datum aa_subarray(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(aa_subarray);
 Datum
 aa_subarray(PG_FUNCTION_ARGS)
 {
@@ -443,6 +462,8 @@ aa_subarray(PG_FUNCTION_ARGS)
 		PG_RETURN_POINTER(r);
 	}
 
+	start = (start > 0) ? start - 1 : start;
+
 	if (start < 0)
 		start = s->nelems + start;
 
@@ -472,7 +493,7 @@ aa_subarray(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(r);
 }
 
-Datum aa_union_elem(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(aa_union_elem);
 Datum
 aa_union_elem(PG_FUNCTION_ARGS)
 {

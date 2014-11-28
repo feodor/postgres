@@ -7,10 +7,20 @@
 -- Create the user-defined type for the 1-D integer arrays (_int4)
 --
 
+CREATE FUNCTION anyset(anyelement)
+	RETURNS anyarray
+	AS 'MODULE_PATHNAME', 'aa_set'
+	LANGUAGE C STRICT IMMUTABLE;
+
 CREATE FUNCTION icount(anyarray)
 	RETURNS int4
 	AS 'MODULE_PATHNAME', 'aa_icount'
 	LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR # (
+	RIGHTARG = anyarray,
+	PROCEDURE = icount
+);
 
 CREATE FUNCTION sort(anyarray)
 	RETURNS anyarray
