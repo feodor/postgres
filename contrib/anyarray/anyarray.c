@@ -123,7 +123,7 @@ hashFuncInit(AnyArrayTypeInfo* info)
 	{
 		if (!OidIsValid(info->hashFuncOid))
 		{
-			info->hashFuncOid = getAMProc(BTREE_AM_OID, info->typid);
+			info->hashFuncOid = getAMProc(HASH_AM_OID, info->typid);
 
 			if (!OidIsValid(info->hashFuncOid))
 				ereport(ERROR,
