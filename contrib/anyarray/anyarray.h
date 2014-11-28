@@ -68,5 +68,18 @@ typedef enum SimilarityType {
 extern SimilarityType SmlType;
 extern double SmlLimit;
 
+/*
+ * Various support functions
+ */
+extern AnyArrayTypeInfo* getAnyArrayTypeInfo(MemoryContext ctx, Oid typid);
+extern void cmpFuncInit(AnyArrayTypeInfo* info);
+extern void hashFuncInit(AnyArrayTypeInfo* info);
+extern SimpleArray* Array2SimpleArray(AnyArrayTypeInfo  *info, ArrayType *a);
+extern ArrayType* SimpleArray2Array(SimpleArray *s);
+extern void sortSimpleArray(SimpleArray *s, int32 direction);
+extern void uniqSimpleArray(SimpleArray *s, bool onlyDuplicate);
+extern int numOfIntersect(SimpleArray *a, SimpleArray *b);
+extern double getSimilarity(SimpleArray *sa, SimpleArray *sb);
+
 #endif
 

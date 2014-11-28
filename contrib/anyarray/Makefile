@@ -1,7 +1,7 @@
 # contrib/anyarray/Makefile
 
 MODULE_big = anyarray
-OBJS = anyarray.o anyarray_guc.o
+OBJS = anyarray.o anyarray_util.o anyarray_guc.o
 
 EXTENSION = anyarray
 DATA = anyarray--1.0.sql
