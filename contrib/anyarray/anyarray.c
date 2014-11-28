@@ -1,7 +1,7 @@
 /*-------------------------------------------------------------------------
  * 
- * pg_prewarm.c
- *		prewarming utilities
+ * anyarray.c
+ *		various functions and operatins for 1-D arrays
  *
  * Copyright (c) 2010-2014, PostgreSQL Global Development Group
  *
@@ -12,6 +12,7 @@
  */
 
 #include "anyarray.h"
+#include <math.h>
 
 #include <access/hash.h>
 #include <access/htup_details.h>
@@ -76,19 +77,65 @@ getAMProc(Oid amOid, Oid typid)
 }
 
 static AnyArrayTypeInfo*
-getAnyArrayTypeInfo(AnyArrayTypeInfo *info, Oid typid)
+getAnyArrayTypeInfo(MemoryContext ctx, Oid typid)
 {
-	if (info == NULL)
-		info = palloc(sizeof(*info));
+	AnyArrayTypeInfo	*info;
+
+	info = MemoryContextAlloc(ctx, sizeof(*info));
 
 	info->typid = typid;
 	info->cmpFuncOid = InvalidOid;
 	info->hashFuncOid = InvalidOid;
+	info->cmpFuncInited = false;
+	info->hashFuncInited = false;
+	info->funcCtx = ctx;
 
 	get_typlenbyvalalign(typid, &info->typlen, &info->typbyval, &info->typalign);
 
 	return info;
 }
+
+static void
+cmpFuncInit(AnyArrayTypeInfo* info)
+{
+	if (info->cmpFuncInited == false)
+	{
+		if (!OidIsValid(info->cmpFuncOid))
+		{
+			info->cmpFuncOid = getAMProc(BTREE_AM_OID, info->typid);
+
+			if (!OidIsValid(info->cmpFuncOid))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("could not find compare function")));
+		}
+
+		fmgr_info_cxt(info->cmpFuncOid, &info->cmpFunc, info->funcCtx);
+		info->cmpFuncInited = true;
+	}
+}
+
+/*
+static void
+hashFuncInit(AnyArrayTypeInfo* info)
+{
+	if (info->hashFuncInited == false)
+	{
+		if (!OidIsValid(info->hashFuncOid))
+		{
+			info->hashFuncOid = getAMProc(BTREE_AM_OID, info->typid);
+
+			if (!OidIsValid(info->hashFuncOid))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("could not find hash function")));
+		}
+
+		fmgr_info_cxt(info->hashFuncOid, &hashFunc, info->funcCtx);
+		info->hashFuncInited = true;
+	}
+}
+*/
 
 static SimpleArray*
 Array2SimpleArray(AnyArrayTypeInfo	*info, ArrayType *a)
@@ -143,63 +190,70 @@ static void
 sortSimpleArray(SimpleArray *s, int32 direction)
 {
 	AnyArrayTypeInfo	*info = s->info;
-	FmgrInfo			cmpFunc;
 
-	if (!OidIsValid(info->cmpFuncOid))
-	{
-		info->cmpFuncOid = getAMProc(BTREE_AM_OID, info->typid);
-
-		if (!OidIsValid(info->cmpFuncOid))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("could not find compare function")));
-	}
+	cmpFuncInit(info);
 
 	if (s->nelems > 1)
 	{
-		fmgr_info(info->cmpFuncOid, &cmpFunc);
-
 		qsort_arg(s->elems, s->nelems, sizeof(Datum), 
 				  (direction > 0) ? cmpAscArrayElem : cmpDescArrayElem,
-				  &cmpFunc);
+				  &info->cmpFunc);
 	}
 }
 
 static void
-uniqSimpleArray(SimpleArray *s)
+uniqSimpleArray(SimpleArray *s, bool onlyDuplicate)
 {
 	AnyArrayTypeInfo	*info = s->info;
-	FmgrInfo			cmpFunc;
 
-	if (!OidIsValid(info->cmpFuncOid))
-	{
-		info->cmpFuncOid = getAMProc(BTREE_AM_OID, info->typid);
-
-		if (!OidIsValid(info->cmpFuncOid))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("could not find compare function")));
-	}
+	cmpFuncInit(info);
 
 	if (s->nelems > 1)
 	{
 		Datum	*tmp, *dr;
-		int32	cmp, num =  s->nelems;
+		int32	num =  s->nelems;
 
-		fmgr_info(info->cmpFuncOid, &cmpFunc);
-
-		tmp = dr = s->elems;
-		while (tmp - s->elems < num)
+		if (onlyDuplicate)
 		{
-			cmp = (tmp == dr) ? 0 : cmpAscArrayElem(tmp, dr, &cmpFunc);
+			Datum	*head = s->elems;
 
-			if ( cmp != 0 )
-				*(++dr) = *tmp++;
-			else
-				tmp++;
+			dr = s->elems;
+			tmp = s->elems + 1;
+
+			while (tmp - s->elems < num)
+			{
+				while (tmp - s->elems < num && cmpAscArrayElem(tmp, dr, &info->cmpFunc) == 0)
+					tmp++;
+
+				if (tmp - dr > 1)
+				{
+					*head = *dr;
+					head++;
+				}
+				dr = tmp;
+			}
+
+			s->nelems = head - s->elems;
 		}
+		else
+		{
+			dr = s->elems;
+			tmp = s->elems + 1;
 
-		s->nelems = dr + 1 - s->elems;
+			while (tmp - s->elems < num)
+			{
+				if (cmpAscArrayElem(tmp, dr, &info->cmpFunc) != 0 )
+					*(++dr) = *tmp++;
+				else
+					tmp++;
+			}
+
+			s->nelems = dr + 1 - s->elems;
+		}
+	}
+	else if (onlyDuplicate)
+	{
+		s->nelems = 0;
 	}
 }
 
@@ -209,14 +263,17 @@ aa_set(PG_FUNCTION_ARGS)
 {
 	Datum 				a = PG_GETARG_DATUM(0);
 	Oid 				typid = get_fn_expr_argtype(fcinfo->flinfo, 0);
-	AnyArrayTypeInfo	info;
+	AnyArrayTypeInfo	*info;
 	SimpleArray			s;
 	ArrayType			*r;
 
-	getAnyArrayTypeInfo(&info, typid);
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, typid);
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+
 	s.nelems = 1;
 	s.elems = &a;
-	s.info = &info;
+	s.info = info;
 
 	r = SimpleArray2Array(&s);
 
@@ -264,15 +321,9 @@ aa_sort(PG_FUNCTION_ARGS)
 					 errmsg("second parameter must be \"ASC\" or \"DESC\"")));
 	}
 
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
 	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-
-	if (info == NULL || info->typid != ARR_ELEMTYPE(a))
-	{
-		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-													  sizeof(*info));
-		info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-		info = getAnyArrayTypeInfo(info, ARR_ELEMTYPE(a));
-	}
 
 	s = Array2SimpleArray(info, a);
 	sortSimpleArray(s, direction);
@@ -295,15 +346,9 @@ aa_sort_asc(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
 	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-
-	if (info == NULL || info->typid != ARR_ELEMTYPE(a))
-	{
-		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-													  sizeof(*info));
-		info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-		info = getAnyArrayTypeInfo(info, ARR_ELEMTYPE(a));
-	}
 
 	s = Array2SimpleArray(info, a);
 	sortSimpleArray(s, 1);
@@ -325,15 +370,9 @@ aa_sort_desc(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
 	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-
-	if (info == NULL || info->typid != ARR_ELEMTYPE(a))
-	{
-		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-													  sizeof(*info));
-		info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-		info = getAnyArrayTypeInfo(info, ARR_ELEMTYPE(a));
-	}
 
 	s = Array2SimpleArray(info, a);
 	sortSimpleArray(s, -1);
@@ -354,18 +393,35 @@ aa_uniq(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
 	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
 
-	if (info == NULL || info->typid != ARR_ELEMTYPE(a))
-	{
-		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-													  sizeof(*info));
-		info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-		info = getAnyArrayTypeInfo(info, ARR_ELEMTYPE(a));
-	}
+	s = Array2SimpleArray(info, a);
+	uniqSimpleArray(s, false);
+	r = SimpleArray2Array(s);
+
+	PG_FREE_IF_COPY(a, 0);
+	PG_RETURN_POINTER(r);
+}
+
+PG_FUNCTION_INFO_V1(aa_uniqd);
+Datum
+aa_uniqd(PG_FUNCTION_ARGS)
+{
+	ArrayType   		*a = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType			*r;
+	SimpleArray			*s;
+	AnyArrayTypeInfo	*info;
+
+	CHECKARRVALID(a);
+
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
 
 	s = Array2SimpleArray(info, a);
-	uniqSimpleArray(s);
+	uniqSimpleArray(s, true);
 	r = SimpleArray2Array(s);
 
 	PG_FREE_IF_COPY(a, 0);
@@ -380,45 +436,28 @@ aa_idx(PG_FUNCTION_ARGS)
 	Datum				e = PG_GETARG_DATUM(1);
 	SimpleArray			*s;
 	AnyArrayTypeInfo	*info;
-	FmgrInfo			cmpFunc;
 	int					i;
 
 	CHECKARRVALID(a);
-
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-
-	if (info == NULL || info->typid != ARR_ELEMTYPE(a))
-	{
-		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-													  sizeof(*info));
-		info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-		info = getAnyArrayTypeInfo(info, ARR_ELEMTYPE(a));
-	}
 
 	if (get_fn_expr_argtype(fcinfo->flinfo, 1) != ARR_ELEMTYPE(a))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("array type doesn't match search type")));
 
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	cmpFuncInit(info);
+
 	s = Array2SimpleArray(info, a);
-
-	if (!OidIsValid(info->cmpFuncOid))
-	{
-		info->cmpFuncOid = getAMProc(BTREE_AM_OID, info->typid);
-
-		if (!OidIsValid(info->cmpFuncOid))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("could not find compare function")));
-	}
 
 	if (info->typlen < 0)
 		e = PointerGetDatum(PG_DETOAST_DATUM(e));
 
-	fmgr_info(info->cmpFuncOid, &cmpFunc);
 	for(i=0; i<s->nelems; i++)
 	{
-		if (cmpAscArrayElem(s->elems + i, &e, &cmpFunc) == 0)
+		if (cmpAscArrayElem(s->elems + i, &e, &info->cmpFunc) == 0)
 			break;
 	}
 
@@ -442,15 +481,9 @@ aa_subarray(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
 	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-
-	if (info == NULL || info->typid != ARR_ELEMTYPE(a))
-	{
-		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-													  sizeof(*info));
-		info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-		info = getAnyArrayTypeInfo(info, ARR_ELEMTYPE(a));
-	}
 
 	s = Array2SimpleArray(info, a);
 
@@ -503,36 +536,20 @@ aa_union_elem(PG_FUNCTION_ARGS)
 	AnyArrayTypeInfo	*info;
 	ArrayType			*r;
 	int 				i;
-	FmgrInfo			cmpFunc;
 
 	CHECKARRVALID(a);
-
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-
-	if (info == NULL || info->typid != ARR_ELEMTYPE(a))
-	{
-		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt,
-													  sizeof(*info));
-		info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
-		info = getAnyArrayTypeInfo(info, ARR_ELEMTYPE(a));
-	}
 
 	if (get_fn_expr_argtype(fcinfo->flinfo, 1) != ARR_ELEMTYPE(a))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("array type doesn't match search type")));
+					 errmsg("array type doesn't match new element type")));
+
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	cmpFuncInit(info);
 
 	s = Array2SimpleArray(info, a);
-
-	if (!OidIsValid(info->cmpFuncOid))
-	{
-		info->cmpFuncOid = getAMProc(BTREE_AM_OID, info->typid);
-
-		if (!OidIsValid(info->cmpFuncOid))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("could not find compare function")));
-	}
 
 	if (info->typlen < 0)
 		e = PointerGetDatum(PG_DETOAST_DATUM(e));
@@ -542,10 +559,9 @@ aa_union_elem(PG_FUNCTION_ARGS)
 	else
 		s->elems = repalloc(s->elems, (s->nelems + 1) * sizeof(*s->elems));
 
-	fmgr_info(info->cmpFuncOid, &cmpFunc);
 	for(i=0; i<s->nelems; i++)
 	{
-		if (cmpAscArrayElem(s->elems + i, &e, &cmpFunc) == 0)
+		if (cmpAscArrayElem(s->elems + i, &e, &info->cmpFunc) == 0)
 			break;
 	}
 
@@ -562,4 +578,298 @@ aa_union_elem(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(r);
 }
 
+PG_FUNCTION_INFO_V1(aa_union_array);
+Datum
+aa_union_array(PG_FUNCTION_ARGS)
+{
+	ArrayType           *a = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType           *b = PG_GETARG_ARRAYTYPE_P(1);
+	SimpleArray			*sb, *sa;
+	AnyArrayTypeInfo	*info;
+	ArrayType			*r;
+
+	CHECKARRVALID(a);
+	CHECKARRVALID(b);
+
+	if (ARR_ELEMTYPE(a) != ARR_ELEMTYPE(b))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("array types aren't matched")));
+
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+
+	sa = Array2SimpleArray(info, a);
+	sb = Array2SimpleArray(info, b);
+
+	if (sa->nelems == 0)
+	{
+		sa = sb;
+		goto out;
+	}
+	else if (sb->nelems == 0)
+	{
+		goto out;
+	}
+
+	sa->elems = repalloc(sa->elems, sizeof(*sa->elems) * (sa->nelems + sb->nelems));
+	memcpy(sa->elems + sa->nelems, sb->elems, sizeof(*sa->elems) * sb->nelems);
+	sa->nelems += sb->nelems;
+	sortSimpleArray(sa, 1);
+	uniqSimpleArray(sa, false);
+
+out:
+	r = SimpleArray2Array(sa);
+
+	PG_FREE_IF_COPY(a, 0);
+	PG_FREE_IF_COPY(b, 1);
+	PG_RETURN_POINTER(r);
+}
+
+PG_FUNCTION_INFO_V1(aa_intersect_array);
+Datum
+aa_intersect_array(PG_FUNCTION_ARGS)
+{
+	ArrayType           *a = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType           *b = PG_GETARG_ARRAYTYPE_P(1);
+	SimpleArray			*sb, *sa;
+	AnyArrayTypeInfo	*info;
+	ArrayType			*r;
+
+	CHECKARRVALID(a);
+	CHECKARRVALID(b);
+
+	if (ARR_ELEMTYPE(a) != ARR_ELEMTYPE(b))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("array types aren't matched")));
+
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+
+	sa = Array2SimpleArray(info, a);
+	sb = Array2SimpleArray(info, b);
+
+	if (sa->nelems == 0 || sb->nelems == 0)
+	{
+		sa->nelems = 0;
+		goto out;
+	}
+
+	sa->elems = repalloc(sa->elems, sizeof(*sa->elems) * (sa->nelems + sb->nelems));
+	memcpy(sa->elems + sa->nelems, sb->elems, sizeof(*sa->elems) * sb->nelems);
+	sa->nelems += sb->nelems;
+	sortSimpleArray(sa, 1);
+	uniqSimpleArray(sa, true);
+
+out:
+	r = SimpleArray2Array(sa);
+
+	PG_FREE_IF_COPY(a, 0);
+	PG_FREE_IF_COPY(b, 1);
+	PG_RETURN_POINTER(r);
+}
+
+PG_FUNCTION_INFO_V1(aa_subtract_array);
+Datum
+aa_subtract_array(PG_FUNCTION_ARGS)
+{
+	ArrayType           *a = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType           *b = PG_GETARG_ARRAYTYPE_P(1);
+	SimpleArray			*sb, *sa, sr;
+	AnyArrayTypeInfo	*info;
+	ArrayType			*r;
+	Datum				*pa, *pb, *pr;
+	int					cmp;
+
+	CHECKARRVALID(a);
+	CHECKARRVALID(b);
+
+	if (ARR_ELEMTYPE(a) != ARR_ELEMTYPE(b))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("array types aren't matched")));
+
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+
+	sa = Array2SimpleArray(info, a);
+	sb = Array2SimpleArray(info, b);
+
+	sr = *sa;
+	if (sb->nelems == 0)
+		goto out;
+
+	sortSimpleArray(sa, 1);
+	uniqSimpleArray(sa, false);
+	sortSimpleArray(sb, 1);
+	uniqSimpleArray(sb, false);
+
+	sr.elems = palloc(sizeof(*sr.elems) * sr.nelems);
+	
+	pa = sa->elems;
+	pb = sb->elems;
+	pr = sr.elems;
+
+	while(pa - sa->elems < sa->nelems)
+	{
+		if (pb - sb->elems >= sb->nelems)
+			cmp = -1;
+		else
+			cmp = cmpAscArrayElem(pa, pb, &info->cmpFunc);
+
+		if (cmp < 0)
+		{
+			*pr = *pa;
+			pr++;
+			pa++;
+		}
+		else 
+		{
+			if (cmp == 0)
+				pa++;
+			pb++;
+		}
+	}
+
+	sr.nelems = pr - sr.elems;
+
+out:
+	r = SimpleArray2Array(&sr);
+
+	PG_FREE_IF_COPY(a, 0);
+	PG_FREE_IF_COPY(b, 1);
+	PG_RETURN_POINTER(r);
+}
+
+static int
+numOfIntersect(SimpleArray *a, SimpleArray *b)
+{
+	int					cnt = 0,
+						cmp;
+	Datum				*aptr = a->elems,
+						*bptr = b->elems;
+	AnyArrayTypeInfo	*info = a->info;
+
+	cmpFuncInit(info);
+
+	while(aptr - a->elems < a->nelems && bptr - b->elems < b->nelems)
+	{
+		cmp = cmpAscArrayElem(aptr, bptr, &info->cmpFunc);
+
+		if (cmp < 0)
+			aptr++;
+		else if (cmp > 0)
+			bptr++;
+		else
+		{
+			cnt++;
+			aptr++;
+			bptr++;
+		}
+	}
+
+	return cnt;
+}
+
+static double
+getSimilarity(SimpleArray *sa, SimpleArray *sb)
+{
+	int			inter;
+	double		result = 0.0;
+
+	sortSimpleArray(sa, 1);
+	uniqSimpleArray(sa, false);
+	sortSimpleArray(sb, 1);
+	uniqSimpleArray(sb, false);
+
+	inter = numOfIntersect(sa, sb);
+
+	switch(SmlType)
+	{
+		case AA_Cosine:
+			result = ((double)inter) / sqrt(((double)sa->nelems) * ((double)sb->nelems));
+			break;
+		case AA_Overlap:
+			result = ((double)inter) / (((double)sa->nelems) + ((double)sb->nelems) - ((double)inter));
+			break;
+		default:
+			elog(ERROR, "unknown similarity type");
+	}
+
+	return result;
+}
+
+PG_FUNCTION_INFO_V1(aa_similarity);
+Datum
+aa_similarity(PG_FUNCTION_ARGS)
+{
+	ArrayType			*a = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType			*b = PG_GETARG_ARRAYTYPE_P(1);
+	AnyArrayTypeInfo	*info;
+	SimpleArray			*sa, *sb;
+	double				result = 0.0;
+	
+	CHECKARRVALID(a);
+	CHECKARRVALID(b);
+
+	if (ARR_ELEMTYPE(a) != ARR_ELEMTYPE(b))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("array types aren't matched")));
+
+	if (ARRISVOID(a) || ARRISVOID(b))
+		PG_RETURN_FLOAT4(0.0);
+
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+
+	sa = Array2SimpleArray(info, a);
+	sb = Array2SimpleArray(info, b);
+
+	result = getSimilarity(sa, sb);
+
+	PG_FREE_IF_COPY(a, 0);
+	PG_FREE_IF_COPY(b, 1);
+	PG_RETURN_FLOAT4(result);
+}
+
+PG_FUNCTION_INFO_V1(aa_similarity_op);
+Datum
+aa_similarity_op(PG_FUNCTION_ARGS)
+{
+	ArrayType			*a = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType			*b = PG_GETARG_ARRAYTYPE_P(1);
+	AnyArrayTypeInfo	*info;
+	SimpleArray			*sa, *sb;
+	double				result = 0.0;
+	
+	CHECKARRVALID(a);
+	CHECKARRVALID(b);
+
+	if (ARR_ELEMTYPE(a) != ARR_ELEMTYPE(b))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("array types aren't matched")));
+
+	if (ARRISVOID(a) || ARRISVOID(b))
+		PG_RETURN_BOOL(false);
+
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+
+	sa = Array2SimpleArray(info, a);
+	sb = Array2SimpleArray(info, b);
+
+	result = getSimilarity(sa, sb);
+
+	PG_FREE_IF_COPY(a, 0);
+	PG_FREE_IF_COPY(b, 1);
+	PG_RETURN_BOOL(result >= SmlLimit);
+}
 

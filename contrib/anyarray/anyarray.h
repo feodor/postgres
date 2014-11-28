@@ -14,16 +14,23 @@
 #ifndef _ANYARRAY_H_
 #define _ANYARRAY_H_
 #include "postgres.h"
+#include "fmgr.h"
+#include "nodes/memnodes.h"
 #include "utils/array.h"
 
 typedef struct AnyArrayTypeInfo
 {
-	Oid			typid;
-	Oid			hashFuncOid;
-	Oid			cmpFuncOid;
-	int16		typlen;
-	bool		typbyval;
-	char		typalign;
+	Oid				typid;
+	int16			typlen;
+	bool			typbyval;
+	char			typalign;
+	MemoryContext	funcCtx;
+	Oid				cmpFuncOid;
+	bool			cmpFuncInited;
+	FmgrInfo		cmpFunc;
+	bool			hashFuncInited;
+	Oid				hashFuncOid;
+	FmgrInfo		hashFunc;
 } AnyArrayTypeInfo;
 
 typedef struct SimpleArray
@@ -51,6 +58,15 @@ typedef struct SimpleArray
 						 errmsg("array must not contain nulls"))); \
 		} \
 	} while(0)
+
+
+typedef enum SimilarityType {
+	AA_Cosine,
+	AA_Overlap
+} SimilarityType;
+
+extern SimilarityType SmlType;
+extern double SmlLimit;
 
 #endif
 

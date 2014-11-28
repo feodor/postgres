@@ -47,6 +47,11 @@ CREATE FUNCTION uniq(anyarray)
 	AS 'MODULE_PATHNAME', 'aa_uniq'
 	LANGUAGE C STRICT IMMUTABLE;
 
+CREATE FUNCTION uniq_d(anyarray)
+	RETURNS anyarray
+	AS 'MODULE_PATHNAME', 'aa_uniqd'
+	LANGUAGE C STRICT IMMUTABLE;
+
 CREATE FUNCTION idx(anyarray, anyelement)
 	RETURNS int4
 	AS 'MODULE_PATHNAME', 'aa_idx'
@@ -80,6 +85,17 @@ CREATE OPERATOR - (
 	PROCEDURE = array_remove
 );
 
+CREATE FUNCTION subtract_array(anyarray, anyarray)
+	RETURNS anyarray
+	AS 'MODULE_PATHNAME', 'aa_subtract_array'
+	LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR - (
+	LEFTARG = anyarray,
+	RIGHTARG = anyarray,
+	PROCEDURE = subtract_array
+);
+
 CREATE FUNCTION union_elem(anyarray, anyelement)
 	RETURNS anyarray
 	AS 'MODULE_PATHNAME', 'aa_union_elem'
@@ -90,3 +106,45 @@ CREATE OPERATOR | (
 	RIGHTARG = anyelement,
 	PROCEDURE = union_elem
 );
+
+CREATE FUNCTION union_array(anyarray, anyarray)
+	RETURNS anyarray
+	AS 'MODULE_PATHNAME', 'aa_union_array'
+	LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR | (
+	LEFTARG = anyarray,
+	RIGHTARG = anyarray,
+	PROCEDURE = union_array
+);
+
+CREATE FUNCTION intersect_array(anyarray, anyarray)
+	RETURNS anyarray
+	AS 'MODULE_PATHNAME', 'aa_intersect_array'
+	LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR & (
+	LEFTARG = anyarray,
+	RIGHTARG = anyarray,
+	PROCEDURE = intersect_array
+);
+
+CREATE FUNCTION similarity(anyarray, anyarray)
+	RETURNS float4
+	AS 'MODULE_PATHNAME', 'aa_similarity'
+	LANGUAGE C STRICT IMMUTABLE;
+
+CREATE FUNCTION similarity_op(anyarray, anyarray)
+	RETURNS bool
+	AS 'MODULE_PATHNAME', 'aa_similarity_op'
+	LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR % (
+	LEFTARG = anyarray,
+	RIGHTARG = anyarray,
+	PROCEDURE = similarity_op,
+	COMMUTATOR = '%',
+	RESTRICT = contsel,
+	JOIN = contjoinsel
+);
+
