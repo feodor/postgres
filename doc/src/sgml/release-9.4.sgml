@@ -503,7 +503,7 @@
        </para>
 
        <para>
-        This feature is illustrated in <xref linkend="test-shm-mq">.
+        This feature is illustrated in <filename>contrib/test_shm_mq</filename>.
        </para>
       </listitem>
 
@@ -1840,14 +1840,6 @@
    <sect3>
     <title><link linkend="libpq"><application>libpq</></link></title>
      <itemizedlist>
-
-      <listitem>
-       <para>
-        Add libpq function <link
-        linkend="libpq-pqhostaddr"><function>PQhostaddr()</></link>
-        to return the server's <acronym>IP</> address (Fujii Masao)
-       </para>
-      </listitem>
 
       <listitem>
        <para>
