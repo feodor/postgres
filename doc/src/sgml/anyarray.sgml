@@ -99,6 +99,14 @@
      </row>
 
      <row>
+      <entry><function>uniq_d(anyarray)</function><indexterm><primary>uniq_d</primary></indexterm></entry>
+      <entry><type>anyarray</type></entry>
+      <entry>leave only duplicates (similar to <command>uniq -d</command>)</entry>
+      <entry><literal>uniq_d(sort('{1,2,3,2,1}'::int[]))</literal></entry>
+      <entry><literal>{1,2}</literal></entry>
+     </row>
+
+     <row>
       <entry><function>idx(anyarray, anyelement item)</function><indexterm><primary>idx</primary></indexterm></entry>
       <entry><type>int</type></entry>
       <entry>index of first element matching <parameter>item</> (0 if none)</entry>
