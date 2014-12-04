@@ -1,5 +1,3 @@
-CREATE EXTENSION anyarray;
-
 SELECT anyset(1234);
 SELECT icount('{1234234,0234234}'::int[]);
 SELECT sort('{1234234,-30,0234234}'::int[]);
@@ -100,5 +98,4 @@ SELECT '{3,2}'::int[] % '{3,2,1}' AS "true";
 SET anyarray.similarity_threshold = 0.7;
 
 SELECT '{3,2}'::int[] % '{3,2,1}' AS "false";
-
 

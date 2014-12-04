@@ -18,7 +18,7 @@
 
 
 #define	CMP(a, b, cmpFunc) \
-	DatumGetInt32(FunctionCall2Coll((cmpFunc), DEFAULT_COLLATION_OID, *(Datum*)(a), *(Datum*)(b)))
+	DatumGetInt32(FunctionCall2Coll((cmpFunc), DEFAULT_COLLATION_OID, (a), (b)))
 
 PG_FUNCTION_INFO_V1(aa_set);
 Datum
@@ -220,7 +220,7 @@ aa_idx(PG_FUNCTION_ARGS)
 
 	for(i=0; i<s->nelems; i++)
 	{
-		if (CMP(s->elems + i, &e, &info->cmpFunc) == 0)
+		if (CMP(s->elems[i], e, &info->cmpFunc) == 0)
 			break;
 	}
 
@@ -324,7 +324,7 @@ aa_union_elem(PG_FUNCTION_ARGS)
 
 	for(i=0; i<s->nelems; i++)
 	{
-		if (CMP(s->elems + i, &e, &info->cmpFunc) == 0)
+		if (CMP(s->elems[i], e, &info->cmpFunc) == 0)
 			break;
 	}
 
@@ -482,7 +482,7 @@ aa_subtract_array(PG_FUNCTION_ARGS)
 		if (pb - sb->elems >= sb->nelems)
 			cmp = -1;
 		else
-			cmp = CMP(pa, pb, &info->cmpFunc);
+			cmp = CMP(*pa, *pb, &info->cmpFunc);
 
 		if (cmp < 0)
 		{

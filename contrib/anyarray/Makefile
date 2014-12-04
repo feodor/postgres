@@ -1,13 +1,14 @@
 # contrib/anyarray/Makefile
 
 MODULE_big = anyarray
-OBJS = anyarray.o anyarray_util.o anyarray_guc.o
+OBJS = anyarray.o anyarray_util.o anyarray_guc.o \
+		anyarray_gist.o
 
 EXTENSION = anyarray
 DATA = anyarray--1.0.sql
 PGFILEDESC = "anyarray - functions and operators for one-dimensional arrays"
 
-REGRESS = anyarray
+REGRESS = init anyarray int4
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config

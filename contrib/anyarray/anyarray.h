@@ -68,6 +68,8 @@ typedef enum SimilarityType {
 extern SimilarityType SmlType;
 extern double SmlLimit;
 
+#define AnyAarraySimilarityStrategy	(16)
+
 /*
  * Various support functions
  */
