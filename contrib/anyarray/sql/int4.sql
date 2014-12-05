@@ -31,6 +31,10 @@ SET anyarray.similarity_type=cosine;
 SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 SET anyarray.similarity_type=jaccard;
 SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SET anyarray.similarity_type=overlap;
+SET anyarray.similarity_threshold = 3;
+SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+RESET anyarray.similarity_threshold;
 
 CREATE INDEX idx_test_int4 ON test_int4 USING gist (v _int4_aa_ops);
 
@@ -50,4 +54,8 @@ SET anyarray.similarity_type=cosine;
 SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 SET anyarray.similarity_type=jaccard;
 SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SET anyarray.similarity_type=overlap;
+SET anyarray.similarity_threshold = 3;
+SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+RESET anyarray.similarity_threshold;
 
