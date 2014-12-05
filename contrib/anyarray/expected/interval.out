@@ -1,0 +1,501 @@
+SELECT
+    t,
+	ARRAY(
+		SELECT
+			v::text::interval
+		FROM
+			generate_series(max(0, t - 10),  t) as v
+	) AS v
+	INTO test_interval
+FROM
+	generate_series(1, 200) as t;
+SET anyarray.similarity_type=cosine;
+SELECT  t, similarity(v, '{10,9,8,7,6,5,4,3,2,1}') AS s FROM test_interval 
+	WHERE v % '{10,9,8,7,6,5,4,3,2,1}' ORDER BY s DESC, t;
+ t  |    s     
+----+----------
+ 10 | 0.953463
+ 11 | 0.953463
+  9 |      0.9
+ 12 | 0.858116
+  8 | 0.843274
+  7 | 0.782624
+ 13 |  0.76277
+  6 | 0.717137
+ 14 | 0.667424
+  5 | 0.645497
+(10 rows)
+
+SELECT  t, similarity(v, '{50,49,8,7,6,5,4,3,2,1}') AS s FROM test_interval 
+	WHERE v % '{50,49,8,7,6,5,4,3,2,1}' ORDER BY s DESC, t;
+ t  |    s     
+----+----------
+  8 | 0.843274
+  9 |      0.8
+  7 | 0.782624
+ 10 |  0.76277
+ 11 |  0.76277
+  6 | 0.717137
+ 12 | 0.667424
+  5 | 0.645497
+(8 rows)
+
+SET anyarray.similarity_type=jaccard;
+SELECT  t, similarity(v, '{10,9,8,7,6,5,4,3,2,1}') AS s FROM test_interval 
+	WHERE v % '{10,9,8,7,6,5,4,3,2,1}' ORDER BY s DESC, t;
+ t  |    s     
+----+----------
+ 10 | 0.909091
+ 11 | 0.909091
+  9 | 0.818182
+ 12 |     0.75
+  8 | 0.727273
+  7 | 0.636364
+ 13 | 0.615385
+(7 rows)
+
+SELECT  t, similarity(v, '{50,49,8,7,6,5,4,3,2,1}') AS s FROM test_interval 
+	WHERE v % '{50,49,8,7,6,5,4,3,2,1}' ORDER BY s DESC, t;
+ t  |    s     
+----+----------
+  8 | 0.727273
+  9 | 0.666667
+  7 | 0.636364
+ 10 | 0.615385
+ 11 | 0.615385
+(5 rows)
+
+SELECT t, v FROM test_interval WHERE v && '{43,50}' ORDER BY t;
+ t  |                                                                   v                                                                   
+----+---------------------------------------------------------------------------------------------------------------------------------------
+ 43 | {"@ 33 secs","@ 34 secs","@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs"}
+ 44 | {"@ 34 secs","@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs"}
+ 45 | {"@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs"}
+ 46 | {"@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs"}
+ 47 | {"@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs"}
+ 48 | {"@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs"}
+ 49 | {"@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs"}
+ 50 | {"@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs"}
+ 51 | {"@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs"}
+ 52 | {"@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs"}
+ 53 | {"@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs"}
+ 54 | {"@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs"}
+ 55 | {"@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs"}
+ 56 | {"@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs"}
+ 57 | {"@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs"}
+ 58 | {"@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs"}
+ 59 | {"@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs","@ 59 secs"}
+ 60 | {"@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs","@ 59 secs","@ 1 min"}
+(18 rows)
+
+SELECT t, v FROM test_interval WHERE v @> '{43,50}' ORDER BY t;
+ t  |                                                                   v                                                                   
+----+---------------------------------------------------------------------------------------------------------------------------------------
+ 50 | {"@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs"}
+ 51 | {"@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs"}
+ 52 | {"@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs"}
+ 53 | {"@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs"}
+(4 rows)
+
+SELECT t, v FROM test_interval WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                           v                                                           
+----+-----------------------------------------------------------------------------------------------------------------------
+  1 | {"@ 0","@ 1 sec"}
+  2 | {"@ 0","@ 1 sec","@ 2 secs"}
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+(10 rows)
+
+SELECT t, v FROM test_interval WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                           v                                                           
+----+-----------------------------------------------------------------------------------------------------------------------
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+(1 row)
+
+SET anyarray.similarity_type=cosine;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                                v                                                                
+----+---------------------------------------------------------------------------------------------------------------------------------
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+ 13 | {"@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs"}
+ 14 | {"@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs"}
+(12 rows)
+
+SET anyarray.similarity_type=jaccard;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                               v                                                               
+----+-------------------------------------------------------------------------------------------------------------------------------
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+(7 rows)
+
+SET anyarray.similarity_type=overlap;
+SET anyarray.similarity_threshold = 3;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                                  v                                                                  
+----+-------------------------------------------------------------------------------------------------------------------------------------
+  2 | {"@ 0","@ 1 sec","@ 2 secs"}
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+ 13 | {"@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs"}
+ 14 | {"@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs"}
+ 15 | {"@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs"}
+ 16 | {"@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs"}
+ 17 | {"@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs","@ 17 secs"}
+ 18 | {"@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs","@ 17 secs","@ 18 secs"}
+(17 rows)
+
+RESET anyarray.similarity_threshold;
+CREATE INDEX idx_test_interval ON test_interval USING gist (v _interval_aa_ops);
+SET enable_seqscan=off;
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v && '{43,50}' ORDER BY t;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_interval
+         Recheck Cond: (v && '{"@ 43 secs","@ 50 secs"}'::interval[])
+         ->  Bitmap Index Scan on idx_test_interval
+               Index Cond: (v && '{"@ 43 secs","@ 50 secs"}'::interval[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v @> '{43,50}' ORDER BY t;
+                             QUERY PLAN                             
+--------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Index Scan using idx_test_interval on test_interval
+         Index Cond: (v @> '{"@ 43 secs","@ 50 secs"}'::interval[])
+(4 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Index Scan using idx_test_interval on test_interval
+         Index Cond: (v <@ '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+(4 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Index Scan using idx_test_interval on test_interval
+         Index Cond: (v = '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+(4 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Index Scan using idx_test_interval on test_interval
+         Index Cond: (v % '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+(4 rows)
+
+SELECT t, v FROM test_interval WHERE v && '{43,50}' ORDER BY t;
+ t  |                                                                   v                                                                   
+----+---------------------------------------------------------------------------------------------------------------------------------------
+ 43 | {"@ 33 secs","@ 34 secs","@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs"}
+ 44 | {"@ 34 secs","@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs"}
+ 45 | {"@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs"}
+ 46 | {"@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs"}
+ 47 | {"@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs"}
+ 48 | {"@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs"}
+ 49 | {"@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs"}
+ 50 | {"@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs"}
+ 51 | {"@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs"}
+ 52 | {"@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs"}
+ 53 | {"@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs"}
+ 54 | {"@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs"}
+ 55 | {"@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs"}
+ 56 | {"@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs"}
+ 57 | {"@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs"}
+ 58 | {"@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs"}
+ 59 | {"@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs","@ 59 secs"}
+ 60 | {"@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs","@ 59 secs","@ 1 min"}
+(18 rows)
+
+SELECT t, v FROM test_interval WHERE v @> '{43,50}' ORDER BY t;
+ t  |                                                                   v                                                                   
+----+---------------------------------------------------------------------------------------------------------------------------------------
+ 50 | {"@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs"}
+ 51 | {"@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs"}
+ 52 | {"@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs"}
+ 53 | {"@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs"}
+(4 rows)
+
+SELECT t, v FROM test_interval WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                           v                                                           
+----+-----------------------------------------------------------------------------------------------------------------------
+  1 | {"@ 0","@ 1 sec"}
+  2 | {"@ 0","@ 1 sec","@ 2 secs"}
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+(10 rows)
+
+SELECT t, v FROM test_interval WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                           v                                                           
+----+-----------------------------------------------------------------------------------------------------------------------
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+(1 row)
+
+SET anyarray.similarity_type=cosine;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                                v                                                                
+----+---------------------------------------------------------------------------------------------------------------------------------
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+ 13 | {"@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs"}
+ 14 | {"@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs"}
+(12 rows)
+
+SET anyarray.similarity_type=jaccard;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                               v                                                               
+----+-------------------------------------------------------------------------------------------------------------------------------
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+(7 rows)
+
+SET anyarray.similarity_type=overlap;
+SET anyarray.similarity_threshold = 3;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                                  v                                                                  
+----+-------------------------------------------------------------------------------------------------------------------------------------
+  2 | {"@ 0","@ 1 sec","@ 2 secs"}
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+ 13 | {"@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs"}
+ 14 | {"@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs"}
+ 15 | {"@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs"}
+ 16 | {"@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs"}
+ 17 | {"@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs","@ 17 secs"}
+ 18 | {"@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs","@ 17 secs","@ 18 secs"}
+(17 rows)
+
+RESET anyarray.similarity_threshold;
+DROP INDEX idx_test_interval;
+CREATE INDEX idx_test_interval ON test_interval USING gin (v _interval_aa_ops);
+SET enable_seqscan=off;
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v && '{43,50}' ORDER BY t;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_interval
+         Recheck Cond: (v && '{"@ 43 secs","@ 50 secs"}'::interval[])
+         ->  Bitmap Index Scan on idx_test_interval
+               Index Cond: (v && '{"@ 43 secs","@ 50 secs"}'::interval[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v @> '{43,50}' ORDER BY t;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_interval
+         Recheck Cond: (v @> '{"@ 43 secs","@ 50 secs"}'::interval[])
+         ->  Bitmap Index Scan on idx_test_interval
+               Index Cond: (v @> '{"@ 43 secs","@ 50 secs"}'::interval[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_interval
+         Recheck Cond: (v <@ '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+         ->  Bitmap Index Scan on idx_test_interval
+               Index Cond: (v <@ '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_interval
+         Recheck Cond: (v = '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+         ->  Bitmap Index Scan on idx_test_interval
+               Index Cond: (v = '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_interval
+         Recheck Cond: (v % '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+         ->  Bitmap Index Scan on idx_test_interval
+               Index Cond: (v % '{"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}'::interval[])
+(6 rows)
+
+SELECT t, v FROM test_interval WHERE v && '{43,50}' ORDER BY t;
+ t  |                                                                   v                                                                   
+----+---------------------------------------------------------------------------------------------------------------------------------------
+ 43 | {"@ 33 secs","@ 34 secs","@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs"}
+ 44 | {"@ 34 secs","@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs"}
+ 45 | {"@ 35 secs","@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs"}
+ 46 | {"@ 36 secs","@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs"}
+ 47 | {"@ 37 secs","@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs"}
+ 48 | {"@ 38 secs","@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs"}
+ 49 | {"@ 39 secs","@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs"}
+ 50 | {"@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs"}
+ 51 | {"@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs"}
+ 52 | {"@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs"}
+ 53 | {"@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs"}
+ 54 | {"@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs"}
+ 55 | {"@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs"}
+ 56 | {"@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs"}
+ 57 | {"@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs"}
+ 58 | {"@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs"}
+ 59 | {"@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs","@ 59 secs"}
+ 60 | {"@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs","@ 54 secs","@ 55 secs","@ 56 secs","@ 57 secs","@ 58 secs","@ 59 secs","@ 1 min"}
+(18 rows)
+
+SELECT t, v FROM test_interval WHERE v @> '{43,50}' ORDER BY t;
+ t  |                                                                   v                                                                   
+----+---------------------------------------------------------------------------------------------------------------------------------------
+ 50 | {"@ 40 secs","@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs"}
+ 51 | {"@ 41 secs","@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs"}
+ 52 | {"@ 42 secs","@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs"}
+ 53 | {"@ 43 secs","@ 44 secs","@ 45 secs","@ 46 secs","@ 47 secs","@ 48 secs","@ 49 secs","@ 50 secs","@ 51 secs","@ 52 secs","@ 53 secs"}
+(4 rows)
+
+SELECT t, v FROM test_interval WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                           v                                                           
+----+-----------------------------------------------------------------------------------------------------------------------
+  1 | {"@ 0","@ 1 sec"}
+  2 | {"@ 0","@ 1 sec","@ 2 secs"}
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+(10 rows)
+
+SELECT t, v FROM test_interval WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                           v                                                           
+----+-----------------------------------------------------------------------------------------------------------------------
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+(1 row)
+
+SET anyarray.similarity_type=cosine;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                                v                                                                
+----+---------------------------------------------------------------------------------------------------------------------------------
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+ 13 | {"@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs"}
+ 14 | {"@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs"}
+(12 rows)
+
+SET anyarray.similarity_type=jaccard;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                               v                                                               
+----+-------------------------------------------------------------------------------------------------------------------------------
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+(7 rows)
+
+SET anyarray.similarity_type=overlap;
+SET anyarray.similarity_threshold = 3;
+SELECT t, v FROM test_interval WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+ t  |                                                                  v                                                                  
+----+-------------------------------------------------------------------------------------------------------------------------------------
+  2 | {"@ 0","@ 1 sec","@ 2 secs"}
+  3 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs"}
+  4 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs"}
+  5 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs"}
+  6 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs"}
+  7 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs"}
+  8 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs"}
+  9 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs"}
+ 10 | {"@ 0","@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs"}
+ 11 | {"@ 1 sec","@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs"}
+ 12 | {"@ 2 secs","@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs"}
+ 13 | {"@ 3 secs","@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs"}
+ 14 | {"@ 4 secs","@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs"}
+ 15 | {"@ 5 secs","@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs"}
+ 16 | {"@ 6 secs","@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs"}
+ 17 | {"@ 7 secs","@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs","@ 17 secs"}
+ 18 | {"@ 8 secs","@ 9 secs","@ 10 secs","@ 11 secs","@ 12 secs","@ 13 secs","@ 14 secs","@ 15 secs","@ 16 secs","@ 17 secs","@ 18 secs"}
+(17 rows)
+
+RESET anyarray.similarity_threshold;

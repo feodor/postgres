@@ -2,15 +2,15 @@ SELECT
     t,
 	ARRAY(
 		SELECT
-			v::int4
+			v::varchar
 		FROM
 			generate_series(max(0, t - 10),  t) as v
 	) AS v
-	INTO test_int4
+	INTO test_varchar
 FROM
 	generate_series(1, 200) as t;
 SET anyarray.similarity_type=cosine;
-SELECT  t, similarity(v, '{10,9,8,7,6,5,4,3,2,1}') AS s FROM test_int4 
+SELECT  t, similarity(v, '{10,9,8,7,6,5,4,3,2,1}') AS s FROM test_varchar 
 	WHERE v % '{10,9,8,7,6,5,4,3,2,1}' ORDER BY s DESC, t;
  t  |    s     
 ----+----------
@@ -26,7 +26,7 @@ SELECT  t, similarity(v, '{10,9,8,7,6,5,4,3,2,1}') AS s FROM test_int4
   5 | 0.645497
 (10 rows)
 
-SELECT  t, similarity(v, '{50,49,8,7,6,5,4,3,2,1}') AS s FROM test_int4 
+SELECT  t, similarity(v, '{50,49,8,7,6,5,4,3,2,1}') AS s FROM test_varchar 
 	WHERE v % '{50,49,8,7,6,5,4,3,2,1}' ORDER BY s DESC, t;
  t  |    s     
 ----+----------
@@ -41,7 +41,7 @@ SELECT  t, similarity(v, '{50,49,8,7,6,5,4,3,2,1}') AS s FROM test_int4
 (8 rows)
 
 SET anyarray.similarity_type=jaccard;
-SELECT  t, similarity(v, '{10,9,8,7,6,5,4,3,2,1}') AS s FROM test_int4 
+SELECT  t, similarity(v, '{10,9,8,7,6,5,4,3,2,1}') AS s FROM test_varchar 
 	WHERE v % '{10,9,8,7,6,5,4,3,2,1}' ORDER BY s DESC, t;
  t  |    s     
 ----+----------
@@ -54,7 +54,7 @@ SELECT  t, similarity(v, '{10,9,8,7,6,5,4,3,2,1}') AS s FROM test_int4
  13 | 0.615385
 (7 rows)
 
-SELECT  t, similarity(v, '{50,49,8,7,6,5,4,3,2,1}') AS s FROM test_int4 
+SELECT  t, similarity(v, '{50,49,8,7,6,5,4,3,2,1}') AS s FROM test_varchar 
 	WHERE v % '{50,49,8,7,6,5,4,3,2,1}' ORDER BY s DESC, t;
  t  |    s     
 ----+----------
@@ -65,7 +65,7 @@ SELECT  t, similarity(v, '{50,49,8,7,6,5,4,3,2,1}') AS s FROM test_int4
  11 | 0.615385
 (5 rows)
 
-SELECT t, v FROM test_int4 WHERE v && '{43,50}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v && '{43,50}' ORDER BY t;
  t  |                 v                  
 ----+------------------------------------
  43 | {33,34,35,36,37,38,39,40,41,42,43}
@@ -88,7 +88,7 @@ SELECT t, v FROM test_int4 WHERE v && '{43,50}' ORDER BY t;
  60 | {50,51,52,53,54,55,56,57,58,59,60}
 (18 rows)
 
-SELECT t, v FROM test_int4 WHERE v @> '{43,50}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v @> '{43,50}' ORDER BY t;
  t  |                 v                  
 ----+------------------------------------
  50 | {40,41,42,43,44,45,46,47,48,49,50}
@@ -97,7 +97,7 @@ SELECT t, v FROM test_int4 WHERE v @> '{43,50}' ORDER BY t;
  53 | {43,44,45,46,47,48,49,50,51,52,53}
 (4 rows)
 
-SELECT t, v FROM test_int4 WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |            v             
 ----+--------------------------
   1 | {0,1}
@@ -112,14 +112,14 @@ SELECT t, v FROM test_int4 WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  10 | {0,1,2,3,4,5,6,7,8,9,10}
 (10 rows)
 
-SELECT t, v FROM test_int4 WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |            v             
 ----+--------------------------
  10 | {0,1,2,3,4,5,6,7,8,9,10}
 (1 row)
 
 SET anyarray.similarity_type=cosine;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |              v               
 ----+------------------------------
   3 | {0,1,2,3}
@@ -137,7 +137,7 @@ SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 (12 rows)
 
 SET anyarray.similarity_type=jaccard;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |             v              
 ----+----------------------------
   6 | {0,1,2,3,4,5,6}
@@ -151,7 +151,7 @@ SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 
 SET anyarray.similarity_type=overlap;
 SET anyarray.similarity_threshold = 3;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |                v                 
 ----+----------------------------------
   2 | {0,1,2}
@@ -174,56 +174,56 @@ SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 (17 rows)
 
 RESET anyarray.similarity_threshold;
-CREATE INDEX idx_test_int4 ON test_int4 USING gist (v _int4_aa_ops);
+CREATE INDEX idx_test_varchar ON test_varchar USING gist (v _varchar_aa_ops);
 SET enable_seqscan=off;
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v && '{43,50}' ORDER BY t;
-                      QUERY PLAN                       
--------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v && '{43,50}' ORDER BY t;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Bitmap Heap Scan on test_int4
-         Recheck Cond: (v && '{43,50}'::integer[])
-         ->  Bitmap Index Scan on idx_test_int4
-               Index Cond: (v && '{43,50}'::integer[])
+   ->  Bitmap Heap Scan on test_varchar
+         Recheck Cond: (v && '{43,50}'::character varying[])
+         ->  Bitmap Index Scan on idx_test_varchar
+               Index Cond: (v && '{43,50}'::character varying[])
 (6 rows)
 
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v @> '{43,50}' ORDER BY t;
-                    QUERY PLAN                     
----------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v @> '{43,50}' ORDER BY t;
+                        QUERY PLAN                         
+-----------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Index Scan using idx_test_int4 on test_int4
-         Index Cond: (v @> '{43,50}'::integer[])
+   ->  Index Scan using idx_test_varchar on test_varchar
+         Index Cond: (v @> '{43,50}'::character varying[])
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Index Scan using idx_test_int4 on test_int4
-         Index Cond: (v <@ '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
+   ->  Index Scan using idx_test_varchar on test_varchar
+         Index Cond: (v <@ '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
-                           QUERY PLAN                            
------------------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Index Scan using idx_test_int4 on test_int4
-         Index Cond: (v = '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
+   ->  Index Scan using idx_test_varchar on test_varchar
+         Index Cond: (v = '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
-                           QUERY PLAN                            
------------------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Index Scan using idx_test_int4 on test_int4
-         Index Cond: (v % '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
+   ->  Index Scan using idx_test_varchar on test_varchar
+         Index Cond: (v % '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
 (4 rows)
 
-SELECT t, v FROM test_int4 WHERE v && '{43,50}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v && '{43,50}' ORDER BY t;
  t  |                 v                  
 ----+------------------------------------
  43 | {33,34,35,36,37,38,39,40,41,42,43}
@@ -246,7 +246,7 @@ SELECT t, v FROM test_int4 WHERE v && '{43,50}' ORDER BY t;
  60 | {50,51,52,53,54,55,56,57,58,59,60}
 (18 rows)
 
-SELECT t, v FROM test_int4 WHERE v @> '{43,50}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v @> '{43,50}' ORDER BY t;
  t  |                 v                  
 ----+------------------------------------
  50 | {40,41,42,43,44,45,46,47,48,49,50}
@@ -255,7 +255,7 @@ SELECT t, v FROM test_int4 WHERE v @> '{43,50}' ORDER BY t;
  53 | {43,44,45,46,47,48,49,50,51,52,53}
 (4 rows)
 
-SELECT t, v FROM test_int4 WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |            v             
 ----+--------------------------
   1 | {0,1}
@@ -270,14 +270,14 @@ SELECT t, v FROM test_int4 WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  10 | {0,1,2,3,4,5,6,7,8,9,10}
 (10 rows)
 
-SELECT t, v FROM test_int4 WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |            v             
 ----+--------------------------
  10 | {0,1,2,3,4,5,6,7,8,9,10}
 (1 row)
 
 SET anyarray.similarity_type=cosine;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |              v               
 ----+------------------------------
   3 | {0,1,2,3}
@@ -295,7 +295,7 @@ SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 (12 rows)
 
 SET anyarray.similarity_type=jaccard;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |             v              
 ----+----------------------------
   6 | {0,1,2,3,4,5,6}
@@ -309,7 +309,7 @@ SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 
 SET anyarray.similarity_type=overlap;
 SET anyarray.similarity_threshold = 3;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |                v                 
 ----+----------------------------------
   2 | {0,1,2}
@@ -332,65 +332,65 @@ SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 (17 rows)
 
 RESET anyarray.similarity_threshold;
-DROP INDEX idx_test_int4;
-CREATE INDEX idx_test_int4 ON test_int4 USING gin (v _int4_aa_ops);
+DROP INDEX idx_test_varchar;
+CREATE INDEX idx_test_varchar ON test_varchar USING gin (v _varchar_aa_ops);
 SET enable_seqscan=off;
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v && '{43,50}' ORDER BY t;
-                      QUERY PLAN                       
--------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v && '{43,50}' ORDER BY t;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Bitmap Heap Scan on test_int4
-         Recheck Cond: (v && '{43,50}'::integer[])
-         ->  Bitmap Index Scan on idx_test_int4
-               Index Cond: (v && '{43,50}'::integer[])
+   ->  Bitmap Heap Scan on test_varchar
+         Recheck Cond: (v && '{43,50}'::character varying[])
+         ->  Bitmap Index Scan on idx_test_varchar
+               Index Cond: (v && '{43,50}'::character varying[])
 (6 rows)
 
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v @> '{43,50}' ORDER BY t;
-                      QUERY PLAN                       
--------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v @> '{43,50}' ORDER BY t;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Bitmap Heap Scan on test_int4
-         Recheck Cond: (v @> '{43,50}'::integer[])
-         ->  Bitmap Index Scan on idx_test_int4
-               Index Cond: (v @> '{43,50}'::integer[])
+   ->  Bitmap Heap Scan on test_varchar
+         Recheck Cond: (v @> '{43,50}'::character varying[])
+         ->  Bitmap Index Scan on idx_test_varchar
+               Index Cond: (v @> '{43,50}'::character varying[])
 (6 rows)
 
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Bitmap Heap Scan on test_int4
-         Recheck Cond: (v <@ '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
-         ->  Bitmap Index Scan on idx_test_int4
-               Index Cond: (v <@ '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
+   ->  Bitmap Heap Scan on test_varchar
+         Recheck Cond: (v <@ '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
+         ->  Bitmap Index Scan on idx_test_varchar
+               Index Cond: (v <@ '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
 (6 rows)
 
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
-                              QUERY PLAN                               
------------------------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Bitmap Heap Scan on test_int4
-         Recheck Cond: (v = '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
-         ->  Bitmap Index Scan on idx_test_int4
-               Index Cond: (v = '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
+   ->  Bitmap Heap Scan on test_varchar
+         Recheck Cond: (v = '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
+         ->  Bitmap Index Scan on idx_test_varchar
+               Index Cond: (v = '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
 (6 rows)
 
-EXPLAIN (COSTS OFF) SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
-                              QUERY PLAN                               
------------------------------------------------------------------------
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
  Sort
    Sort Key: t
-   ->  Bitmap Heap Scan on test_int4
-         Recheck Cond: (v % '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
-         ->  Bitmap Index Scan on idx_test_int4
-               Index Cond: (v % '{0,1,2,3,4,5,6,7,8,9,10}'::integer[])
+   ->  Bitmap Heap Scan on test_varchar
+         Recheck Cond: (v % '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
+         ->  Bitmap Index Scan on idx_test_varchar
+               Index Cond: (v % '{0,1,2,3,4,5,6,7,8,9,10}'::character varying[])
 (6 rows)
 
-SELECT t, v FROM test_int4 WHERE v && '{43,50}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v && '{43,50}' ORDER BY t;
  t  |                 v                  
 ----+------------------------------------
  43 | {33,34,35,36,37,38,39,40,41,42,43}
@@ -413,7 +413,7 @@ SELECT t, v FROM test_int4 WHERE v && '{43,50}' ORDER BY t;
  60 | {50,51,52,53,54,55,56,57,58,59,60}
 (18 rows)
 
-SELECT t, v FROM test_int4 WHERE v @> '{43,50}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v @> '{43,50}' ORDER BY t;
  t  |                 v                  
 ----+------------------------------------
  50 | {40,41,42,43,44,45,46,47,48,49,50}
@@ -422,7 +422,7 @@ SELECT t, v FROM test_int4 WHERE v @> '{43,50}' ORDER BY t;
  53 | {43,44,45,46,47,48,49,50,51,52,53}
 (4 rows)
 
-SELECT t, v FROM test_int4 WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |            v             
 ----+--------------------------
   1 | {0,1}
@@ -437,14 +437,14 @@ SELECT t, v FROM test_int4 WHERE v <@ '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  10 | {0,1,2,3,4,5,6,7,8,9,10}
 (10 rows)
 
-SELECT t, v FROM test_int4 WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v =  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |            v             
 ----+--------------------------
  10 | {0,1,2,3,4,5,6,7,8,9,10}
 (1 row)
 
 SET anyarray.similarity_type=cosine;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |              v               
 ----+------------------------------
   3 | {0,1,2,3}
@@ -462,7 +462,7 @@ SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 (12 rows)
 
 SET anyarray.similarity_type=jaccard;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |             v              
 ----+----------------------------
   6 | {0,1,2,3,4,5,6}
@@ -476,7 +476,7 @@ SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
 
 SET anyarray.similarity_type=overlap;
 SET anyarray.similarity_threshold = 3;
-SELECT t, v FROM test_int4 WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
+SELECT t, v FROM test_varchar WHERE v %  '{0,1,2,3,4,5,6,7,8,9,10}' ORDER BY t;
  t  |                v                 
 ----+----------------------------------
   2 | {0,1,2}

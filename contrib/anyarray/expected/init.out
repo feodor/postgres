@@ -54,9 +54,32 @@ WHERE
 	opc.opcintype = t.oid AND 
 	opc.opcname ~ '_aa_ops$'
 ORDER BY opc.opcname;
- opcname | typname | opcdefault 
----------+---------+------------
-(0 rows)
+       opcname       |   typname    | opcdefault 
+---------------------+--------------+------------
+ _bit_aa_ops         | _bit         | f
+ _bytea_aa_ops       | _bytea       | f
+ _char_aa_ops        | _char        | f
+ _cidr_aa_ops        | _cidr        | f
+ _date_aa_ops        | _date        | f
+ _float4_aa_ops      | _float4      | f
+ _float8_aa_ops      | _float8      | f
+ _inet_aa_ops        | _inet        | f
+ _int2_aa_ops        | _int2        | f
+ _int4_aa_ops        | _int4        | f
+ _int8_aa_ops        | _int8        | f
+ _interval_aa_ops    | _interval    | f
+ _macaddr_aa_ops     | _macaddr     | f
+ _money_aa_ops       | _money       | f
+ _numeric_aa_ops     | _numeric     | f
+ _oid_aa_ops         | _oid         | f
+ _text_aa_ops        | _text        | f
+ _time_aa_ops        | _time        | f
+ _timestamp_aa_ops   | _timestamp   | f
+ _timestamptz_aa_ops | _timestamptz | f
+ _timetz_aa_ops      | _timetz      | f
+ _varbit_aa_ops      | _varbit      | f
+ _varchar_aa_ops     | _varchar     | f
+(23 rows)
 
 SELECT 
     trim( leading '_'  from t.typname ) || '[]' AS "Array Type",
@@ -95,29 +118,32 @@ WHERE
 ORDER BY
     "Array Type" ASC 
 ;
-  Array Type   | GIN operator class | GiST operator class 
----------------+--------------------+---------------------
- bytea[]       |                    | _bytea_aa_ops
- char[]        |                    | _char_aa_ops
- cidr[]        |                    | _cidr_aa_ops
- date[]        |                    | _date_aa_ops
- float4[]      |                    | _float4_aa_ops
- float8[]      |                    | _float8_aa_ops
- inet[]        |                    | _inet_aa_ops
- int2[]        |                    | _int2_aa_ops
- int4[]        |                    | _int4_aa_ops
- int8[]        |                    | _int8_aa_ops
- interval[]    |                    | _interval_aa_ops
- macaddr[]     |                    | _macaddr_aa_ops
- numeric[]     |                    | _numeric_aa_ops
- oid[]         |                    | _oid_aa_ops
- text[]        |                    | _text_aa_ops
- time[]        |                    | _time_aa_ops
- timestamp[]   |                    | _timestamp_aa_ops
- timestamptz[] |                    | _timestamptz_aa_ops
- timetz[]      |                    | _timetz_aa_ops
- varchar[]     |                    | _varchar_aa_ops
-(20 rows)
+  Array Type   | GIN operator class  | GiST operator class 
+---------------+---------------------+---------------------
+ bit[]         | _bit_aa_ops         | 
+ bytea[]       | _bytea_aa_ops       | _bytea_aa_ops
+ char[]        | _char_aa_ops        | _char_aa_ops
+ cidr[]        | _cidr_aa_ops        | _cidr_aa_ops
+ date[]        | _date_aa_ops        | _date_aa_ops
+ float4[]      | _float4_aa_ops      | _float4_aa_ops
+ float8[]      | _float8_aa_ops      | _float8_aa_ops
+ inet[]        | _inet_aa_ops        | _inet_aa_ops
+ int2[]        | _int2_aa_ops        | _int2_aa_ops
+ int4[]        | _int4_aa_ops        | _int4_aa_ops
+ int8[]        | _int8_aa_ops        | _int8_aa_ops
+ interval[]    | _interval_aa_ops    | _interval_aa_ops
+ macaddr[]     | _macaddr_aa_ops     | _macaddr_aa_ops
+ money[]       | _money_aa_ops       | 
+ numeric[]     | _numeric_aa_ops     | _numeric_aa_ops
+ oid[]         | _oid_aa_ops         | _oid_aa_ops
+ text[]        | _text_aa_ops        | _text_aa_ops
+ time[]        | _time_aa_ops        | _time_aa_ops
+ timestamp[]   | _timestamp_aa_ops   | _timestamp_aa_ops
+ timestamptz[] | _timestamptz_aa_ops | _timestamptz_aa_ops
+ timetz[]      | _timetz_aa_ops      | _timetz_aa_ops
+ varbit[]      | _varbit_aa_ops      | 
+ varchar[]     | _varchar_aa_ops     | _varchar_aa_ops
+(23 rows)
 
 --testing function
 CREATE OR REPLACE FUNCTION epoch2timestamp(int4)

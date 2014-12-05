@@ -31,6 +31,7 @@ static Oid
 getAMProc(Oid amOid, Oid typid)
 {
 	Oid		opclassOid = GetDefaultOpClass(typid, amOid);
+	Oid		procOid;
 
 	Assert(amOid == BTREE_AM_OID || amOid == HASH_AM_OID);
 
@@ -38,6 +39,7 @@ getAMProc(Oid amOid, Oid typid)
 	{
 		typid = getBaseType(typid);
 		opclassOid = GetDefaultOpClass(typid, amOid);
+
 
 		if (!OidIsValid(opclassOid))
 		{
@@ -55,7 +57,7 @@ getAMProc(Oid amOid, Oid typid)
 				HeapTuple		tuple = &catlist->members[i]->tuple;
 				Form_pg_cast	castForm = (Form_pg_cast)GETSTRUCT(tuple);
 
-				if (castForm->castfunc == InvalidOid && castForm->castcontext == COERCION_CODE_IMPLICIT)
+				if (castForm->castmethod == COERCION_METHOD_BINARY)
 				{
 					typid = castForm->casttarget;
 					opclassOid = GetDefaultOpClass(typid, amOid);
@@ -71,9 +73,20 @@ getAMProc(Oid amOid, Oid typid)
 	if (!OidIsValid(opclassOid))
 		return InvalidOid;
 
-	return get_opfamily_proc(get_opclass_family(opclassOid),
+	procOid = get_opfamily_proc(get_opclass_family(opclassOid),
 							 typid, typid,
-							 (amOid == BTREE_AM_OID) ? BTORDER_PROC : HASHPROC); 
+							 (amOid == BTREE_AM_OID) ? BTORDER_PROC : HASHPROC);
+
+	if (!OidIsValid(procOid))
+	{
+		typid = get_opclass_input_type(opclassOid);
+
+		procOid = get_opfamily_proc(get_opclass_family(opclassOid),
+								 typid, typid,
+								 (amOid == BTREE_AM_OID) ? BTORDER_PROC : HASHPROC);
+	}
+
+	return procOid;
 }
 
 AnyArrayTypeInfo*
