@@ -303,8 +303,11 @@ getSimilarity(SimpleArray *sa, SimpleArray *sb)
 		case AA_Cosine:
 			result = ((double)inter) / sqrt(((double)sa->nelems) * ((double)sb->nelems));
 			break;
-		case AA_Overlap:
+		case AA_Jaccard:
 			result = ((double)inter) / (((double)sa->nelems) + ((double)sb->nelems) - ((double)inter));
+			break;
+		case AA_Overlap:
+			result = inter;
 			break;
 		default:
 			elog(ERROR, "unknown similarity type");

@@ -87,7 +87,7 @@ SELECT similarity('{}'::int[], '{3}');
 SELECT similarity('{3}'::int[], '{3}');
 SELECT similarity('{2}'::int[], '{3}');
 
-SET anyarray.similarity_type = 'overlap';
+SET anyarray.similarity_type = 'jaccard';
 
 SELECT similarity('{3,2}'::int[], '{3,2,1}');
 

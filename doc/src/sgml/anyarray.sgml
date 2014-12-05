@@ -262,7 +262,7 @@
     </term>
     <listitem>
      <para>
-	  Type of similarity formula: <literal>cosine</>(default), <literal>overlap</>
+	  Type of similarity formula: <literal>cosine</>(default), <literal>jaccard</>, <literal>overlap</>
      </para>
     </listitem>
    </varlistentry>

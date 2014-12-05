@@ -1044,38 +1044,42 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 
 			if (GIST_LEAF(entry))
 			{
-				int32	length;
-
 				nIntersect = countIntersections(queryArray, array, false);
 
-				if (ISALLTRUE(array))
-					length = SIGLENBIT;
-				else if (ISARRKEY(array))
-					length = ARRNELEM(array);
-				else
-					length = sizebitvec(GETSIGN(array));
-
-				switch(SmlType)
+				if (SmlType == AA_Overlap)
 				{
-					case AA_Cosine:
-						if (((double)nIntersect) / 
-								sqrt(((double)queryArray->nelems) * ((double)length)) < SmlLimit)
-							retval = false;
-						break;
-					case AA_Overlap:
-						if (((double)(nIntersect)) / 
-							(((double)queryArray->nelems) + ((double)length) - ((double)nIntersect)) < SmlLimit)
-							retval = false;
-						break;
-					default:
-						elog(ERROR, "unknown similarity type");
+					retval = (nIntersect >= SmlLimit);
+				}
+				else
+				{
+					int32	length;
+
+					if (ISALLTRUE(array))
+						length = SIGLENBIT;
+					else if (ISARRKEY(array))
+						length = ARRNELEM(array);
+					else
+						length = sizebitvec(GETSIGN(array));
+
+					switch(SmlType)
+					{
+						case AA_Cosine:
+							if (((double)nIntersect) / 
+									sqrt(((double)queryArray->nelems) * ((double)length)) < SmlLimit)
+								retval = false;
+							break;
+						case AA_Jaccard:
+							if (((double)(nIntersect)) / 
+								(((double)queryArray->nelems) + ((double)length) - ((double)nIntersect)) < SmlLimit)
+								retval = false;
+							break;
+						default:
+							elog(ERROR, "unknown similarity type");
+					}
 				}
 			}
 			else if (!ISALLTRUE(entry))
 			{
-				int32	length;
-
-				length = sizebitvec(GETSIGN(array));
 				nIntersect = countIntersections(queryArray, array, false);
 
 				switch(SmlType)
@@ -1085,9 +1089,12 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 						if (sqrt(((double)nIntersect) / ((double)queryArray->nelems)) < SmlLimit)
 							retval = false;
 						break;
-					case AA_Overlap:
+					case AA_Jaccard:
 						if (((double)nIntersect) / ((double)queryArray->nelems) < SmlLimit)
 							retval = false;
+						break;
+					case AA_Overlap:
+						retval = (nIntersect >= SmlLimit);
 						break;
 					default:
 						elog(ERROR, "unknown similarity type");

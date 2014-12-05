@@ -62,6 +62,7 @@ typedef struct SimpleArray
 
 typedef enum SimilarityType {
 	AA_Cosine,
+	AA_Jaccard,
 	AA_Overlap
 } SimilarityType;
 

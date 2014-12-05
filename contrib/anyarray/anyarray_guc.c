@@ -22,6 +22,7 @@ static bool AnyArrayInited = false;
 
 static const struct config_enum_entry SmlTypeOptions[] = {
 	{"cosine", AA_Cosine, false},
+	{"jaccard", AA_Jaccard, false},
 	{"overlap", AA_Overlap, false},
 	{NULL, 0, false}
 };
@@ -39,7 +40,7 @@ initAnyArray()
 		&SmlLimit,
 		SmlLimit,
 		0.0,
-		1.0,
+		1e10,
 		PGC_USERSET,
 		0,
 		NULL,
@@ -49,7 +50,7 @@ initAnyArray()
 	DefineCustomEnumVariable(
 		"anyarray.similarity_type",
 		"Type of similarity formula",
-		"Type of similarity formula: cosine(default), overlap",
+		"Type of similarity formula: cosine(default), jaccard, overlap",
 		(int*)&SmlType,
 		SmlType,
 		SmlTypeOptions,
