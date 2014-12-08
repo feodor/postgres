@@ -1,0 +1,501 @@
+SELECT
+    t,
+	ARRAY(
+		SELECT
+			epoch2timestamp(v)::timestamptz
+		FROM
+			generate_series(max(0, t - 10),  t) as v
+	) AS v
+	INTO test_timestamptz
+FROM
+	generate_series(1, 200) as t;
+SET anyarray.similarity_type=cosine;
+SELECT  t, similarity(v, to_tsp_array('{10,9,8,7,6,5,4,3,2,1}')::timestamptz[]) AS s FROM test_timestamptz 
+	WHERE v % to_tsp_array('{10,9,8,7,6,5,4,3,2,1}')::timestamptz[] ORDER BY s DESC, t;
+ t  |    s     
+----+----------
+ 10 | 0.953463
+ 11 | 0.953463
+  9 |      0.9
+ 12 | 0.858116
+  8 | 0.843274
+  7 | 0.782624
+ 13 |  0.76277
+  6 | 0.717137
+ 14 | 0.667424
+  5 | 0.645497
+(10 rows)
+
+SELECT  t, similarity(v, to_tsp_array('{50,49,8,7,6,5,4,3,2,1}')::timestamptz[]) AS s FROM test_timestamptz 
+	WHERE v % to_tsp_array('{50,49,8,7,6,5,4,3,2,1}')::timestamptz[] ORDER BY s DESC, t;
+ t  |    s     
+----+----------
+  8 | 0.843274
+  9 |      0.8
+  7 | 0.782624
+ 10 |  0.76277
+ 11 |  0.76277
+  6 | 0.717137
+ 12 | 0.667424
+  5 | 0.645497
+(8 rows)
+
+SET anyarray.similarity_type=jaccard;
+SELECT  t, similarity(v, to_tsp_array('{10,9,8,7,6,5,4,3,2,1}')::timestamptz[]) AS s FROM test_timestamptz 
+	WHERE v % to_tsp_array('{10,9,8,7,6,5,4,3,2,1}')::timestamptz[] ORDER BY s DESC, t;
+ t  |    s     
+----+----------
+ 10 | 0.909091
+ 11 | 0.909091
+  9 | 0.818182
+ 12 |     0.75
+  8 | 0.727273
+  7 | 0.636364
+ 13 | 0.615385
+(7 rows)
+
+SELECT  t, similarity(v, to_tsp_array('{50,49,8,7,6,5,4,3,2,1}')::timestamptz[]) AS s FROM test_timestamptz 
+	WHERE v % to_tsp_array('{50,49,8,7,6,5,4,3,2,1}')::timestamptz[] ORDER BY s DESC, t;
+ t  |    s     
+----+----------
+  8 | 0.727273
+  9 | 0.666667
+  7 | 0.636364
+ 10 | 0.615385
+ 11 | 0.615385
+(5 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v && to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 43 | {"Tue Feb 03 00:00:33 1970 PST","Wed Feb 04 00:00:34 1970 PST","Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST"}
+ 44 | {"Wed Feb 04 00:00:34 1970 PST","Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST"}
+ 45 | {"Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST"}
+ 46 | {"Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST"}
+ 47 | {"Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST"}
+ 48 | {"Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST"}
+ 49 | {"Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST"}
+ 50 | {"Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST"}
+ 51 | {"Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST"}
+ 52 | {"Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST"}
+ 53 | {"Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST"}
+ 54 | {"Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST"}
+ 55 | {"Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST"}
+ 56 | {"Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST"}
+ 57 | {"Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST"}
+ 58 | {"Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST"}
+ 59 | {"Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST","Sun Mar 01 00:00:59 1970 PST"}
+ 60 | {"Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST","Sun Mar 01 00:00:59 1970 PST","Mon Mar 02 00:01:00 1970 PST"}
+(18 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v @> to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 50 | {"Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST"}
+ 51 | {"Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST"}
+ 52 | {"Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST"}
+ 53 | {"Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST"}
+(4 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v <@ to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  1 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST"}
+  2 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST"}
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+(10 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v =  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+(1 row)
+
+SET anyarray.similarity_type=cosine;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+ 13 | {"Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST"}
+ 14 | {"Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST"}
+(12 rows)
+
+SET anyarray.similarity_type=jaccard;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+(7 rows)
+
+SET anyarray.similarity_type=overlap;
+SET anyarray.similarity_threshold = 3;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  2 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST"}
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+ 13 | {"Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST"}
+ 14 | {"Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST"}
+ 15 | {"Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST"}
+ 16 | {"Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST"}
+ 17 | {"Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST","Sun Jan 18 00:00:17 1970 PST"}
+ 18 | {"Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST","Sun Jan 18 00:00:17 1970 PST","Mon Jan 19 00:00:18 1970 PST"}
+(17 rows)
+
+RESET anyarray.similarity_threshold;
+CREATE INDEX idx_test_timestamptz ON test_timestamptz USING gist (v _timestamptz_aa_ops);
+SET enable_seqscan=off;
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v && to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_timestamptz
+         Recheck Cond: (v && ('{"Fri Feb 13 00:00:43 1970","Fri Feb 20 00:00:50 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+         ->  Bitmap Index Scan on idx_test_timestamptz
+               Index Cond: (v && ('{"Fri Feb 13 00:00:43 1970","Fri Feb 20 00:00:50 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v @> to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Index Scan using idx_test_timestamptz on test_timestamptz
+         Index Cond: (v @> ('{"Fri Feb 13 00:00:43 1970","Fri Feb 20 00:00:50 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(4 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v <@ to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Index Scan using idx_test_timestamptz on test_timestamptz
+         Index Cond: (v <@ ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(4 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v =  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Index Scan using idx_test_timestamptz on test_timestamptz
+         Index Cond: (v = ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(4 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                              
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Index Scan using idx_test_timestamptz on test_timestamptz
+         Index Cond: (v % ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(4 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v && to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 43 | {"Tue Feb 03 00:00:33 1970 PST","Wed Feb 04 00:00:34 1970 PST","Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST"}
+ 44 | {"Wed Feb 04 00:00:34 1970 PST","Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST"}
+ 45 | {"Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST"}
+ 46 | {"Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST"}
+ 47 | {"Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST"}
+ 48 | {"Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST"}
+ 49 | {"Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST"}
+ 50 | {"Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST"}
+ 51 | {"Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST"}
+ 52 | {"Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST"}
+ 53 | {"Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST"}
+ 54 | {"Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST"}
+ 55 | {"Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST"}
+ 56 | {"Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST"}
+ 57 | {"Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST"}
+ 58 | {"Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST"}
+ 59 | {"Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST","Sun Mar 01 00:00:59 1970 PST"}
+ 60 | {"Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST","Sun Mar 01 00:00:59 1970 PST","Mon Mar 02 00:01:00 1970 PST"}
+(18 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v @> to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 50 | {"Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST"}
+ 51 | {"Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST"}
+ 52 | {"Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST"}
+ 53 | {"Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST"}
+(4 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v <@ to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  1 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST"}
+  2 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST"}
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+(10 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v =  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+(1 row)
+
+SET anyarray.similarity_type=cosine;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+ 13 | {"Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST"}
+ 14 | {"Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST"}
+(12 rows)
+
+SET anyarray.similarity_type=jaccard;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+(7 rows)
+
+SET anyarray.similarity_type=overlap;
+SET anyarray.similarity_threshold = 3;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  2 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST"}
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+ 13 | {"Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST"}
+ 14 | {"Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST"}
+ 15 | {"Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST"}
+ 16 | {"Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST"}
+ 17 | {"Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST","Sun Jan 18 00:00:17 1970 PST"}
+ 18 | {"Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST","Sun Jan 18 00:00:17 1970 PST","Mon Jan 19 00:00:18 1970 PST"}
+(17 rows)
+
+RESET anyarray.similarity_threshold;
+DROP INDEX idx_test_timestamptz;
+CREATE INDEX idx_test_timestamptz ON test_timestamptz USING gin (v _timestamptz_aa_ops);
+SET enable_seqscan=off;
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v && to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_timestamptz
+         Recheck Cond: (v && ('{"Fri Feb 13 00:00:43 1970","Fri Feb 20 00:00:50 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+         ->  Bitmap Index Scan on idx_test_timestamptz
+               Index Cond: (v && ('{"Fri Feb 13 00:00:43 1970","Fri Feb 20 00:00:50 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v @> to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_timestamptz
+         Recheck Cond: (v @> ('{"Fri Feb 13 00:00:43 1970","Fri Feb 20 00:00:50 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+         ->  Bitmap Index Scan on idx_test_timestamptz
+               Index Cond: (v @> ('{"Fri Feb 13 00:00:43 1970","Fri Feb 20 00:00:50 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v <@ to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_timestamptz
+         Recheck Cond: (v <@ ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+         ->  Bitmap Index Scan on idx_test_timestamptz
+               Index Cond: (v <@ ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v =  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                 
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_timestamptz
+         Recheck Cond: (v = ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+         ->  Bitmap Index Scan on idx_test_timestamptz
+               Index Cond: (v = ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(6 rows)
+
+EXPLAIN (COSTS OFF) SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                 
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: t
+   ->  Bitmap Heap Scan on test_timestamptz
+         Recheck Cond: (v % ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+         ->  Bitmap Index Scan on idx_test_timestamptz
+               Index Cond: (v % ('{"Thu Jan 01 00:00:00 1970","Fri Jan 02 00:00:01 1970","Sat Jan 03 00:00:02 1970","Sun Jan 04 00:00:03 1970","Mon Jan 05 00:00:04 1970","Tue Jan 06 00:00:05 1970","Wed Jan 07 00:00:06 1970","Thu Jan 08 00:00:07 1970","Fri Jan 09 00:00:08 1970","Sat Jan 10 00:00:09 1970","Sun Jan 11 00:00:10 1970"}'::timestamp without time zone[])::timestamp with time zone[])
+(6 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v && to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 43 | {"Tue Feb 03 00:00:33 1970 PST","Wed Feb 04 00:00:34 1970 PST","Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST"}
+ 44 | {"Wed Feb 04 00:00:34 1970 PST","Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST"}
+ 45 | {"Thu Feb 05 00:00:35 1970 PST","Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST"}
+ 46 | {"Fri Feb 06 00:00:36 1970 PST","Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST"}
+ 47 | {"Sat Feb 07 00:00:37 1970 PST","Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST"}
+ 48 | {"Sun Feb 08 00:00:38 1970 PST","Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST"}
+ 49 | {"Mon Feb 09 00:00:39 1970 PST","Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST"}
+ 50 | {"Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST"}
+ 51 | {"Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST"}
+ 52 | {"Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST"}
+ 53 | {"Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST"}
+ 54 | {"Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST"}
+ 55 | {"Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST"}
+ 56 | {"Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST"}
+ 57 | {"Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST"}
+ 58 | {"Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST"}
+ 59 | {"Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST","Sun Mar 01 00:00:59 1970 PST"}
+ 60 | {"Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST","Tue Feb 24 00:00:54 1970 PST","Wed Feb 25 00:00:55 1970 PST","Thu Feb 26 00:00:56 1970 PST","Fri Feb 27 00:00:57 1970 PST","Sat Feb 28 00:00:58 1970 PST","Sun Mar 01 00:00:59 1970 PST","Mon Mar 02 00:01:00 1970 PST"}
+(18 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v @> to_tsp_array('{43,50}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 50 | {"Tue Feb 10 00:00:40 1970 PST","Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST"}
+ 51 | {"Wed Feb 11 00:00:41 1970 PST","Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST"}
+ 52 | {"Thu Feb 12 00:00:42 1970 PST","Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST"}
+ 53 | {"Fri Feb 13 00:00:43 1970 PST","Sat Feb 14 00:00:44 1970 PST","Sun Feb 15 00:00:45 1970 PST","Mon Feb 16 00:00:46 1970 PST","Tue Feb 17 00:00:47 1970 PST","Wed Feb 18 00:00:48 1970 PST","Thu Feb 19 00:00:49 1970 PST","Fri Feb 20 00:00:50 1970 PST","Sat Feb 21 00:00:51 1970 PST","Sun Feb 22 00:00:52 1970 PST","Mon Feb 23 00:00:53 1970 PST"}
+(4 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v <@ to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  1 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST"}
+  2 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST"}
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+(10 rows)
+
+SELECT t, v FROM test_timestamptz WHERE v =  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+(1 row)
+
+SET anyarray.similarity_type=cosine;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+ 13 | {"Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST"}
+ 14 | {"Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST"}
+(12 rows)
+
+SET anyarray.similarity_type=jaccard;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+(7 rows)
+
+SET anyarray.similarity_type=overlap;
+SET anyarray.similarity_threshold = 3;
+SELECT t, v FROM test_timestamptz WHERE v %  to_tsp_array('{0,1,2,3,4,5,6,7,8,9,10}')::timestamptz[] ORDER BY t;
+ t  |                                                                                                                                                                           v                                                                                                                                                                            
+----+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  2 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST"}
+  3 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST"}
+  4 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST"}
+  5 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST"}
+  6 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST"}
+  7 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST"}
+  8 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST"}
+  9 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST"}
+ 10 | {"Thu Jan 01 00:00:00 1970 PST","Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST"}
+ 11 | {"Fri Jan 02 00:00:01 1970 PST","Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST"}
+ 12 | {"Sat Jan 03 00:00:02 1970 PST","Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST"}
+ 13 | {"Sun Jan 04 00:00:03 1970 PST","Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST"}
+ 14 | {"Mon Jan 05 00:00:04 1970 PST","Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST"}
+ 15 | {"Tue Jan 06 00:00:05 1970 PST","Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST"}
+ 16 | {"Wed Jan 07 00:00:06 1970 PST","Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST"}
+ 17 | {"Thu Jan 08 00:00:07 1970 PST","Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST","Sun Jan 18 00:00:17 1970 PST"}
+ 18 | {"Fri Jan 09 00:00:08 1970 PST","Sat Jan 10 00:00:09 1970 PST","Sun Jan 11 00:00:10 1970 PST","Mon Jan 12 00:00:11 1970 PST","Tue Jan 13 00:00:12 1970 PST","Wed Jan 14 00:00:13 1970 PST","Thu Jan 15 00:00:14 1970 PST","Fri Jan 16 00:00:15 1970 PST","Sat Jan 17 00:00:16 1970 PST","Sun Jan 18 00:00:17 1970 PST","Mon Jan 19 00:00:18 1970 PST"}
+(17 rows)
+
+RESET anyarray.similarity_threshold;

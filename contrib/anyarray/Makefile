@@ -8,9 +8,12 @@ EXTENSION = anyarray
 DATA = anyarray--1.0.sql
 PGFILEDESC = "anyarray - functions and operators for one-dimensional arrays"
 
-REGRESS = init anyarray int2 int4 int8 \
-	float4 float8 numeric text varchar bytea \
-	interval money oid
+REGRESS = init anyarray \
+	int2 int4 int8 float4 float8 numeric \
+	text varchar char varbit bit bytea \
+	interval money oid \
+	timestamp timestamptz time timetz date \
+	macaddr inet cidr 
 
 ifdef USE_PGXS
 PG_CONFIG = pg_config

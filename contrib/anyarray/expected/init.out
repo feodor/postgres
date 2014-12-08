@@ -146,15 +146,33 @@ ORDER BY
 (23 rows)
 
 --testing function
-CREATE OR REPLACE FUNCTION epoch2timestamp(int4)
+CREATE OR REPLACE FUNCTION epoch2timestamp(int8)
 RETURNS timestamp AS $$
     SELECT ('1970-01-01 00:00:00'::timestamp +   ( ($1*3600*24 + $1) ::text || ' seconds' )::interval)::timestamp;
 	$$ LANGUAGE SQL RETURNS NULL ON NULL INPUT IMMUTABLE;
-CREATE OR REPLACE FUNCTION to_tsp_array(_int4)
+CREATE OR REPLACE FUNCTION to_tsp_array(_int8)
 RETURNS _timestamp AS $$
 	SELECT ARRAY( 
 		SELECT 
 			epoch2timestamp( $1[n] )
+		FROM
+			generate_series( 1, array_upper( $1, 1) - array_lower( $1, 1 ) + 1 ) AS n
+	);
+	$$ LANGUAGE SQL RETURNS NULL ON NULL INPUT IMMUTABLE;
+CREATE OR REPLACE FUNCTION to_macp_array(_int8)
+RETURNS _macaddr AS $$
+	SELECT ARRAY( 
+		SELECT 
+			('01:01:01:01:01:' || to_hex($1[n] % 256))::macaddr	
+		FROM
+			generate_series( 1, array_upper( $1, 1) - array_lower( $1, 1 ) + 1 ) AS n
+	);
+	$$ LANGUAGE SQL RETURNS NULL ON NULL INPUT IMMUTABLE;
+CREATE OR REPLACE FUNCTION to_inetp_array(_int8)
+RETURNS _inet AS $$
+	SELECT ARRAY( 
+		SELECT 
+			('192.168.1.' || ($1[n] % 256))::inet	
 		FROM
 			generate_series( 1, array_upper( $1, 1) - array_lower( $1, 1 ) + 1 ) AS n
 	);
