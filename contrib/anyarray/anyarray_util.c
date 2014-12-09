@@ -171,6 +171,18 @@ Array2SimpleArray(AnyArrayTypeInfo	*info, ArrayType *a)
 	return s;
 }
 
+void
+freeSimpleArray(SimpleArray* s)
+{
+	if (s)
+	{
+		if (s->elems)
+			pfree(s->elems);
+		pfree(s);
+	}	
+}
+
+
 ArrayType*
 SimpleArray2Array(SimpleArray *s)
 {

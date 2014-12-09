@@ -15,6 +15,7 @@
 #include <math.h>
 
 #include <catalog/pg_collation.h>
+#include <utils/builtins.h>
 
 
 #define	CMP(a, b, cmpFunc) \
@@ -92,6 +93,7 @@ aa_sort(PG_FUNCTION_ARGS)
 	sortSimpleArray(s, direction);
 	r = SimpleArray2Array(s);
 
+	freeSimpleArray(s);
 	PG_FREE_IF_COPY(a, 0);
 	if (dirstr)
 		PG_FREE_IF_COPY(dirstr, 1);
@@ -141,6 +143,7 @@ aa_sort_desc(PG_FUNCTION_ARGS)
 	sortSimpleArray(s, -1);
 	r = SimpleArray2Array(s);
 
+	freeSimpleArray(s);
 	PG_FREE_IF_COPY(a, 0);
 	PG_RETURN_POINTER(r);
 }
@@ -164,6 +167,7 @@ aa_uniq(PG_FUNCTION_ARGS)
 	uniqSimpleArray(s, false);
 	r = SimpleArray2Array(s);
 
+	freeSimpleArray(s);
 	PG_FREE_IF_COPY(a, 0);
 	PG_RETURN_POINTER(r);
 }
@@ -187,6 +191,7 @@ aa_uniqd(PG_FUNCTION_ARGS)
 	uniqSimpleArray(s, true);
 	r = SimpleArray2Array(s);
 
+	freeSimpleArray(s);
 	PG_FREE_IF_COPY(a, 0);
 	PG_RETURN_POINTER(r);
 }
@@ -224,6 +229,7 @@ aa_idx(PG_FUNCTION_ARGS)
 			break;
 	}
 
+	freeSimpleArray(s);
 	PG_FREE_IF_COPY(a, 0);
 	if (info->typlen < 0)
 		PG_FREE_IF_COPY(DatumGetPointer(e), 1);
@@ -279,7 +285,7 @@ aa_subarray(PG_FUNCTION_ARGS)
 	if (!(start >= end || end <= 0))
 	{
 		if (end - start > 0 && start != 0)
-			memcpy(s->elems, s->elems + start, (end - start) * sizeof(*s->elems));
+			s->elems += start;
 		s->nelems = end - start;
 	}
 
@@ -335,6 +341,7 @@ aa_union_elem(PG_FUNCTION_ARGS)
 
 	r = SimpleArray2Array(s);
 
+	freeSimpleArray(s);
 	PG_FREE_IF_COPY(a, 0);
 	if (info->typlen < 0)
 		PG_FREE_IF_COPY(DatumGetPointer(e), 1);
@@ -430,8 +437,10 @@ aa_intersect_array(PG_FUNCTION_ARGS)
 out:
 	r = SimpleArray2Array(sa);
 
-	PG_FREE_IF_COPY(a, 0);
+	freeSimpleArray(sb);
+	freeSimpleArray(sa);
 	PG_FREE_IF_COPY(b, 1);
+	PG_FREE_IF_COPY(a, 0);
 	PG_RETURN_POINTER(r);
 }
 
@@ -503,8 +512,10 @@ aa_subtract_array(PG_FUNCTION_ARGS)
 out:
 	r = SimpleArray2Array(&sr);
 
-	PG_FREE_IF_COPY(a, 0);
+	freeSimpleArray(sb);
+	freeSimpleArray(sa);
 	PG_FREE_IF_COPY(b, 1);
+	PG_FREE_IF_COPY(a, 0);
 	PG_RETURN_POINTER(r);
 }
 
@@ -538,8 +549,10 @@ aa_similarity(PG_FUNCTION_ARGS)
 
 	result = getSimilarity(sa, sb);
 
-	PG_FREE_IF_COPY(a, 0);
+	freeSimpleArray(sb);
+	freeSimpleArray(sa);
 	PG_FREE_IF_COPY(b, 1);
+	PG_FREE_IF_COPY(a, 0);
 	PG_RETURN_FLOAT4(result);
 }
 
@@ -573,8 +586,51 @@ aa_similarity_op(PG_FUNCTION_ARGS)
 
 	result = getSimilarity(sa, sb);
 
-	PG_FREE_IF_COPY(a, 0);
+	freeSimpleArray(sb);
+	freeSimpleArray(sa);
 	PG_FREE_IF_COPY(b, 1);
+	PG_FREE_IF_COPY(a, 0);
 	PG_RETURN_BOOL(result >= SmlLimit);
+}
+
+PG_FUNCTION_INFO_V1(aa_distance);
+Datum
+aa_distance(PG_FUNCTION_ARGS)
+{
+	ArrayType			*a = PG_GETARG_ARRAYTYPE_P(0);
+	ArrayType			*b = PG_GETARG_ARRAYTYPE_P(1);
+	AnyArrayTypeInfo	*info;
+	SimpleArray			*sa, *sb;
+	double				result = 0.0;
+	
+	CHECKARRVALID(a);
+	CHECKARRVALID(b);
+
+	if (ARR_ELEMTYPE(a) != ARR_ELEMTYPE(b))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("array types aren't matched")));
+
+	if (ARRISVOID(a) || ARRISVOID(b))
+		PG_RETURN_FLOAT4(0.0);
+
+	if (fcinfo->flinfo->fn_extra == NULL)
+		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+
+	sa = Array2SimpleArray(info, a);
+	sb = Array2SimpleArray(info, b);
+
+	result = getSimilarity(sa, sb);
+	if (result == 0.0)
+		result = get_float4_infinity();
+	else
+		result = 1.0/result;
+
+	freeSimpleArray(sb);
+	freeSimpleArray(sa);
+	PG_FREE_IF_COPY(b, 1);
+	PG_FREE_IF_COPY(a, 0);
+	PG_RETURN_FLOAT4(result);
 }
 

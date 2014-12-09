@@ -40,6 +40,8 @@ typedef struct SimpleArray
 	AnyArrayTypeInfo	*info;
 } SimpleArray;
 
+#define LINEAR_LIMIT	(5)
+
 #define NDIM 1
 #define ARRISVOID(x)  ((x) == NULL || ARRNELEMS(x) == 0)
 #define ARRNELEMS(x)  ArrayGetNItems(ARR_NDIM(x), ARR_DIMS(x))
@@ -78,6 +80,7 @@ extern AnyArrayTypeInfo* getAnyArrayTypeInfo(MemoryContext ctx, Oid typid);
 extern void cmpFuncInit(AnyArrayTypeInfo* info);
 extern void hashFuncInit(AnyArrayTypeInfo* info);
 extern SimpleArray* Array2SimpleArray(AnyArrayTypeInfo  *info, ArrayType *a);
+extern void	freeSimpleArray(SimpleArray* s);
 extern ArrayType* SimpleArray2Array(SimpleArray *s);
 extern void sortSimpleArray(SimpleArray *s, int32 direction);
 extern void uniqSimpleArray(SimpleArray *s, bool onlyDuplicate);

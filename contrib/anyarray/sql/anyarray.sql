@@ -71,6 +71,8 @@ SELECT '{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
 SET anyarray.similarity_type = 'cosine';
 
 SELECT similarity('{3,2}'::text[], '{3,2,1}');
+SELECT distance('{3,2}'::text[], '{3,2,1}');
+SELECT '{3,2}'::text[] <-> '{3,2,1}';
 
 SELECT similarity('{3,2}'::int[], '{3,2,1}');
 SELECT similarity('{2,1}'::int[], '{3,2,1}');
@@ -87,9 +89,15 @@ SELECT similarity('{}'::int[], '{3}');
 SELECT similarity('{3}'::int[], '{3}');
 SELECT similarity('{2}'::int[], '{3}');
 
+SET anyarray.similarity_type = 'overlap';
+
+SELECT similarity('{3,2}'::int[], '{3,2,1}');
+SELECT distance('{3,2}'::text[], '{3,2,1}');
+
 SET anyarray.similarity_type = 'jaccard';
 
 SELECT similarity('{3,2}'::int[], '{3,2,1}');
+SELECT distance('{3,2}'::text[], '{3,2,1}');
 
 SET anyarray.similarity_threshold = 0.6;
 
@@ -98,4 +106,5 @@ SELECT '{3,2}'::int[] % '{3,2,1}' AS "true";
 SET anyarray.similarity_threshold = 0.7;
 
 SELECT '{3,2}'::int[] % '{3,2,1}' AS "false";
+
 

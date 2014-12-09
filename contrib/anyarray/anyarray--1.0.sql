@@ -148,6 +148,17 @@ CREATE OPERATOR % (
 	JOIN = contjoinsel
 );
 
+CREATE FUNCTION distance(anyarray, anyarray)
+	RETURNS float4
+	AS 'MODULE_PATHNAME', 'aa_distance'
+	LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OPERATOR <-> (
+	LEFTARG = anyarray,
+	RIGHTARG = anyarray,
+	PROCEDURE = distance
+);
+
 --GiST interface
 
 CREATE FUNCTION ganyarrayin(cstring)

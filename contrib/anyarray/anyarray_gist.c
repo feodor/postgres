@@ -766,7 +766,7 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 			}
 		}
 	}
-	else if (ARRNELEM(array) <= 3)
+	else if (ARRNELEM(array) < LINEAR_LIMIT)
 	{
 		int32	i, j,
 				len = ARRNELEM(array),
@@ -789,7 +789,7 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 			}
 		}
 	}
-	else if (query->nelems < 5)
+	else if (query->nelems < LINEAR_LIMIT)
 	{
 		int32	i;
 
@@ -880,7 +880,7 @@ anyarrayContains(SignAnyArray *array, SimpleArray *query)
 				return false;
 		}
 	}
-	else if (ARRNELEM(array) <= 3)
+	else if (ARRNELEM(array) < LINEAR_LIMIT)
 	{
 		int32	i, j,
 				len = ARRNELEM(array),
