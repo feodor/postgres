@@ -15938,6 +15938,45 @@ SELECT collation for ('foo' COLLATE "de_DE");
     For example <literal>10:20:10,14,15</literal> means
     <literal>xmin=10, xmax=20, xip_list=10, 14, 15</literal>.
    </para>
+
+   <para>
+    The functions shown in <xref linkend="functions-commit-timestamp">
+    provide information about transactions that have been already committed.
+    These functions mainly provide information about when the transactions
+    were committed. They only provide useful data when
+    <xref linkend="guc-track-commit-timestamp"> configuration option is enabled
+    and only for transactions that were committed after it was enabled.
+   </para>
+
+   <table id="functions-commit-timestamp">
+    <title>Committed transaction information</title>
+    <tgroup cols="3">
+     <thead>
+      <row><entry>Name</entry> <entry>Return Type</entry> <entry>Description</entry></row>
+     </thead>
+
+     <tbody>
+      <row>
+       <entry>
+        <indexterm><primary>pg_xact_commit_timestamp</primary></indexterm>
+        <literal><function>pg_xact_commit_timestamp(<parameter>xid</parameter>)</function></literal>
+       </entry>
+       <entry><type>timestamp with time zone</type></entry>
+       <entry>get commit timestamp of a transaction</entry>
+      </row>
+
+      <row>
+       <entry>
+        <indexterm><primary>pg_last_committed_xact</primary></indexterm>
+        <literal><function>pg_last_committed_xact()</function></literal>
+       </entry>
+       <entry><parameter>xid</> <type>xid</>, <parameter>timestamp</> <type>timestamp with time zone</></entry>
+       <entry>get transaction ID and commit timestamp of latest committed transaction</entry>
+      </row>
+     </tbody>
+    </tgroup>
+   </table>
+
   </sect1>
 
   <sect1 id="functions-admin">
@@ -17568,14 +17607,22 @@ FOR EACH ROW EXECUTE PROCEDURE suppress_redundant_updates_trigger();
   <sect1 id="functions-event-triggers">
    <title>Event Trigger Functions</title>
 
+   <para>
+    <productname>PostgreSQL</> provides these helper functions
+    to retrieve information from event triggers.
+   </para>
+
+   <para>
+    For more information about event triggers,
+    see <xref linkend="event-triggers">.
+   </para>
+
+  <sect2 id="pg-event-trigger-sql-drop-functions">
+   <title>Processing objects dropped by a DDL command.</title>
+
    <indexterm>
      <primary>pg_event_trigger_dropped_objects</primary>
    </indexterm>
-
-   <para>
-    Currently <productname>PostgreSQL</> provides one built-in event trigger
-    helper function, <function>pg_event_trigger_dropped_objects</>.
-   </para>
 
    <para>
     <function>pg_event_trigger_dropped_objects</> returns a list of all objects
@@ -17670,11 +17717,72 @@ CREATE EVENT TRIGGER test_event_trigger_for_drops
    EXECUTE PROCEDURE test_event_trigger_for_drops();
 </programlisting>
     </para>
+  </sect2>
 
-     <para>
-       For more information about event triggers,
-       see <xref linkend="event-triggers">.
+  <sect2 id="pg-event-trigger-table-rewrite-functions">
+   <title>Handling a Table Rewrite Event</title>
+
+   <para>
+    The functions shown in
+    <xref linkend="functions-event-trigger-table-rewrite">
+    provide information about a table for which a
+    <literal>table_rewrite</> event has just been called.
+    If called in any other context, an error is raised.
+   </para>
+
+   <table id="functions-event-trigger-table-rewrite">
+    <title>Table Rewrite information</title>
+    <tgroup cols="3">
+     <thead>
+      <row><entry>Name</entry> <entry>Return Type</entry> <entry>Description</entry></row>
+     </thead>
+
+     <tbody>
+      <row>
+       <entry>
+        <indexterm><primary>pg_event_trigger_table_rewrite_oid</primary></indexterm>
+        <literal><function>pg_event_trigger_table_rewrite_oid()</function></literal>
+       </entry>
+       <entry><type>Oid</type></entry>
+       <entry>The Oid of the table about to be rewritten.</entry>
+      </row>
+
+      <row>
+       <entry>
+        <indexterm><primary>pg_event_trigger_table_rewrite_reason</primary></indexterm>
+        <literal><function>pg_event_trigger_table_rewrite_reason()</function></literal>
+       </entry>
+       <entry><type>int</type></entry>
+       <entry>
+        The reason code(s) explaining the reason for rewriting. The exact
+        meaning of the codes is release dependent.
+       </entry>
+      </row>
+     </tbody>
+    </tgroup>
+   </table>
+
+   <para>
+    The <function>pg_event_trigger_table_rewrite_oid</> function can be used
+    in an event trigger like this:
+<programlisting>
+CREATE FUNCTION test_event_trigger_table_rewrite_oid()
+ RETURNS event_trigger
+ LANGUAGE plpgsql AS
+$$
+BEGIN
+  RAISE NOTICE 'rewriting table % for reason %',
+                pg_event_trigger_table_rewrite_oid()::regclass,
+                pg_event_trigger_table_rewrite_reason();
+END;
+$$;
+
+CREATE EVENT TRIGGER test_table_rewrite_oid
+                  ON table_rewrite
+   EXECUTE PROCEDURE test_event_trigger_table_rewrite_oid();
+</programlisting>
     </para>
+  </sect2>
   </sect1>
 
 </chapter>
