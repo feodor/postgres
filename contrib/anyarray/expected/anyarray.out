@@ -341,6 +341,36 @@ SELECT similarity('{3,2}'::text[], '{3,2,1}');
    0.816497
 (1 row)
 
+SELECT distance('{3,2}'::text[], '{3,2,1}');
+ distance 
+----------
+  1.22474
+(1 row)
+
+SELECT '{3,2}'::text[] <-> '{3,2,1}';
+ ?column? 
+----------
+  1.22474
+(1 row)
+
+SELECT similarity('{3,2}'::int4[], '{3,2,1}');
+ similarity 
+------------
+   0.816497
+(1 row)
+
+SELECT distance('{3,2}'::int4[], '{3,2,1}');
+ distance 
+----------
+  1.22474
+(1 row)
+
+SELECT '{3,2}'::int4[] <-> '{3,2,1}';
+ ?column? 
+----------
+  1.22474
+(1 row)
+
 SELECT similarity('{3,2}'::int[], '{3,2,1}');
  similarity 
 ------------
@@ -425,11 +455,30 @@ SELECT similarity('{2}'::int[], '{3}');
           0
 (1 row)
 
+SET anyarray.similarity_type = 'overlap';
+SELECT similarity('{3,2}'::int[], '{3,2,1}');
+ similarity 
+------------
+          2
+(1 row)
+
+SELECT distance('{3,2}'::text[], '{3,2,1}');
+ distance 
+----------
+      0.5
+(1 row)
+
 SET anyarray.similarity_type = 'jaccard';
 SELECT similarity('{3,2}'::int[], '{3,2,1}');
  similarity 
 ------------
    0.666667
+(1 row)
+
+SELECT distance('{3,2}'::text[], '{3,2,1}');
+ distance 
+----------
+      1.5
 (1 row)
 
 SET anyarray.similarity_threshold = 0.6;

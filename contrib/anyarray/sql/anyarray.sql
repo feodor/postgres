@@ -74,6 +74,10 @@ SELECT similarity('{3,2}'::text[], '{3,2,1}');
 SELECT distance('{3,2}'::text[], '{3,2,1}');
 SELECT '{3,2}'::text[] <-> '{3,2,1}';
 
+SELECT similarity('{3,2}'::int4[], '{3,2,1}');
+SELECT distance('{3,2}'::int4[], '{3,2,1}');
+SELECT '{3,2}'::int4[] <-> '{3,2,1}';
+
 SELECT similarity('{3,2}'::int[], '{3,2,1}');
 SELECT similarity('{2,1}'::int[], '{3,2,1}');
 SELECT similarity('{}'::int[], '{3,2,1}');
