@@ -150,7 +150,7 @@
       <entry><function>distance(anyarray, anyarray)</function><indexterm><primary>similarity</primary></indexterm></entry>
       <entry><type>float4</type></entry>
       <entry>calculates distance beetween arrays according <varname>anyarray.similarity_type</>,
-             distance is a nverted similarity</entry>
+             distance is a inverted similarity</entry>
       <entry><literal>distance('{3,2}'::text[], '{3,2,1}')</literal></entry>
       <entry><literal>1.22474</literal></entry>
      </row>
@@ -274,19 +274,19 @@
   </para>
 
   <para>
-  	<filename>anyarray</> provides GIN support for following types: 
-	bit, bytea, char, cidr, date, float4, float8, inet, int2, int4, int8,
-	interval, macaddr, money, numeric, oid, text, time, timestamp, timestamptz,
-	timetz, varbit, varchar with appropriately called non-default
-	operator classes (example: _int4_aa_ops for int4).
+      <filename>anyarray</> provides GIN support for following types: 
+    bit, bytea, char, cidr, date, float4, float8, inet, int2, int4, int8,
+    interval, macaddr, money, numeric, oid, text, time, timestamp, timestamptz,
+    timetz, varbit, varchar with appropriately called non-default
+    operator classes (example: _int4_aa_ops for int4).
   </para>
 
   <para>
-  	<filename>anyarray</> provides GiST support for following types: 
-	bytea, char, cidr, date, float4, float8, inet, int2, int4, int8,
-	interval, macaddr, numeric, oid, text, time, timestamp, timestamptz,
-	timetz, varchar with appropriately called non-default
-	operator classes (example: _int4_aa_ops for int4).
+      <filename>anyarray</> provides GiST support for following types: 
+    bytea, char, cidr, date, float4, float8, inet, int2, int4, int8,
+    interval, macaddr, numeric, oid, text, time, timestamp, timestamptz,
+    timetz, varchar with appropriately called non-default
+    operator classes (example: _int4_aa_ops for int4).
   </para>
 
   <para>
