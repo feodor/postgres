@@ -81,6 +81,242 @@ ORDER BY opc.opcname;
  _varchar_aa_ops     | _varchar     | f
 (23 rows)
 
+SELECT
+	am.amname,
+	opc.opcname,
+	o.oprname,
+	count(*) over (partition by am.oid, opc.oid) as "N operators"
+FROM
+	pg_opclass opc,
+	pg_am am,
+	pg_amop amop,
+	pg_operator o
+WHERE
+	opc.opcmethod = am.oid AND
+	opc.opcname ~ '_aa_ops$' AND
+	amop.amopfamily = opc.opcfamily AND
+	amop.amopopr = o.oid
+ORDER BY
+	1, 2, 3;
+ amname |       opcname       | oprname | N operators 
+--------+---------------------+---------+-------------
+ gin    | _bit_aa_ops         | %       |           5
+ gin    | _bit_aa_ops         | &&      |           5
+ gin    | _bit_aa_ops         | <@      |           5
+ gin    | _bit_aa_ops         | =       |           5
+ gin    | _bit_aa_ops         | @>      |           5
+ gin    | _bytea_aa_ops       | %       |           5
+ gin    | _bytea_aa_ops       | &&      |           5
+ gin    | _bytea_aa_ops       | <@      |           5
+ gin    | _bytea_aa_ops       | =       |           5
+ gin    | _bytea_aa_ops       | @>      |           5
+ gin    | _char_aa_ops        | %       |           5
+ gin    | _char_aa_ops        | &&      |           5
+ gin    | _char_aa_ops        | <@      |           5
+ gin    | _char_aa_ops        | =       |           5
+ gin    | _char_aa_ops        | @>      |           5
+ gin    | _cidr_aa_ops        | %       |           5
+ gin    | _cidr_aa_ops        | &&      |           5
+ gin    | _cidr_aa_ops        | <@      |           5
+ gin    | _cidr_aa_ops        | =       |           5
+ gin    | _cidr_aa_ops        | @>      |           5
+ gin    | _date_aa_ops        | %       |           5
+ gin    | _date_aa_ops        | &&      |           5
+ gin    | _date_aa_ops        | <@      |           5
+ gin    | _date_aa_ops        | =       |           5
+ gin    | _date_aa_ops        | @>      |           5
+ gin    | _float4_aa_ops      | %       |           5
+ gin    | _float4_aa_ops      | &&      |           5
+ gin    | _float4_aa_ops      | <@      |           5
+ gin    | _float4_aa_ops      | =       |           5
+ gin    | _float4_aa_ops      | @>      |           5
+ gin    | _float8_aa_ops      | %       |           5
+ gin    | _float8_aa_ops      | &&      |           5
+ gin    | _float8_aa_ops      | <@      |           5
+ gin    | _float8_aa_ops      | =       |           5
+ gin    | _float8_aa_ops      | @>      |           5
+ gin    | _inet_aa_ops        | %       |           5
+ gin    | _inet_aa_ops        | &&      |           5
+ gin    | _inet_aa_ops        | <@      |           5
+ gin    | _inet_aa_ops        | =       |           5
+ gin    | _inet_aa_ops        | @>      |           5
+ gin    | _int2_aa_ops        | %       |           5
+ gin    | _int2_aa_ops        | &&      |           5
+ gin    | _int2_aa_ops        | <@      |           5
+ gin    | _int2_aa_ops        | =       |           5
+ gin    | _int2_aa_ops        | @>      |           5
+ gin    | _int4_aa_ops        | %       |           5
+ gin    | _int4_aa_ops        | &&      |           5
+ gin    | _int4_aa_ops        | <@      |           5
+ gin    | _int4_aa_ops        | =       |           5
+ gin    | _int4_aa_ops        | @>      |           5
+ gin    | _int8_aa_ops        | %       |           5
+ gin    | _int8_aa_ops        | &&      |           5
+ gin    | _int8_aa_ops        | <@      |           5
+ gin    | _int8_aa_ops        | =       |           5
+ gin    | _int8_aa_ops        | @>      |           5
+ gin    | _interval_aa_ops    | %       |           5
+ gin    | _interval_aa_ops    | &&      |           5
+ gin    | _interval_aa_ops    | <@      |           5
+ gin    | _interval_aa_ops    | =       |           5
+ gin    | _interval_aa_ops    | @>      |           5
+ gin    | _macaddr_aa_ops     | %       |           5
+ gin    | _macaddr_aa_ops     | &&      |           5
+ gin    | _macaddr_aa_ops     | <@      |           5
+ gin    | _macaddr_aa_ops     | =       |           5
+ gin    | _macaddr_aa_ops     | @>      |           5
+ gin    | _money_aa_ops       | %       |           5
+ gin    | _money_aa_ops       | &&      |           5
+ gin    | _money_aa_ops       | <@      |           5
+ gin    | _money_aa_ops       | =       |           5
+ gin    | _money_aa_ops       | @>      |           5
+ gin    | _numeric_aa_ops     | %       |           5
+ gin    | _numeric_aa_ops     | &&      |           5
+ gin    | _numeric_aa_ops     | <@      |           5
+ gin    | _numeric_aa_ops     | =       |           5
+ gin    | _numeric_aa_ops     | @>      |           5
+ gin    | _oid_aa_ops         | %       |           5
+ gin    | _oid_aa_ops         | &&      |           5
+ gin    | _oid_aa_ops         | <@      |           5
+ gin    | _oid_aa_ops         | =       |           5
+ gin    | _oid_aa_ops         | @>      |           5
+ gin    | _text_aa_ops        | %       |           5
+ gin    | _text_aa_ops        | &&      |           5
+ gin    | _text_aa_ops        | <@      |           5
+ gin    | _text_aa_ops        | =       |           5
+ gin    | _text_aa_ops        | @>      |           5
+ gin    | _time_aa_ops        | %       |           5
+ gin    | _time_aa_ops        | &&      |           5
+ gin    | _time_aa_ops        | <@      |           5
+ gin    | _time_aa_ops        | =       |           5
+ gin    | _time_aa_ops        | @>      |           5
+ gin    | _timestamp_aa_ops   | %       |           5
+ gin    | _timestamp_aa_ops   | &&      |           5
+ gin    | _timestamp_aa_ops   | <@      |           5
+ gin    | _timestamp_aa_ops   | =       |           5
+ gin    | _timestamp_aa_ops   | @>      |           5
+ gin    | _timestamptz_aa_ops | %       |           5
+ gin    | _timestamptz_aa_ops | &&      |           5
+ gin    | _timestamptz_aa_ops | <@      |           5
+ gin    | _timestamptz_aa_ops | =       |           5
+ gin    | _timestamptz_aa_ops | @>      |           5
+ gin    | _timetz_aa_ops      | %       |           5
+ gin    | _timetz_aa_ops      | &&      |           5
+ gin    | _timetz_aa_ops      | <@      |           5
+ gin    | _timetz_aa_ops      | =       |           5
+ gin    | _timetz_aa_ops      | @>      |           5
+ gin    | _varbit_aa_ops      | %       |           5
+ gin    | _varbit_aa_ops      | &&      |           5
+ gin    | _varbit_aa_ops      | <@      |           5
+ gin    | _varbit_aa_ops      | =       |           5
+ gin    | _varbit_aa_ops      | @>      |           5
+ gin    | _varchar_aa_ops     | %       |           5
+ gin    | _varchar_aa_ops     | &&      |           5
+ gin    | _varchar_aa_ops     | <@      |           5
+ gin    | _varchar_aa_ops     | =       |           5
+ gin    | _varchar_aa_ops     | @>      |           5
+ gist   | _bytea_aa_ops       | %       |           5
+ gist   | _bytea_aa_ops       | &&      |           5
+ gist   | _bytea_aa_ops       | <@      |           5
+ gist   | _bytea_aa_ops       | =       |           5
+ gist   | _bytea_aa_ops       | @>      |           5
+ gist   | _char_aa_ops        | %       |           5
+ gist   | _char_aa_ops        | &&      |           5
+ gist   | _char_aa_ops        | <@      |           5
+ gist   | _char_aa_ops        | =       |           5
+ gist   | _char_aa_ops        | @>      |           5
+ gist   | _cidr_aa_ops        | %       |           5
+ gist   | _cidr_aa_ops        | &&      |           5
+ gist   | _cidr_aa_ops        | <@      |           5
+ gist   | _cidr_aa_ops        | =       |           5
+ gist   | _cidr_aa_ops        | @>      |           5
+ gist   | _date_aa_ops        | %       |           5
+ gist   | _date_aa_ops        | &&      |           5
+ gist   | _date_aa_ops        | <@      |           5
+ gist   | _date_aa_ops        | =       |           5
+ gist   | _date_aa_ops        | @>      |           5
+ gist   | _float4_aa_ops      | %       |           5
+ gist   | _float4_aa_ops      | &&      |           5
+ gist   | _float4_aa_ops      | <@      |           5
+ gist   | _float4_aa_ops      | =       |           5
+ gist   | _float4_aa_ops      | @>      |           5
+ gist   | _float8_aa_ops      | %       |           5
+ gist   | _float8_aa_ops      | &&      |           5
+ gist   | _float8_aa_ops      | <@      |           5
+ gist   | _float8_aa_ops      | =       |           5
+ gist   | _float8_aa_ops      | @>      |           5
+ gist   | _inet_aa_ops        | %       |           5
+ gist   | _inet_aa_ops        | &&      |           5
+ gist   | _inet_aa_ops        | <@      |           5
+ gist   | _inet_aa_ops        | =       |           5
+ gist   | _inet_aa_ops        | @>      |           5
+ gist   | _int2_aa_ops        | %       |           5
+ gist   | _int2_aa_ops        | &&      |           5
+ gist   | _int2_aa_ops        | <@      |           5
+ gist   | _int2_aa_ops        | =       |           5
+ gist   | _int2_aa_ops        | @>      |           5
+ gist   | _int4_aa_ops        | %       |           5
+ gist   | _int4_aa_ops        | &&      |           5
+ gist   | _int4_aa_ops        | <@      |           5
+ gist   | _int4_aa_ops        | =       |           5
+ gist   | _int4_aa_ops        | @>      |           5
+ gist   | _int8_aa_ops        | %       |           5
+ gist   | _int8_aa_ops        | &&      |           5
+ gist   | _int8_aa_ops        | <@      |           5
+ gist   | _int8_aa_ops        | =       |           5
+ gist   | _int8_aa_ops        | @>      |           5
+ gist   | _interval_aa_ops    | %       |           5
+ gist   | _interval_aa_ops    | &&      |           5
+ gist   | _interval_aa_ops    | <@      |           5
+ gist   | _interval_aa_ops    | =       |           5
+ gist   | _interval_aa_ops    | @>      |           5
+ gist   | _macaddr_aa_ops     | %       |           5
+ gist   | _macaddr_aa_ops     | &&      |           5
+ gist   | _macaddr_aa_ops     | <@      |           5
+ gist   | _macaddr_aa_ops     | =       |           5
+ gist   | _macaddr_aa_ops     | @>      |           5
+ gist   | _numeric_aa_ops     | %       |           5
+ gist   | _numeric_aa_ops     | &&      |           5
+ gist   | _numeric_aa_ops     | <@      |           5
+ gist   | _numeric_aa_ops     | =       |           5
+ gist   | _numeric_aa_ops     | @>      |           5
+ gist   | _oid_aa_ops         | %       |           5
+ gist   | _oid_aa_ops         | &&      |           5
+ gist   | _oid_aa_ops         | <@      |           5
+ gist   | _oid_aa_ops         | =       |           5
+ gist   | _oid_aa_ops         | @>      |           5
+ gist   | _text_aa_ops        | %       |           5
+ gist   | _text_aa_ops        | &&      |           5
+ gist   | _text_aa_ops        | <@      |           5
+ gist   | _text_aa_ops        | =       |           5
+ gist   | _text_aa_ops        | @>      |           5
+ gist   | _time_aa_ops        | %       |           5
+ gist   | _time_aa_ops        | &&      |           5
+ gist   | _time_aa_ops        | <@      |           5
+ gist   | _time_aa_ops        | =       |           5
+ gist   | _time_aa_ops        | @>      |           5
+ gist   | _timestamp_aa_ops   | %       |           5
+ gist   | _timestamp_aa_ops   | &&      |           5
+ gist   | _timestamp_aa_ops   | <@      |           5
+ gist   | _timestamp_aa_ops   | =       |           5
+ gist   | _timestamp_aa_ops   | @>      |           5
+ gist   | _timestamptz_aa_ops | %       |           5
+ gist   | _timestamptz_aa_ops | &&      |           5
+ gist   | _timestamptz_aa_ops | <@      |           5
+ gist   | _timestamptz_aa_ops | =       |           5
+ gist   | _timestamptz_aa_ops | @>      |           5
+ gist   | _timetz_aa_ops      | %       |           5
+ gist   | _timetz_aa_ops      | &&      |           5
+ gist   | _timetz_aa_ops      | <@      |           5
+ gist   | _timetz_aa_ops      | =       |           5
+ gist   | _timetz_aa_ops      | @>      |           5
+ gist   | _varchar_aa_ops     | %       |           5
+ gist   | _varchar_aa_ops     | &&      |           5
+ gist   | _varchar_aa_ops     | <@      |           5
+ gist   | _varchar_aa_ops     | =       |           5
+ gist   | _varchar_aa_ops     | @>      |           5
+(215 rows)
+
 SELECT 
     trim( leading '_'  from t.typname ) || '[]' AS "Array Type",
     gin.opcname AS "GIN operator class",

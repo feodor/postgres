@@ -33,6 +33,24 @@ WHERE
 	opc.opcname ~ '_aa_ops$'
 ORDER BY opc.opcname;
 
+SELECT
+	am.amname,
+	opc.opcname,
+	o.oprname,
+	count(*) over (partition by am.oid, opc.oid) as "N operators"
+FROM
+	pg_opclass opc,
+	pg_am am,
+	pg_amop amop,
+	pg_operator o
+WHERE
+	opc.opcmethod = am.oid AND
+	opc.opcname ~ '_aa_ops$' AND
+	amop.amopfamily = opc.opcfamily AND
+	amop.amopopr = o.oid
+ORDER BY
+	1, 2, 3;
+
 SELECT 
     trim( leading '_'  from t.typname ) || '[]' AS "Array Type",
     gin.opcname AS "GIN operator class",

@@ -141,9 +141,18 @@
      <row>
       <entry><function>similarity(anyarray, anyarray)</function><indexterm><primary>similarity</primary></indexterm></entry>
       <entry><type>float4</type></entry>
-      <entry>make single-element array</entry>
+      <entry>calculates similarity of arrays according <varname>anyarray.similarity_type</></entry>
       <entry><literal>similarity('{3,2}'::text[], '{3,2,1}')</literal></entry>
       <entry><literal>0.816497</literal></entry>
+     </row>
+
+     <row>
+      <entry><function>distance(anyarray, anyarray)</function><indexterm><primary>similarity</primary></indexterm></entry>
+      <entry><type>float4</type></entry>
+      <entry>calculates distance beetween arrays according <varname>anyarray.similarity_type</>,
+             distance is a nverted similarity</entry>
+      <entry><literal>distance('{3,2}'::text[], '{3,2,1}')</literal></entry>
+      <entry><literal>1.22474</literal></entry>
      </row>
 
     </tbody>
@@ -204,35 +213,19 @@
       <entry>intersection of arrays</entry>
      </row>
      <row>
-      <entry><literal>anyarray % anyarray  </literal></entry>
+      <entry><literal>anyarray % anyarray</literal></entry>
       <entry><type>bool</type></entry>
-      <entry>returns true if arrays are similar</entry>
+      <entry>returns true if similarity of arrays is greater than <varname>anyarray.similarity_threshold</></entry>
      </row>
      <row>
-      <entry><literal>int[] @@ query_int</literal></entry>
-      <entry><type>boolean</type></entry>
-      <entry><literal>true</> if array satisfies query (see below)</entry>
-     </row>
-     <row>
-      <entry><literal>query_int ~~ int[]</literal></entry>
-      <entry><type>boolean</type></entry>
-      <entry><literal>true</> if array satisfies query (commutator of <literal>@@</>)</entry>
+      <entry><literal>anyarray &lt;-&gt; anyarray</literal></entry>
+      <entry><type>float4</type></entry>
+      <entry>distance between arrays</entry>
      </row>
     </tbody>
    </tgroup>
   </table>
 
-  <para>
-   The <literal>@@</> and <literal>~~</> operators test whether an array
-   satisfies a <firstterm>query</>, which is expressed as a value of a
-   specialized data type <type>query_int</>.  A <firstterm>query</>
-   consists of integer values that are checked against the elements of
-   the array, possibly combined using the operators <literal>&amp;</>
-   (AND), <literal>|</> (OR), and <literal>!</> (NOT).  Parentheses
-   can be used as needed.  For example,
-   the query <literal>1&amp;(2|3)</> matches arrays that contain 1
-   and also contain either 2 or 3.
-  </para>
  </sect2>
 
  <sect2>
@@ -248,8 +241,8 @@
     </term>
     <listitem>
      <para>
-	  Lower threshold of array's similarity, array's with similarity 
-	  lower than threshold are not similar by % operation. Default: 0.6. 
+      Lower threshold of array's similarity, array's with similarity 
+      lower than threshold are not similar by % operation. Default: 0.6. 
      </para>
     </listitem>
    </varlistentry>
@@ -262,7 +255,7 @@
     </term>
     <listitem>
      <para>
-	  Type of similarity formula: <literal>cosine</>(default), <literal>jaccard</>, <literal>overlap</>
+      Type of similarity formula: <literal>cosine</>(default), <literal>jaccard</>, <literal>overlap</>
      </para>
     </listitem>
    </varlistentry>
@@ -274,25 +267,26 @@
   <title>Index Support</title>
 
   <para>
-   <filename>anyarray</> provides index support for the
+   <filename>anyarray</> provides GIN and GiST index support for the
    <literal>&amp;&amp;</>, <literal>@&gt;</>, <literal>&lt;@</>,
-   and <literal>@@</> operators, as well as regular array equality.
+   and <literal>%</> operators, as well as regular array equality.
+   Corresponding operator classes aren't default.
   </para>
 
   <para>
-   Two GiST index operator classes are provided:
-   <literal>gist__int_ops</> (used by default) is suitable for
-   small- to medium-size data sets, while
-   <literal>gist__intbig_ops</> uses a larger signature and is more
-   suitable for indexing large data sets (i.e., columns containing
-   a large number of distinct array values).
-   The implementation uses an RD-tree data structure with
-   built-in lossy compression.
+  	<filename>anyarray</> provides GIN support for following types: 
+	bit, bytea, char, cidr, date, float4, float8, inet, int2, int4, int8,
+	interval, macaddr, money, numeric, oid, text, time, timestamp, timestamptz,
+	timetz, varbit, varchar with appropriately called non-default
+	operator classes (example: _int4_aa_ops for int4).
   </para>
 
   <para>
-   There is also a non-default GIN operator class
-   <literal>gin__int_ops</> supporting the same operators.
+  	<filename>anyarray</> provides GiST support for following types: 
+	bytea, char, cidr, date, float4, float8, inet, int2, int4, int8,
+	interval, macaddr, numeric, oid, text, time, timestamp, timestamptz,
+	timetz, varchar with appropriately called non-default
+	operator classes (example: _int4_aa_ops for int4).
   </para>
 
   <para>
@@ -320,8 +314,6 @@ SELECT message.mid FROM message WHERE message.sections &amp;&amp; '{1,2}';
 -- select messages in sections 1 AND 2 - CONTAINS operator
 SELECT message.mid FROM message WHERE message.sections @&gt; '{1,2}';
 
--- the same, using QUERY operator
-SELECT message.mid FROM message WHERE message.sections @@ '1&amp;2'::query_int;
 </programlisting>
  </sect2>
 
