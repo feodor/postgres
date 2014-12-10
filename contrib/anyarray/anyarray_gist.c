@@ -139,42 +139,6 @@ ganyarrayout(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(outbuf);
 }
 
-static int
-compareint(const void *va, const void *vb)
-{
-	int32		a = *((const int32 *) va);
-	int32		b = *((const int32 *) vb);
-
-	if (a == b)
-		return 0;
-	return (a > b) ? 1 : -1;
-}
-
-/*
- * Removes duplicates from an array of int32. 'l' is
- * size of the input array. Returns the new size of the array.
- */
-static int
-uniqueint(int32 *a, int32 l)
-{
-	int32	   *ptr,
-			   *res;
-
-	if (l <= 1)
-		return l;
-
-	ptr = res = a;
-
-	qsort((void *) a, l, sizeof(int32), compareint);
-
-	while (ptr - a < l)
-		if (*ptr != *res)
-			*(++res) = *ptr++;
-		else
-			ptr++;
-	return res + 1 - a;
-}
-
 static void
 makeSignSimpleArray(BITVECP sign, SimpleArray *s)
 {
@@ -192,11 +156,9 @@ makeSignSimpleArray(BITVECP sign, SimpleArray *s)
 }
 
 static void
-makesign(BITVECP sign, SignAnyArray *a)
+makeSign(BITVECP sign, int32 *ptr, int32 len)
 {
-	int32		k,
-				len = ARRNELEM(a);
-	int32	   *ptr = GETARR(a);
+	int32		k;
 
 	MemSet((void *) sign, 0, sizeof(BITVEC));
 	for (k = 0; k < len; k++)
@@ -215,8 +177,7 @@ ganyarray_compress(PG_FUNCTION_ARGS)
 		ArrayType			*array = DatumGetArrayTypeP(entry->key);
 		AnyArrayTypeInfo	*info;
 		SimpleArray			*s;
-		int32				i, len,
-							*arr;
+		int32				len;
 
 		if (fcinfo->flinfo->fn_extra == NULL)
 			fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(array));
@@ -224,38 +185,25 @@ ganyarray_compress(PG_FUNCTION_ARGS)
 		hashFuncInit(info);
 
 		s = Array2SimpleArray(info, array);
+		hashSimpleArray(s);
 
-		len = CALCGTSIZE(ARRKEY, s->nelems);
-		res = (SignAnyArray *) palloc(len);
-		SET_VARSIZE(res, len);
-		res->flag = ARRKEY;
-		arr = GETARR(res);
-
-		for(i=0; i<s->nelems; i++)
-			arr[i] = DatumGetInt32(FunctionCall1(&info->hashFunc, s->elems[i]));	
-
-		len = uniqueint(GETARR(res), s->nelems);
-		if (len != s->nelems)
-		{
-			/*
-			 * there is a collision of hash-function; len is always less than
-			 * val->size
-			 */
-			len = CALCGTSIZE(ARRKEY, len);
-			SET_VARSIZE(res, len);
-		}
+		len = CALCGTSIZE(ARRKEY, s->nHashedElems);
 
 		/* make signature, if array is too long */
-		if (VARSIZE(res) > TOAST_INDEX_TARGET)
+		if (len <= TOAST_INDEX_TARGET)
 		{
-			SignAnyArray *ressign;
-
+			res = (SignAnyArray *) palloc(len);
+			SET_VARSIZE(res, len);
+			res->flag = ARRKEY;
+			memcpy(GETARR(res), s->hashedElems, s->nHashedElems * sizeof(int32));
+		}
+		else
+		{
 			len = CALCGTSIZE(SIGNKEY, 0);
-			ressign = (SignAnyArray *) palloc(len);
-			SET_VARSIZE(ressign, len);
-			ressign->flag = SIGNKEY;
-			makesign(GETSIGN(ressign), res);
-			res = ressign;
+			res = (SignAnyArray *) palloc(len);
+			SET_VARSIZE(res, len);
+			res->flag = SIGNKEY;
+			makeSign(GETSIGN(res), s->hashedElems, s->nHashedElems);
 		}
 
 		retval = (GISTENTRY *) palloc(sizeof(GISTENTRY));
@@ -485,7 +433,7 @@ ganyarray_penalty(PG_FUNCTION_ARGS)
 	{
 		BITVEC		sign;
 
-		makesign(sign, newval);
+		makeSign(sign, GETARR(newval), ARRNELEM(newval));
 
 		if (ISALLTRUE(origval))
 			*penalty = ((float) (SIGLENBIT - sizebitvec(sign))) / (float) (SIGLENBIT + 1);
@@ -508,7 +456,7 @@ fillcache(CACHESIGN *item, SignAnyArray *key)
 {
 	item->allistrue = false;
 	if (ISARRKEY(key))
-		makesign(item->sign, key);
+		makeSign(item->sign, GETARR(key), ARRNELEM(key));
 	else if (ISALLTRUE(key))
 		item->allistrue = true;
 	else
@@ -741,24 +689,26 @@ static int32
 countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 {
 	int32	nIntersect = 0;
+	int32	n = 0, *p = NULL;
+
+	hashSimpleArray(query);
+	p = query->hashedElems;
+	n = query->nHashedElems;
 
 	if (query->nelems == 0)
 		return 0;
 
 	if (ISSIGNKEY(array))
 	{
-		int32	i;
+		int32 i;
+
 
 		if (ISALLTRUE(array))
-			return query->nelems;
+			return n;
 
-		hashFuncInit(query->info);
-
-		for(i=0; i<query->nelems; i++)
+		for(i=0; i<n; i++)
 		{
-			int32 hash = DatumGetInt32(FunctionCall1(&query->info->hashFunc, query->elems[i]));
-
-			if (GETBIT(GETSIGN(array), HASHVAL(hash)))
+			if (GETBIT(GETSIGN(array), HASHVAL(p[i])))
 			{
 				nIntersect++;
 				if (justOverlap)
@@ -772,15 +722,11 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 				len = ARRNELEM(array),
 				*a = GETARR(array);
 
-		hashFuncInit(query->info);
-
-		for(i=0; i<query->nelems; i++)
+		for(i=0; i<n; i++)
 		{
-			int32 hash = DatumGetInt32(FunctionCall1(&query->info->hashFunc, query->elems[i]));
-
 			for(j=0; j<len; j++)
 			{
-				if (a[j] == hash)
+				if (a[j] == p[i])
 				{
 					nIntersect++;
 					if (justOverlap)
@@ -789,15 +735,13 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 			}
 		}
 	}
-	else if (query->nelems < LINEAR_LIMIT)
+	else if (n < LINEAR_LIMIT)
 	{
 		int32	i;
 
-		hashFuncInit(query->info);
-
-		for(i=0; i<query->nelems; i++)
+		for(i=0; i<n; i++)
 		{
-			int32 hash = DatumGetInt32(FunctionCall1(&query->info->hashFunc, query->elems[i]));
+			int32 hash = p[i];
 			int32	*StopLow  = GETARR(array),
 					*StopHigh = GETARR(array) + ARRNELEM(array),
 					*StopMiddle;
@@ -823,21 +767,11 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 	}
 	else
 	{
-		int32			i, j,
+		int32			i = 0, j = 0,
 						na = ARRNELEM(array),
 						*da = GETARR(array),
-						nb, 
-						*db = palloc(sizeof(int32) * query->nelems);
+						nb = n, *db = p;
 
-		hashFuncInit(query->info);
-
-		for(i=0; i<query->nelems; i++)
-			db[i] = DatumGetInt32(FunctionCall1(&query->info->hashFunc, query->elems[i]));	
-
-		query->nelems = nb = uniqueint(db, query->nelems);
-
-		i = j = 0;
-		
 		while(i < na && j < nb)
 		{
 			if (da[i] < db[j])
@@ -861,6 +795,12 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 static bool
 anyarrayContains(SignAnyArray *array, SimpleArray *query)
 {
+	int32	n = 0, *p = NULL;
+
+	hashSimpleArray(query);
+	p = query->hashedElems;
+	n = query->nHashedElems;
+
 	if (ISSIGNKEY(array))
 	{
 		BITVECP	sign;
@@ -869,14 +809,10 @@ anyarrayContains(SignAnyArray *array, SimpleArray *query)
 		if (ISALLTRUE(array))
 			return true;
 
-		hashFuncInit(query->info);
-
 		sign = GETSIGN(array);
-		for(i=0; i<query->nelems; i++)
+		for(i=0; i<n; i++)
 		{
-			int32 hash = DatumGetInt32(FunctionCall1(&query->info->hashFunc, query->elems[i]));
-
-			if (!GETBIT(sign, HASHVAL(hash)))
+			if (!GETBIT(sign, HASHVAL(p[i])))
 				return false;
 		}
 	}
@@ -886,15 +822,11 @@ anyarrayContains(SignAnyArray *array, SimpleArray *query)
 				len = ARRNELEM(array),
 				*a = GETARR(array);
 
-		hashFuncInit(query->info);
-
-		for(i=0; i<query->nelems; i++)
+		for(i=0; i<n; i++)
 		{
-			int32 hash = DatumGetInt32(FunctionCall1(&query->info->hashFunc, query->elems[i]));
-
 			for(j=0; j<len; j++)
 			{
-				if (a[j] == hash)
+				if (a[j] == p[i])
 					break;
 			}
 
@@ -902,15 +834,13 @@ anyarrayContains(SignAnyArray *array, SimpleArray *query)
 				return false;
 		}
 	}
-	else
+	else if (n < LINEAR_LIMIT)
 	{
 		int32	i;
 
-		hashFuncInit(query->info);
-
-		for(i=0; i<query->nelems; i++)
+		for(i=0; i<n; i++)
 		{
-			int32 hash = DatumGetInt32(FunctionCall1(&query->info->hashFunc, query->elems[i]));
+			int32 hash = p[i];
 			int32	*StopLow  = GETARR(array),
 					*StopHigh = GETARR(array) + ARRNELEM(array),
 					*StopMiddle;
@@ -931,6 +861,28 @@ anyarrayContains(SignAnyArray *array, SimpleArray *query)
 				return false;
 		}
 	}
+	else
+	{
+		int32			i, j,
+						na = ARRNELEM(array),
+						*da = GETARR(array),
+						nb = n, *db = p;
+
+		i = j = 0;
+		
+		while(i < na && j < nb)
+		{
+			if (da[i] < db[j])
+				i++;
+			else if (da[i] > db[j])
+				return false;
+			else
+			{
+				i++;
+				j++;
+			}
+		}
+	}
 
 	return true;
 }
@@ -947,7 +899,7 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 	/* Oid      subtype = PG_GETARG_OID(3); */
 	bool				*recheck = (bool *) PG_GETARG_POINTER(4);
 	bool				retval = true;
-	int					nIntersect;
+	int32				nIntersect;
 
 	CHECKARRVALID(query);
 
@@ -1002,7 +954,7 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 			else
 			{
 				nIntersect = countIntersections(queryArray, array, false);
-				retval = (nIntersect == queryArray->nelems && nIntersect >= ARRNELEM(array));
+				retval = (nIntersect == queryArray->nHashedElems && nIntersect >= ARRNELEM(array));
 			}
 			break;
 		case RTContainsStrategyNumber:
@@ -1065,12 +1017,13 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 					{
 						case AA_Cosine:
 							if (((double)nIntersect) / 
-									sqrt(((double)queryArray->nelems) * ((double)length)) < SmlLimit)
+									sqrt(((double)queryArray->nHashedElems) * ((double)length)) < SmlLimit)
 								retval = false;
 							break;
 						case AA_Jaccard:
 							if (((double)(nIntersect)) / 
-								(((double)queryArray->nelems) + ((double)length) - ((double)nIntersect)) < SmlLimit)
+								(((double)queryArray->nHashedElems) + ((double)length) - ((double)nIntersect))
+									< SmlLimit)
 								retval = false;
 							break;
 						default:
@@ -1085,12 +1038,12 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 				switch(SmlType)
 				{
 					case AA_Cosine:
-						/* nIntersect / sqrt(queryArray->nelems * nIntersect) */
-						if (sqrt(((double)nIntersect) / ((double)queryArray->nelems)) < SmlLimit)
+						/* nIntersect / sqrt(queryArray->nHashedElems * nIntersect) */
+						if (sqrt(((double)nIntersect) / ((double)queryArray->nHashedElems)) < SmlLimit)
 							retval = false;
 						break;
 					case AA_Jaccard:
-						if (((double)nIntersect) / ((double)queryArray->nelems) < SmlLimit)
+						if (((double)nIntersect) / ((double)queryArray->nHashedElems) < SmlLimit)
 							retval = false;
 						break;
 					case AA_Overlap:

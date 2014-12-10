@@ -36,7 +36,9 @@ typedef struct AnyArrayTypeInfo
 typedef struct SimpleArray
 {
 	Datum				*elems;
+	int32				*hashedElems;
 	int32				nelems;
+	int32				nHashedElems;
 	AnyArrayTypeInfo	*info;
 } SimpleArray;
 
@@ -84,7 +86,7 @@ extern void	freeSimpleArray(SimpleArray* s);
 extern ArrayType* SimpleArray2Array(SimpleArray *s);
 extern void sortSimpleArray(SimpleArray *s, int32 direction);
 extern void uniqSimpleArray(SimpleArray *s, bool onlyDuplicate);
-extern int numOfIntersect(SimpleArray *a, SimpleArray *b);
+extern void hashSimpleArray(SimpleArray *s);
 extern double getSimilarity(SimpleArray *sa, SimpleArray *sb);
 
 #endif

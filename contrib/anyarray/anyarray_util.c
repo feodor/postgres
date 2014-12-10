@@ -156,6 +156,9 @@ Array2SimpleArray(AnyArrayTypeInfo	*info, ArrayType *a)
 	CHECKARRVALID(a);
 
 	s->info = info;
+	s->nHashedElems = 0;
+	s->hashedElems = NULL;
+
 	if (ARRISVOID(a))
 	{
 		s->elems = NULL;
@@ -178,6 +181,8 @@ freeSimpleArray(SimpleArray* s)
 	{
 		if (s->elems)
 			pfree(s->elems);
+		if (s->hashedElems)
+			pfree(s->hashedElems);
 		pfree(s);
 	}	
 }
@@ -280,7 +285,57 @@ uniqSimpleArray(SimpleArray *s, bool onlyDuplicate)
 	}
 }
 
-int
+static int
+compareint(const void *va, const void *vb)
+{
+	int32	a = *((const int32 *) va);
+	int32	b = *((const int32 *) vb);
+
+	if (a == b)
+		return 0;
+	return (a > b) ? 1 : -1;
+}
+
+static int
+uniqueint(int32 *a, int32 l)
+{
+	int32	*ptr,
+			*res;
+
+	if (l <= 1)
+		return l;
+
+	ptr = res = a;
+
+	qsort((void *) a, l, sizeof(int32), compareint);
+
+	while (ptr - a < l)
+		if (*ptr != *res)
+			*(++res) = *ptr++;
+		else
+			ptr++;
+	return res + 1 - a;
+}
+
+void
+hashSimpleArray(SimpleArray* query)
+{
+	int32	i;
+
+	if (query->hashedElems)
+		return;
+
+	query->hashedElems = palloc(sizeof(*query->hashedElems) * (query->nelems + 1));
+
+	hashFuncInit(query->info);
+
+	for(i=0; i<query->nelems; i++)
+		query->hashedElems[i] = DatumGetInt32(FunctionCall1(&query->info->hashFunc, query->elems[i]));
+
+	query->nHashedElems = uniqueint(query->hashedElems, query->nelems);
+}
+
+static int
 numOfIntersect(SimpleArray *a, SimpleArray *b)
 {
 	int					cnt = 0,
@@ -290,6 +345,11 @@ numOfIntersect(SimpleArray *a, SimpleArray *b)
 	AnyArrayTypeInfo	*info = a->info;
 
 	cmpFuncInit(info);
+
+	sortSimpleArray(a, 1);
+	uniqSimpleArray(a, false);
+	sortSimpleArray(b, 1);
+	uniqSimpleArray(b, false);
 
 	while(aptr - a->elems < a->nelems && bptr - b->elems < b->nelems)
 	{
@@ -315,11 +375,6 @@ getSimilarity(SimpleArray *sa, SimpleArray *sb)
 {
 	int			inter;
 	double		result = 0.0;
-
-	sortSimpleArray(sa, 1);
-	uniqSimpleArray(sa, false);
-	sortSimpleArray(sb, 1);
-	uniqSimpleArray(sb, false);
 
 	inter = numOfIntersect(sa, sb);
 
