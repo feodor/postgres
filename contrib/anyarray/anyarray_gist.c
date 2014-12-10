@@ -918,6 +918,7 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 		case RTOverlapStrategyNumber:
 			retval = (countIntersections(queryArray, array, true) > 0);
 			break;
+		case RTContainsStrategyNumber:
 		case RTSameStrategyNumber:
 			if (ISSIGNKEY(array))
 			{
@@ -928,7 +929,7 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 				pb = b;
 				makeSignSimpleArray(pb, queryArray);
 
-				if (GIST_LEAF(entry))
+				if (GIST_LEAF(entry) && strategy == RTSameStrategyNumber)
 				{
 					LOOPBYTE
 					{
@@ -956,9 +957,6 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 				nIntersect = countIntersections(queryArray, array, false);
 				retval = (nIntersect == queryArray->nHashedElems && nIntersect >= ARRNELEM(array));
 			}
-			break;
-		case RTContainsStrategyNumber:
-			retval = anyarrayContains(array, queryArray);
 			break;
 		case RTContainedByStrategyNumber:
 			if (GIST_LEAF(entry))
