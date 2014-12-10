@@ -138,7 +138,7 @@ ginanyarray_consistent(PG_FUNCTION_ARGS)
 			{
 				if (!check[i])
 				{
-					res = true;
+					res = false;
 					break;
 				}
 			}
@@ -160,9 +160,6 @@ ginanyarray_consistent(PG_FUNCTION_ARGS)
 		case AnyAarraySimilarityStrategy:
 			{
 				int32	nIntersection = 0;
-
-				/* we will need recheck becouse we don't know actual length*/
-				*recheck = true;
 
 				for (i = 0; i < nkeys; i++)
 				{
