@@ -290,6 +290,37 @@
   </para>
 
   <para>
+  Full list of supported arrays and corresponding operator classes names:
+   <programlisting>
+  Array Type     | GIN operator class  | GiST operator class
+  ---------------+---------------------+---------------------
+   bit[]         | _bit_aa_ops         |
+   bytea[]       | _bytea_aa_ops       | _bytea_aa_ops
+   char[]        | _char_aa_ops        | _char_aa_ops
+   cidr[]        | _cidr_aa_ops        | _cidr_aa_ops
+   date[]        | _date_aa_ops        | _date_aa_ops
+   float4[]      | _float4_aa_ops      | _float4_aa_ops
+   float8[]      | _float8_aa_ops      | _float8_aa_ops
+   inet[]        | _inet_aa_ops        | _inet_aa_ops
+   int2[]        | _int2_aa_ops        | _int2_aa_ops
+   int4[]        | _int4_aa_ops        | _int4_aa_ops
+   int8[]        | _int8_aa_ops        | _int8_aa_ops
+   interval[]    | _interval_aa_ops    | _interval_aa_ops
+   macaddr[]     | _macaddr_aa_ops     | _macaddr_aa_ops
+   money[]       | _money_aa_ops       |
+   numeric[]     | _numeric_aa_ops     | _numeric_aa_ops
+   oid[]         | _oid_aa_ops         | _oid_aa_ops
+   text[]        | _text_aa_ops        | _text_aa_ops
+   time[]        | _time_aa_ops        | _time_aa_ops
+   timestamp[]   | _timestamp_aa_ops   | _timestamp_aa_ops
+   timestamptz[] | _timestamptz_aa_ops | _timestamptz_aa_ops
+   timetz[]      | _timetz_aa_ops      | _timetz_aa_ops
+   varbit[]      | _varbit_aa_ops      |
+   varchar[]     | _varchar_aa_ops     | _varchar_aa_ops
+    </programlisting>
+  </para>
+
+  <para>
    The choice between GiST and GIN indexing depends on the relative
    performance characteristics of GiST and GIN, which are discussed elsewhere.
    As a rule of thumb, a GIN index is faster to search than a GiST index, but
