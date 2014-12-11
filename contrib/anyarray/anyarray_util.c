@@ -109,6 +109,35 @@ getAnyArrayTypeInfo(MemoryContext ctx, Oid typid)
 }
 
 void
+freeAnyArrayTypeInfo(AnyArrayTypeInfo *info)
+{
+	if (info)
+	{
+		/*
+		 * there is no way to cleanup FmgrInfo...
+		 */
+		pfree(info);
+	}
+}
+
+AnyArrayTypeInfo*
+getAnyArrayTypeInfoCached(FunctionCallInfo fcinfo, Oid typid)
+{
+	AnyArrayTypeInfo	*info = NULL;
+
+	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+
+	if (info == NULL || info->typid != typid)
+	{
+		freeAnyArrayTypeInfo(info);
+		info = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, typid);
+		fcinfo->flinfo->fn_extra = info;
+	}
+
+	return info;
+}
+
+void
 cmpFuncInit(AnyArrayTypeInfo* info)
 {
 	if (info->cmpFuncInited == false)

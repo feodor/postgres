@@ -79,6 +79,8 @@ extern double SmlLimit;
  * Various support functions
  */
 extern AnyArrayTypeInfo* getAnyArrayTypeInfo(MemoryContext ctx, Oid typid);
+extern void freeAnyArrayTypeInfo(AnyArrayTypeInfo *info);
+extern AnyArrayTypeInfo* getAnyArrayTypeInfoCached(FunctionCallInfo fcinfo, Oid typid);
 extern void cmpFuncInit(AnyArrayTypeInfo* info);
 extern void hashFuncInit(AnyArrayTypeInfo* info);
 extern SimpleArray* Array2SimpleArray(AnyArrayTypeInfo  *info, ArrayType *a);

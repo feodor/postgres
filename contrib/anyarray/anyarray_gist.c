@@ -179,9 +179,7 @@ ganyarray_compress(PG_FUNCTION_ARGS)
 		SimpleArray			*s;
 		int32				len;
 
-		if (fcinfo->flinfo->fn_extra == NULL)
-			fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(array));
-		info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+		info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(array));
 		hashFuncInit(info);
 
 		s = Array2SimpleArray(info, array);
@@ -845,9 +843,7 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 	if (ISSIGNKEY(array) && ISALLTRUE(array))
 		PG_RETURN_BOOL(true);
 		
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(query));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(query));
 
 	queryArray = Array2SimpleArray(info, query);
 	

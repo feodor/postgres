@@ -34,9 +34,7 @@ ginanyarray_extract(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(array);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(array));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(array));
 
 	sa = Array2SimpleArray(info, array);
 	sortSimpleArray(sa, 1);
@@ -63,9 +61,7 @@ ginanyarray_queryextract(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(array);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(array));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(array));
 
 	sa = Array2SimpleArray(info, array);
 	sortSimpleArray(sa, 1);

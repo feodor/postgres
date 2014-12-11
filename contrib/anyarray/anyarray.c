@@ -31,9 +31,7 @@ aa_set(PG_FUNCTION_ARGS)
 	SimpleArray			s;
 	ArrayType			*r;
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, typid);
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, typid);
 
 	s.nelems = 1;
 	s.elems = &a;
@@ -85,9 +83,7 @@ aa_sort(PG_FUNCTION_ARGS)
 					 errmsg("second parameter must be \"ASC\" or \"DESC\"")));
 	}
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(a));
 
 	s = Array2SimpleArray(info, a);
 	sortSimpleArray(s, direction);
@@ -111,9 +107,7 @@ aa_sort_asc(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(a));
 
 	s = Array2SimpleArray(info, a);
 	sortSimpleArray(s, 1);
@@ -135,9 +129,7 @@ aa_sort_desc(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(a));
 
 	s = Array2SimpleArray(info, a);
 	sortSimpleArray(s, -1);
@@ -159,9 +151,7 @@ aa_uniq(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(a));
 
 	s = Array2SimpleArray(info, a);
 	uniqSimpleArray(s, false);
@@ -183,9 +173,7 @@ aa_uniqd(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(a));
 
 	s = Array2SimpleArray(info, a);
 	uniqSimpleArray(s, true);
@@ -213,9 +201,7 @@ aa_idx(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("array type doesn't match search type")));
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(a));
 	cmpFuncInit(info);
 
 	s = Array2SimpleArray(info, a);
@@ -250,9 +236,7 @@ aa_subarray(PG_FUNCTION_ARGS)
 
 	CHECKARRVALID(a);
 
-	if (fcinfo->flinfo->fn_extra == NULL)
-		fcinfo->flinfo->fn_extra = getAnyArrayTypeInfo(fcinfo->flinfo->fn_mcxt, ARR_ELEMTYPE(a));
-	info = (AnyArrayTypeInfo*)fcinfo->flinfo->fn_extra;
+	info = getAnyArrayTypeInfoCached(fcinfo, ARR_ELEMTYPE(a));
 
 	s = Array2SimpleArray(info, a);
 
