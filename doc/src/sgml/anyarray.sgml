@@ -150,7 +150,7 @@
       <entry><function>distance(anyarray, anyarray)</function><indexterm><primary>similarity</primary></indexterm></entry>
       <entry><type>float4</type></entry>
       <entry>calculates distance beetween arrays according <varname>anyarray.similarity_type</>,
-             distance is a inverted similarity</entry>
+             distance is an inverted similarity</entry>
       <entry><literal>distance('{3,2}'::text[], '{3,2,1}')</literal></entry>
       <entry><literal>1.22474</literal></entry>
      </row>
