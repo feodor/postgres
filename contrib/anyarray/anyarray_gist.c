@@ -685,8 +685,15 @@ ganyarray_picksplit(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(v);
 }
 
+typedef enum CountStopType
+{
+	CountAll,
+	FirstFound,
+	FirstMissed
+} CountStopType;
+
 static int32
-countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
+countIntersections(SimpleArray *query, SignAnyArray *array, CountStopType stop)
 {
 	int32	nIntersect = 0;
 	int32	n = 0, *p = NULL;
@@ -711,8 +718,12 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 			if (GETBIT(GETSIGN(array), HASHVAL(p[i])))
 			{
 				nIntersect++;
-				if (justOverlap)
+				if (stop == FirstFound)
 					break;
+			}
+			else if (stop == FirstMissed) 
+			{
+				break;
 			}
 		}
 	}
@@ -729,9 +740,18 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 				if (a[j] == p[i])
 				{
 					nIntersect++;
-					if (justOverlap)
-						break;
+					break;
 				}
+			}
+
+			if (j>=len)
+			{
+				if (stop == FirstMissed)
+					break;
+			}
+			else if (stop == FirstFound)
+			{
+				break;
 			}
 		}
 	}
@@ -761,8 +781,15 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 				}
 			}
 
-			if (nIntersect > 0 && justOverlap)
+			if (StopLow >= StopHigh)
+			{
+				if (stop == FirstMissed)
+					break;
+			}
+			else if (stop == FirstFound)
+			{
 				break;
+			}
 		}
 	}
 	else
@@ -775,13 +802,19 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 		while(i < na && j < nb)
 		{
 			if (da[i] < db[j])
+			{
 				i++;
+			}
 			else if (da[i] > db[j])
+			{
+				if (stop == FirstMissed)
+					break;
 				j++;
+			}
 			else
 			{
 				nIntersect++;
-				if (justOverlap)
+				if (stop == FirstFound)
 					break;
 				i++;
 				j++;
@@ -790,101 +823,6 @@ countIntersections(SimpleArray *query, SignAnyArray *array, bool justOverlap)
 	}
 
 	return nIntersect;
-}
-
-static bool
-anyarrayContains(SignAnyArray *array, SimpleArray *query)
-{
-	int32	n = 0, *p = NULL;
-
-	hashSimpleArray(query);
-	p = query->hashedElems;
-	n = query->nHashedElems;
-
-	if (ISSIGNKEY(array))
-	{
-		BITVECP	sign;
-		int32	i;
-
-		if (ISALLTRUE(array))
-			return true;
-
-		sign = GETSIGN(array);
-		for(i=0; i<n; i++)
-		{
-			if (!GETBIT(sign, HASHVAL(p[i])))
-				return false;
-		}
-	}
-	else if (ARRNELEM(array) < LINEAR_LIMIT)
-	{
-		int32	i, j,
-				len = ARRNELEM(array),
-				*a = GETARR(array);
-
-		for(i=0; i<n; i++)
-		{
-			for(j=0; j<len; j++)
-			{
-				if (a[j] == p[i])
-					break;
-			}
-
-			if (j >= len)
-				return false;
-		}
-	}
-	else if (n < LINEAR_LIMIT)
-	{
-		int32	i;
-
-		for(i=0; i<n; i++)
-		{
-			int32 hash = p[i];
-			int32	*StopLow  = GETARR(array),
-					*StopHigh = GETARR(array) + ARRNELEM(array),
-					*StopMiddle;
-
-			while (StopLow < StopHigh)
-			{
-				StopMiddle = StopLow + (StopHigh - StopLow) / 2;
-
-				if (*StopMiddle < hash)
-					StopLow = StopMiddle + 1;
-				else if (*StopMiddle > hash)
-					StopHigh = StopMiddle;
-				else
-					break;
-			}
-
-			if (StopLow >= StopHigh)
-				return false;
-		}
-	}
-	else
-	{
-		int32			i, j,
-						na = ARRNELEM(array),
-						*da = GETARR(array),
-						nb = n, *db = p;
-
-		i = j = 0;
-		
-		while(i < na && j < nb)
-		{
-			if (da[i] < db[j])
-				i++;
-			else if (da[i] > db[j])
-				return false;
-			else
-			{
-				i++;
-				j++;
-			}
-		}
-	}
-
-	return true;
 }
 
 Datum
@@ -916,7 +854,7 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 	switch (strategy)
 	{
 		case RTOverlapStrategyNumber:
-			retval = (countIntersections(queryArray, array, true) > 0);
+			retval = (countIntersections(queryArray, array, FirstFound) > 0);
 			break;
 		case RTContainsStrategyNumber:
 		case RTSameStrategyNumber:
@@ -954,8 +892,11 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 			}
 			else
 			{
-				nIntersect = countIntersections(queryArray, array, false);
-				retval = (nIntersect == queryArray->nHashedElems && nIntersect >= ARRNELEM(array));
+				nIntersect = countIntersections(queryArray, array, FirstMissed);
+				if (strategy == RTSameStrategyNumber)
+					retval = (nIntersect == queryArray->nHashedElems && nIntersect >= ARRNELEM(array));
+				else
+					retval = (nIntersect == queryArray->nHashedElems);
 			}
 			break;
 		case RTContainedByStrategyNumber:
@@ -981,20 +922,20 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 				}
 				else
 				{
-					nIntersect = countIntersections(queryArray, array, false);
+					nIntersect = countIntersections(queryArray, array, CountAll);
 					retval = (nIntersect >= ARRNELEM(array));
 				}
 			}
 			else
 			{
-					retval = (countIntersections(queryArray, array, true) > 0);
+					retval = (countIntersections(queryArray, array, FirstFound) > 0);
 			}
 			break;
 		case AnyAarraySimilarityStrategy:
 
 			if (GIST_LEAF(entry))
 			{
-				nIntersect = countIntersections(queryArray, array, false);
+				nIntersect = countIntersections(queryArray, array, CountAll);
 
 				if (SmlType == AA_Overlap)
 				{
@@ -1031,7 +972,7 @@ ganyarray_consistent(PG_FUNCTION_ARGS)
 			}
 			else if (!ISALLTRUE(entry))
 			{
-				nIntersect = countIntersections(queryArray, array, false);
+				nIntersect = countIntersections(queryArray, array, CountAll);
 
 				switch(SmlType)
 				{
