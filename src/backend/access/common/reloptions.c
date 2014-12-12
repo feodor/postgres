@@ -209,6 +209,21 @@ static relopt_int intRelOpts[] =
 			RELOPT_KIND_HEAP | RELOPT_KIND_TOAST
 		}, -1, 0, 2000000000
 	},
+	{
+		{
+			"pages_per_range",
+			"Number of pages that each page range covers in a BRIN index",
+			RELOPT_KIND_BRIN
+		}, 128, 1, 131072
+	},
+	{
+		{
+			"gin_pending_list_limit",
+			"Maximum size of the pending list for this GIN index, in kilobytes.",
+			RELOPT_KIND_GIN
+		},
+		-1, 64, MAX_KILOBYTES
+	},
 
 	/* list terminator */
 	{{NULL}}
@@ -620,8 +635,6 @@ transformRelOptions(Datum oldOptions, List *defList, char *namspace,
 		int			noldoptions;
 		int			i;
 
-		Assert(ARR_ELEMTYPE(array) == TEXTOID);
-
 		deconstruct_array(array, TEXTOID, -1, false, 'i',
 						  &oldoptions, NULL, &noldoptions);
 
@@ -777,8 +790,6 @@ untransformRelOptions(Datum options)
 
 	array = DatumGetArrayTypeP(options);
 
-	Assert(ARR_ELEMTYPE(array) == TEXTOID);
-
 	deconstruct_array(array, TEXTOID, -1, false, 'i',
 					  &optiondatums, NULL, &noptions);
 
@@ -834,9 +845,11 @@ extractRelOptions(HeapTuple tuple, TupleDesc tupdesc, Oid amoptions)
 	{
 		case RELKIND_RELATION:
 		case RELKIND_TOASTVALUE:
-		case RELKIND_VIEW:
 		case RELKIND_MATVIEW:
 			options = heap_reloptions(classForm->relkind, datum, false);
+			break;
+		case RELKIND_VIEW:
+			options = view_reloptions(datum, false);
 			break;
 		case RELKIND_INDEX:
 			options = index_reloptions(amoptions, datum, false);
@@ -910,13 +923,9 @@ parseRelOptions(Datum options, bool validate, relopt_kind kind,
 	/* Done if no options */
 	if (PointerIsValid(DatumGetPointer(options)))
 	{
-		ArrayType  *array;
+		ArrayType  *array = DatumGetArrayTypeP(options);
 		Datum	   *optiondatums;
 		int			noptions;
-
-		array = DatumGetArrayTypeP(options);
-
-		Assert(ARR_ELEMTYPE(array) == TEXTOID);
 
 		deconstruct_array(array, TEXTOID, -1, false, 'i',
 						  &optiondatums, NULL, &noptions);
@@ -957,6 +966,11 @@ parseRelOptions(Datum options, bool validate, relopt_kind kind,
 						 errmsg("unrecognized parameter \"%s\"", s)));
 			}
 		}
+
+		/* It's worth avoiding memory leaks in this function */
+		pfree(optiondatums);
+		if (((void *) array) != DatumGetPointer(options))
+			pfree(array);
 	}
 
 	*numrelopts = numoptions;
@@ -1200,10 +1214,6 @@ default_reloptions(Datum reloptions, bool validate, relopt_kind kind)
 		offsetof(StdRdOptions, autovacuum) +offsetof(AutoVacOpts, vacuum_scale_factor)},
 		{"autovacuum_analyze_scale_factor", RELOPT_TYPE_REAL,
 		offsetof(StdRdOptions, autovacuum) +offsetof(AutoVacOpts, analyze_scale_factor)},
-		{"security_barrier", RELOPT_TYPE_BOOL,
-		offsetof(StdRdOptions, security_barrier)},
-		{"check_option", RELOPT_TYPE_STRING,
-		offsetof(StdRdOptions, check_option_offset)},
 		{"user_catalog_table", RELOPT_TYPE_BOOL,
 		offsetof(StdRdOptions, user_catalog_table)}
 	};
@@ -1222,6 +1232,38 @@ default_reloptions(Datum reloptions, bool validate, relopt_kind kind)
 	pfree(options);
 
 	return (bytea *) rdopts;
+}
+
+/*
+ * Option parser for views
+ */
+bytea *
+view_reloptions(Datum reloptions, bool validate)
+{
+	relopt_value *options;
+	ViewOptions *vopts;
+	int			numoptions;
+	static const relopt_parse_elt tab[] = {
+		{"security_barrier", RELOPT_TYPE_BOOL,
+		offsetof(ViewOptions, security_barrier)},
+		{"check_option", RELOPT_TYPE_STRING,
+		offsetof(ViewOptions, check_option_offset)}
+	};
+
+	options = parseRelOptions(reloptions, validate, RELOPT_KIND_VIEW, &numoptions);
+
+	/* if none set, we're done */
+	if (numoptions == 0)
+		return NULL;
+
+	vopts = allocateReloptStruct(sizeof(ViewOptions), options, numoptions);
+
+	fillRelOptions((void *) vopts, sizeof(ViewOptions), options, numoptions,
+				   validate, tab, lengthof(tab));
+
+	pfree(options);
+
+	return (bytea *) vopts;
 }
 
 /*
@@ -1248,8 +1290,6 @@ heap_reloptions(char relkind, Datum reloptions, bool validate)
 		case RELKIND_RELATION:
 		case RELKIND_MATVIEW:
 			return default_reloptions(reloptions, validate, RELOPT_KIND_HEAP);
-		case RELKIND_VIEW:
-			return default_reloptions(reloptions, validate, RELOPT_KIND_VIEW);
 		default:
 			/* other relkinds are not supported */
 			return NULL;

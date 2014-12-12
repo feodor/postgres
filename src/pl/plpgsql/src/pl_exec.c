@@ -2939,10 +2939,9 @@ exec_stmt_raise(PLpgSQL_execstate *estate, PLpgSQL_stmt_raise *stmt)
 					continue;
 				}
 
+				/* should have been checked at compile time */
 				if (current_param == NULL)
-					ereport(ERROR,
-							(errcode(ERRCODE_SYNTAX_ERROR),
-						  errmsg("too few parameters specified for RAISE")));
+					elog(ERROR, "unexpected RAISE parameter list length");
 
 				paramvalue = exec_eval_expr(estate,
 									  (PLpgSQL_expr *) lfirst(current_param),
@@ -2963,14 +2962,9 @@ exec_stmt_raise(PLpgSQL_execstate *estate, PLpgSQL_stmt_raise *stmt)
 				appendStringInfoChar(&ds, cp[0]);
 		}
 
-		/*
-		 * If more parameters were specified than were required to process the
-		 * format string, throw an error
-		 */
+		/* should have been checked at compile time */
 		if (current_param != NULL)
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("too many parameters specified for RAISE")));
+			elog(ERROR, "unexpected RAISE parameter list length");
 
 		err_message = ds.data;
 		/* No pfree(ds.data), the pfree(err_message) does it */
@@ -5269,7 +5263,6 @@ setup_param_list(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 	 */
 	if (!bms_is_empty(expr->paramnos))
 	{
-		Bitmapset  *tmpset;
 		int			dno;
 
 		paramLI = (ParamListInfo)
@@ -5282,8 +5275,8 @@ setup_param_list(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 		paramLI->numParams = estate->ndatums;
 
 		/* Instantiate values for "safe" parameters of the expression */
-		tmpset = bms_copy(expr->paramnos);
-		while ((dno = bms_first_member(tmpset)) >= 0)
+		dno = -1;
+		while ((dno = bms_next_member(expr->paramnos, dno)) >= 0)
 		{
 			PLpgSQL_datum *datum = estate->datums[dno];
 
@@ -5298,7 +5291,6 @@ setup_param_list(PLpgSQL_execstate *estate, PLpgSQL_expr *expr)
 				prm->ptype = var->datatype->typoid;
 			}
 		}
-		bms_free(tmpset);
 
 		/*
 		 * Set up link to active expr where the hook functions can find it.
@@ -6534,15 +6526,14 @@ format_expr_params(PLpgSQL_execstate *estate,
 	int			paramno;
 	int			dno;
 	StringInfoData paramstr;
-	Bitmapset  *tmpset;
 
 	if (!expr->paramnos)
 		return NULL;
 
 	initStringInfo(&paramstr);
-	tmpset = bms_copy(expr->paramnos);
 	paramno = 0;
-	while ((dno = bms_first_member(tmpset)) >= 0)
+	dno = -1;
+	while ((dno = bms_next_member(expr->paramnos, dno)) >= 0)
 	{
 		Datum		paramdatum;
 		Oid			paramtypeid;
@@ -6578,7 +6569,6 @@ format_expr_params(PLpgSQL_execstate *estate,
 
 		paramno++;
 	}
-	bms_free(tmpset);
 
 	return paramstr.data;
 }

@@ -109,7 +109,6 @@ static bool reached_end_position(XLogRecPtr segendpos, uint32 timeline,
 					 bool segment_finished);
 
 static const char *get_tablespace_mapping(const char *dir);
-static void update_tablespace_symlink(Oid oid, const char *old_dir);
 static void tablespace_list_append(const char *arg);
 
 
@@ -232,7 +231,8 @@ usage(void)
 	printf(_("\nOptions controlling the output:\n"));
 	printf(_("  -D, --pgdata=DIRECTORY receive base backup into directory\n"));
 	printf(_("  -F, --format=p|t       output format (plain (default), tar)\n"));
-	printf(_("  -r, --max-rate=RATE    maximum transfer rate to transfer data directory\n"));
+	printf(_("  -r, --max-rate=RATE    maximum transfer rate to transfer data directory\n"
+			 "                         (in kB/s, or use suffix \"k\" or \"M\")\n"));
 	printf(_("  -R, --write-recovery-conf\n"
 			 "                         write recovery.conf after backup\n"));
 	printf(_("  -T, --tablespace-mapping=OLDDIR=NEWDIR\n"
@@ -370,7 +370,7 @@ LogStreamerMain(logstreamer_param *param)
 	if (!ReceiveXlogStream(param->bgconn, param->startptr, param->timeline,
 						   param->sysidentifier, param->xlogdir,
 						   reached_end_position, standby_message_timeout,
-						   NULL))
+						   NULL, false))
 
 		/*
 		 * Any errors will already have been reported in the function process,
@@ -1109,34 +1109,6 @@ get_tablespace_mapping(const char *dir)
 
 
 /*
- * Update symlinks to reflect relocated tablespace.
- */
-static void
-update_tablespace_symlink(Oid oid, const char *old_dir)
-{
-	const char *new_dir = get_tablespace_mapping(old_dir);
-
-	if (strcmp(old_dir, new_dir) != 0)
-	{
-		char	   *linkloc = psprintf("%s/pg_tblspc/%d", basedir, oid);
-
-		if (unlink(linkloc) != 0 && errno != ENOENT)
-		{
-			fprintf(stderr, _("%s: could not remove symbolic link \"%s\": %s"),
-					progname, linkloc, strerror(errno));
-			disconnect_and_exit(1);
-		}
-		if (symlink(new_dir, linkloc) != 0)
-		{
-			fprintf(stderr, _("%s: could not create symbolic link \"%s\": %s"),
-					progname, linkloc, strerror(errno));
-			disconnect_and_exit(1);
-		}
-	}
-}
-
-
-/*
  * Receive a tar format stream from the connection to the server, and unpack
  * the contents of it into a directory. Only files, directories and
  * symlinks are supported, no other kinds of special files.
@@ -1150,16 +1122,20 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res, int rownum)
 {
 	char		current_path[MAXPGPATH];
 	char		filename[MAXPGPATH];
+	const char *mapped_tblspc_path;
 	int			current_len_left;
 	int			current_padding = 0;
-	bool		basetablespace = PQgetisnull(res, rownum, 0);
+	bool		basetablespace;
 	char	   *copybuf = NULL;
 	FILE	   *file = NULL;
 
+	basetablespace = PQgetisnull(res, rownum, 0);
 	if (basetablespace)
 		strlcpy(current_path, basedir, sizeof(current_path));
 	else
-		strlcpy(current_path, get_tablespace_mapping(PQgetvalue(res, rownum, 1)), sizeof(current_path));
+		strlcpy(current_path,
+				get_tablespace_mapping(PQgetvalue(res, rownum, 1)),
+				sizeof(current_path));
 
 	/*
 	 * Get the COPY data
@@ -1283,13 +1259,25 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res, int rownum)
 				{
 					/*
 					 * Symbolic link
+					 *
+					 * It's most likely a link in pg_tblspc directory, to the
+					 * location of a tablespace. Apply any tablespace mapping
+					 * given on the command line (--tablespace-mapping).
+					 * (We blindly apply the mapping without checking that
+					 * the link really is inside pg_tblspc. We don't expect
+					 * there to be other symlinks in a data directory, but
+					 * if there are, you can call it an undocumented feature
+					 * that you can map them too.)
 					 */
 					filename[strlen(filename) - 1] = '\0';		/* Remove trailing slash */
-					if (symlink(&copybuf[157], filename) != 0)
+
+					mapped_tblspc_path = get_tablespace_mapping(&copybuf[157]);
+					if (symlink(mapped_tblspc_path, filename) != 0)
 					{
 						fprintf(stderr,
 								_("%s: could not create symbolic link from \"%s\" to \"%s\": %s\n"),
-						 progname, filename, &copybuf[157], strerror(errno));
+								progname, filename, mapped_tblspc_path,
+								strerror(errno));
 						disconnect_and_exit(1);
 					}
 				}
@@ -1581,8 +1569,8 @@ BaseBackup(void)
 {
 	PGresult   *res;
 	char	   *sysidentifier;
-	uint32		latesttli;
-	uint32		starttli;
+	TimeLineID	latesttli;
+	TimeLineID	starttli;
 	char	   *basebkp;
 	char		escaped_label[MAXPGPATH];
 	char	   *maxrate_clause = NULL;
@@ -1636,23 +1624,8 @@ BaseBackup(void)
 	/*
 	 * Run IDENTIFY_SYSTEM so we can get the timeline
 	 */
-	res = PQexec(conn, "IDENTIFY_SYSTEM");
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		fprintf(stderr, _("%s: could not send replication command \"%s\": %s"),
-				progname, "IDENTIFY_SYSTEM", PQerrorMessage(conn));
+	if (!RunIdentifySystem(conn, &sysidentifier, &latesttli, NULL, NULL))
 		disconnect_and_exit(1);
-	}
-	if (PQntuples(res) != 1 || PQnfields(res) < 3)
-	{
-		fprintf(stderr,
-				_("%s: could not identify system: got %d rows and %d fields, expected %d rows and %d or more fields\n"),
-				progname, PQntuples(res), PQnfields(res), 1, 3);
-		disconnect_and_exit(1);
-	}
-	sysidentifier = pg_strdup(PQgetvalue(res, 0, 0));
-	latesttli = atoi(PQgetvalue(res, 0, 1));
-	PQclear(res);
 
 	/*
 	 * Start the actual backup
@@ -1790,17 +1763,6 @@ BaseBackup(void)
 	{
 		progress_report(PQntuples(res), NULL, true);
 		fprintf(stderr, "\n");	/* Need to move to next line */
-	}
-
-	if (format == 'p' && tablespace_dirs.head != NULL)
-	{
-		for (i = 0; i < PQntuples(res); i++)
-		{
-			Oid			tblspc_oid = atooid(PQgetvalue(res, i, 0));
-
-			if (tblspc_oid)
-				update_tablespace_symlink(tblspc_oid, PQgetvalue(res, i, 1));
-		}
 	}
 
 	PQclear(res);

@@ -977,6 +977,13 @@ materializeQueryResult(FunctionCallInfo fcinfo,
 
 	PG_TRY();
 	{
+		/* Create short-lived memory context for data conversions */
+		sinfo.tmpcontext = AllocSetContextCreate(CurrentMemoryContext,
+												 "dblink temporary context",
+												 ALLOCSET_DEFAULT_MINSIZE,
+												 ALLOCSET_DEFAULT_INITSIZE,
+												 ALLOCSET_DEFAULT_MAXSIZE);
+
 		/* execute query, collecting any tuples into the tuplestore */
 		res = storeQueryResult(&sinfo, conn, sql);
 
@@ -1041,6 +1048,12 @@ materializeQueryResult(FunctionCallInfo fcinfo,
 			PQclear(res);
 			res = NULL;
 		}
+
+		/* clean up data conversion short-lived memory context */
+		if (sinfo.tmpcontext != NULL)
+			MemoryContextDelete(sinfo.tmpcontext);
+		sinfo.tmpcontext = NULL;
+
 		PQclear(sinfo.last_res);
 		sinfo.last_res = NULL;
 		PQclear(sinfo.cur_res);
@@ -1204,15 +1217,6 @@ storeRow(storeInfo *sinfo, PGresult *res, bool first)
 		if (sinfo->cstrs)
 			pfree(sinfo->cstrs);
 		sinfo->cstrs = (char **) palloc(nfields * sizeof(char *));
-
-		/* Create short-lived memory context for data conversions */
-		if (!sinfo->tmpcontext)
-			sinfo->tmpcontext =
-				AllocSetContextCreate(CurrentMemoryContext,
-									  "dblink temporary context",
-									  ALLOCSET_DEFAULT_MINSIZE,
-									  ALLOCSET_DEFAULT_INITSIZE,
-									  ALLOCSET_DEFAULT_MAXSIZE);
 	}
 
 	/* Should have a single-row result if we get here */
@@ -2976,7 +2980,7 @@ applyRemoteGucs(PGconn *conn)
 		/* Apply the option (this will throw error on failure) */
 		(void) set_config_option(gucName, remoteVal,
 								 PGC_USERSET, PGC_S_SESSION,
-								 GUC_ACTION_SAVE, true, 0);
+								 GUC_ACTION_SAVE, true, 0, false);
 	}
 
 	return nestlevel;

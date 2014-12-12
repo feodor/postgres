@@ -65,6 +65,14 @@
 #define NUM_SPINLOCK_SEMAPHORES		1024
 
 /*
+ * When we have neither spinlocks nor atomic operations support we're
+ * implementing atomic operations on top of spinlock on top of semaphores. To
+ * be safe against atomic operations while holding a spinlock separate
+ * semaphores have to be used.
+ */
+#define NUM_ATOMICS_SEMAPHORES		64
+
+/*
  * Define this if you want to allow the lo_import and lo_export SQL
  * functions to be executed by ordinary users.  By default these
  * functions are only available to the Postgres superuser.  CAUTION:
@@ -145,6 +153,15 @@
 #endif
 
 /*
+ * USE_SSL code should be compiled only when compiling with an SSL
+ * implementation.  (Currently, only OpenSSL is supported, but we might add
+ * more implementations in the future.)
+ */
+#ifdef USE_OPENSSL
+#define USE_SSL
+#endif
+
+/*
  * This is the default directory in which AF_UNIX socket files are
  * placed.  Caution: changing this risks breaking your existing client
  * applications, which are likely to continue to look in the old
@@ -153,6 +170,11 @@
  * with the postmaster's -k switch.
  */
 #define DEFAULT_PGSOCKET_DIR  "/tmp"
+
+/*
+ * This is the default event source for Windows event log.
+ */
+#define DEFAULT_EVENT_SOURCE  "PostgreSQL"
 
 /*
  * The random() function is expected to yield values between 0 and
@@ -164,22 +186,6 @@
  * considerably inferior to --- random().
  */
 #define MAX_RANDOM_VALUE  (0x7FFFFFFF)
-
-/*
- * Set the format style used by gcc to check printf type functions. We really
- * want the "gnu_printf" style set, which includes what glibc uses, such
- * as %m for error strings and %lld for 64 bit long longs. But not all gcc
- * compilers are known to support it, so we just use "printf" which all
- * gcc versions alive are known to support, except on Windows where
- * using "gnu_printf" style makes a dramatic difference. Maybe someday
- * we'll have a configure test for this, if we ever discover use of more
- * variants to be necessary.
- */
-#ifdef WIN32
-#define PG_PRINTF_ATTRIBUTE gnu_printf
-#else
-#define PG_PRINTF_ATTRIBUTE printf
-#endif
 
 /*
  * On PPC machines, decide whether to use the mutex hint bit in LWARX
@@ -216,7 +222,7 @@
  * bytes of wasted memory. The default is 128, which should be large enough
  * for all supported platforms.
  */
-#define CACHE_LINE_SIZE		128
+#define PG_CACHE_LINE_SIZE		128
 
 /*
  *------------------------------------------------------------------------
@@ -299,11 +305,3 @@
  */
 /* #define HEAPDEBUGALL */
 /* #define ACLDEBUG */
-/* #define RTDEBUG */
-
-/*
- * Automatic configuration file name for ALTER SYSTEM.
- * This file will be used to store values of configuration parameters
- * set by ALTER SYSTEM command.
- */
-#define PG_AUTOCONF_FILENAME		"postgresql.auto.conf"

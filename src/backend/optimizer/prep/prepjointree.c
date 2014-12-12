@@ -133,9 +133,9 @@ static Node *find_jointree_node_for_rel(Node *jtnode, int relid);
  * transformations if any are found.
  *
  * This routine has to run before preprocess_expression(), so the quals
- * clauses are not yet reduced to implicit-AND format.  That means we need
- * to recursively search through explicit AND clauses, which are
- * probably only binary ANDs.  We stop as soon as we hit a non-AND item.
+ * clauses are not yet reduced to implicit-AND format, and are not guaranteed
+ * to be AND/OR-flat either.  That means we need to recursively search through
+ * explicit AND clauses.  We stop as soon as we hit a non-AND item.
  */
 void
 pull_up_sublinks(PlannerInfo *root)
@@ -804,6 +804,7 @@ pull_up_simple_subquery(PlannerInfo *root, Node *jtnode, RangeTblEntry *rte,
 	subroot->planner_cxt = CurrentMemoryContext;
 	subroot->init_plans = NIL;
 	subroot->cte_plan_ids = NIL;
+	subroot->multiexpr_params = NIL;
 	subroot->eq_classes = NIL;
 	subroot->append_rel_list = NIL;
 	subroot->rowMarks = NIL;

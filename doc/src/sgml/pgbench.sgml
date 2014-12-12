@@ -345,6 +345,24 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
      </varlistentry>
 
      <varlistentry>
+      <term><option>-L</option> <replaceable>limit</></term>
+      <term><option>--latency-limit=</option><replaceable>limit</></term>
+      <listitem>
+       <para>
+        Transaction which last more than <replaceable>limit</> milliseconds
+        are counted and reported separately, as <firstterm>late</>.
+       </para>
+       <para>
+        When throttling is used (<option>--rate=...</>), transactions that
+        lag behind schedule by more than <replaceable>limit</> ms, and thus
+        have no hope of meeting the latency limit, are not sent to the server
+        at all. They are counted and reported separately as
+        <firstterm>skipped</>.
+       </para>
+       </listitem>
+     </varlistentry>
+
+     <varlistentry>
       <term><option>-M</option> <replaceable>querymode</></term>
       <term><option>--protocol=</option><replaceable>querymode</></term>
       <listitem>
@@ -396,18 +414,6 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
      </varlistentry>
 
      <varlistentry>
-      <term><option>-r</option></term>
-      <term><option>--report-latencies</option></term>
-      <listitem>
-       <para>
-        Report the average per-statement latency (execution time from the
-        perspective of the client) of each command after the benchmark
-        finishes.  See below for details.
-       </para>
-      </listitem>
-     </varlistentry>
-
-     <varlistentry>
       <term><option>-P</option> <replaceable>sec</></term>
       <term><option>--progress=</option><replaceable>sec</></term>
       <listitem>
@@ -415,8 +421,22 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
         Show progress report every <literal>sec</> seconds.  The report
         includes the time since the beginning of the run, the tps since the
         last report, and the transaction latency average and standard
-        deviation since the last report.  Under throttling (<option>-R</>), it
-        also includes the average schedule lag time since the last report.
+        deviation since the last report.  Under throttling (<option>-R</>),
+        the latency is computed with respect to the transaction scheduled
+        start time, not the actual transaction beginning time, thus it also
+        includes the average schedule lag time.
+       </para>
+      </listitem>
+     </varlistentry>
+
+     <varlistentry>
+      <term><option>-r</option></term>
+      <term><option>--report-latencies</option></term>
+      <listitem>
+       <para>
+        Report the average per-statement latency (execution time from the
+        perspective of the client) of each command after the benchmark
+        finishes.  See below for details.
        </para>
       </listitem>
      </varlistentry>
@@ -440,29 +460,34 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
         possible for later ones to catch up again.
        </para>
        <para>
-        When throttling is active, the average and maximum transaction
-        schedule lag time are reported in ms.  This is the delay between
-        the original scheduled transaction time and the actual transaction
-        start times.  The schedule lag shows whether a transaction was
-        started on time or late.  Once a client starts running behind its
-        schedule, every following transaction can continue to be penalized
-        for schedule lag.  If faster transactions are able to catch up, it's
-        possible for them to get back on schedule again.  The lag measurement
-        of every transaction is shown when pgbench is run with debugging
-        output.
+        When throttling is active, the transaction latency reported at the
+        end of the run is calculated from the scheduled start times, so it
+        includes the time each transaction had to wait for the previous
+        transaction to finish. The wait time is called the schedule lag time,
+        and its average and maximum are also reported separately. The
+        transaction latency with respect to the actual transaction start time,
+        i.e. the time spent executing the transaction in the database, can be
+        computed by subtracting the schedule lag time from the reported
+        latency.
        </para>
+
        <para>
-        High rate limit schedule lag values, that is lag values that are large
-        compared to the actual transaction latency, indicate that something is
-        amiss in the throttling process.  High schedule lag can highlight a subtle
-        problem there even if the target rate limit is met in the end.  One
-        possible cause of schedule lag is insufficient pgbench threads to
-        handle all of the clients.  To improve that, consider reducing the
-        number of clients, increasing the number of threads in pgbench, or
-        running pgbench on a separate host.  Another possibility is that the
-        database is not keeping up with the load at some point.  When that
-        happens, you will have to reduce the expected transaction rate to
-        lower schedule lag.
+        If <option>--latency-limit</> is used together with <option>--rate</>,
+        a transaction can lag behind so much that it is already over the
+        latency limit when the previous transaction ends, because the latency
+        is calculated from the scheduled start time. Such transactions are
+        not sent to the server, but are skipped altogether and counted
+        separately.
+       </para>
+
+       <para>
+        A high schedule lag time is an indication that the system cannot
+        process transactions at the specified rate, with the chosen number of
+        clients and threads. When the average transaction execution time is
+        longer than the scheduled interval between each transaction, each
+        successive transaction will fall further behind, and the schedule lag
+        time will keep increasing the longer the test run is. When that
+        happens, you will have to reduce the specified transaction rate.
        </para>
       </listitem>
      </varlistentry>
@@ -748,8 +773,8 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
 
    <varlistentry>
     <term>
-     <literal>\setrandom <replaceable>varname</> <replaceable>min</> <replaceable>max</></literal>
-    </term>
+     <literal>\setrandom <replaceable>varname</> <replaceable>min</> <replaceable>max</> [ uniform | { gaussian | exponential } <replaceable>threshold</> ]</literal>
+     </term>
 
     <listitem>
      <para>
@@ -761,9 +786,63 @@ pgbench <optional> <replaceable>options</> </optional> <replaceable>dbname</>
      </para>
 
      <para>
+      By default, or when <literal>uniform</> is specified, all values in the
+      range are drawn with equal probability.  Specifying <literal>gaussian</>
+      or  <literal>exponential</> options modifies this behavior; each
+      requires a mandatory threshold which determines the precise shape of the
+      distribution.
+     </para>
+
+     <para>
+      For a Gaussian distribution, the interval is mapped onto a standard
+      normal distribution (the classical bell-shaped Gaussian curve) truncated
+      at <literal>-threshold</> on the left and <literal>+threshold</>
+      on the right.
+      To be precise, if <literal>PHI(x)</> is the cumulative distribution
+      function of the standard normal distribution, with mean <literal>mu</>
+      defined as <literal>(max + min) / 2.0</>, then value <replaceable>i</>
+      between <replaceable>min</> and <replaceable>max</> inclusive is drawn
+      with probability:
+      <literal>
+        (PHI(2.0 * threshold * (i - min - mu + 0.5) / (max - min + 1)) -
+         PHI(2.0 * threshold * (i - min - mu - 0.5) / (max - min + 1))) /
+         (2.0 * PHI(threshold) - 1.0)</>.
+      Intuitively, the larger the <replaceable>threshold</>, the more
+      frequently values close to the middle of the interval are drawn, and the
+      less frequently values close to the <replaceable>min</> and
+      <replaceable>max</> bounds.
+      About 67% of values are drawn from the middle <literal>1.0 / threshold</>
+      and 95% in the middle <literal>2.0 / threshold</>; for instance, if
+      <replaceable>threshold</> is 4.0, 67% of values are drawn from the middle
+      quarter and 95% from the middle half of the interval.
+      The minimum <replaceable>threshold</> is 2.0 for performance of
+      the Box-Muller transform.
+     </para>
+
+     <para>
+      For an exponential distribution, the <replaceable>threshold</>
+      parameter controls the distribution by truncating a quickly-decreasing
+      exponential distribution at <replaceable>threshold</>, and then
+      projecting onto integers between the bounds.
+      To be precise, value <replaceable>i</> between <replaceable>min</> and
+      <replaceable>max</> inclusive is drawn with probability:
+      <literal>(exp(-threshold*(i-min)/(max+1-min)) -
+       exp(-threshold*(i+1-min)/(max+1-min))) / (1.0 - exp(-threshold))</>.
+      Intuitively, the larger the <replaceable>threshold</>, the more
+      frequently values close to <replaceable>min</> are accessed, and the
+      less frequently values close to <replaceable>max</> are accessed.
+      The closer to 0 the threshold, the flatter (more uniform) the access
+      distribution.
+      A crude approximation of the distribution is that the most frequent 1%
+      values in the range, close to <replaceable>min</>, are drawn
+      <replaceable>threshold</>%  of the time.
+      The <replaceable>threshold</> value must be strictly positive.
+     </para>
+
+     <para>
       Example:
 <programlisting>
-\setrandom aid 1 :naccounts
+\setrandom aid 1 :naccounts gaussian 5.0
 </programlisting></para>
     </listitem>
    </varlistentry>
@@ -888,7 +967,7 @@ END;
    The format of the log is:
 
 <synopsis>
-<replaceable>client_id</> <replaceable>transaction_no</> <replaceable>time</> <replaceable>file_no</> <replaceable>time_epoch</> <replaceable>time_us</>
+<replaceable>client_id</> <replaceable>transaction_no</> <replaceable>time</> <replaceable>file_no</> <replaceable>time_epoch</> <replaceable>time_us</> <optional><replaceable>schedule_lag</replaceable></optional>
 </synopsis>
 
    where <replaceable>time</> is the total elapsed transaction time in microseconds,
@@ -896,19 +975,42 @@ END;
    (useful when multiple scripts were specified with <option>-f</>),
    and <replaceable>time_epoch</>/<replaceable>time_us</> are a
    UNIX epoch format timestamp and an offset
-   in microseconds (suitable for creating a ISO 8601
+   in microseconds (suitable for creating an ISO 8601
    timestamp with fractional seconds) showing when
    the transaction completed.
+   Field <replaceable>schedule_lag</> is the difference between the
+   transaction's scheduled start time, and the time it actually started, in
+   microseconds. It is only present when the <option>--rate</> option is used.
+   The last field <replaceable>skipped_transactions</> reports the number of
+   transactions skipped because they were too far behind schedule. It is only
+   present when both options <option>--rate</> and <option>--latency-limit</>
+   are used.
   </para>
 
   <para>
-   Here are example outputs:
+   Here is a snippet of the log file generated:
 <screen>
  0 199 2241 0 1175850568 995598
  0 200 2465 0 1175850568 998079
  0 201 2513 0 1175850569 608
  0 202 2038 0 1175850569 2663
-</screen></para>
+</screen>
+
+   Another example with --rate=100 and --latency-limit=5 (note the additional
+   <replaceable>schedule_lag</> column):
+<screen>
+ 0 81 4621 0 1412881037 912698 3005
+ 0 82 6173 0 1412881037 914578 4304
+ 0 83 skipped 0 1412881037 914578 5217
+ 0 83 skipped 0 1412881037 914578 5099
+ 0 83 4722 0 1412881037 916203 3108
+ 0 84 4142 0 1412881037 918023 2333
+ 0 85 2465 0 1412881037 919759 740
+</screen>
+   In this example, transaction 82 was late, because it's latency (6.173 ms) was
+   over the 5 ms limit. The next two transactions were skipped, because they
+   were already late before they were even started.
+  </para>
 
   <para>
    When running a long test on hardware that can handle a lot of transactions,
@@ -924,7 +1026,7 @@ END;
    With the <option>--aggregate-interval</option> option, the logs use a bit different format:
 
 <synopsis>
-<replaceable>interval_start</> <replaceable>num_of_transactions</> <replaceable>latency_sum</> <replaceable>latency_2_sum</> <replaceable>min_latency</> <replaceable>max_latency</>
+<replaceable>interval_start</> <replaceable>num_of_transactions</> <replaceable>latency_sum</> <replaceable>latency_2_sum</> <replaceable>min_latency</> <replaceable>max_latency</> <optional><replaceable>lag_sum</> <replaceable>lag_2_sum</> <replaceable>min_lag</> <replaceable>max_lag</> <optional><replaceable>skipped_transactions</></optional></optional>
 </synopsis>
 
    where <replaceable>interval_start</> is the start of the interval (UNIX epoch
@@ -935,7 +1037,14 @@ END;
    <replaceable>latency_2_sum</> is a sum of 2nd powers of latencies. The last two
    fields are <replaceable>min_latency</> - a minimum latency within the interval, and
    <replaceable>max_latency</> - maximum latency within the interval. A transaction is
-   counted into the interval when it was committed.
+   counted into the interval when it was committed. The fields in the end,
+   <replaceable>lag_sum</>, <replaceable>lag_2_sum</>, <replaceable>min_lag</>,
+   and <replaceable>max_lag</>, are only present if the <option>--rate</>
+   option is used. The very last one, <replaceable>skipped_transactions</>,
+   is only present if the option <option>--latency-limit</> is present, too.
+   They are calculated from the time each transaction had to wait for the
+   previous one to finish, i.e. the difference between each transaction's
+   scheduled start time and the time it actually started.
   </para>
 
   <para>

@@ -124,7 +124,10 @@ PGconn *PQconnectdbParams(const char * const *keywords,
       <para>
        When <literal>expand_dbname</literal> is non-zero, the
        <parameter>dbname</parameter> key word value is allowed to be recognized
-       as a connection string. More details on the possible formats appear in
+       as a connection string. Only the first occurrence of
+       <parameter>dbname</parameter> is expanded this way, any subsequent
+       <parameter>dbname</parameter> value is processed as plain database name. More
+       details on the possible connection string formats appear in
        <xref linkend="libpq-connstring">.
       </para>
 
@@ -136,7 +139,7 @@ PGconn *PQconnectdbParams(const char * const *keywords,
       </para>
 
       <para>
-       If  any  parameter is NULL or an emptry string, the corresponding
+       If  any  parameter is <symbol>NULL</symbol> or an emptry string, the corresponding
        environment variable (see <xref linkend="libpq-envars">) is checked.
        If the  environment  variable is not set either, then the indicated
        built-in defaults are used.
@@ -1459,24 +1462,6 @@ char *PQpass(const PGconn *conn);
        Returns the server host name of the connection.
 <synopsis>
 char *PQhost(const PGconn *conn);
-</synopsis>
-      </para>
-     </listitem>
-    </varlistentry>
-
-    <varlistentry id="libpq-pqhostaddr">
-     <term>
-      <function>PQhostaddr</function>
-      <indexterm>
-       <primary>PQhostaddr</primary>
-      </indexterm>
-     </term>
-
-     <listitem>
-      <para>
-       Returns the server numeric IP address of the connection.
-<synopsis>
-char *PQhostaddr(const PGconn *conn);
 </synopsis>
       </para>
      </listitem>
@@ -6878,7 +6863,7 @@ myEventProc(PGEventId evtId, void *evtInfo, void *passThrough)
        <primary><envar>PGLOCALEDIR</envar></primary>
       </indexterm>
       <envar>PGLOCALEDIR</envar> sets the directory containing the
-      <literal>locale</> files for message internationalization.
+      <literal>locale</> files for message localization.
      </para>
     </listitem>
    </itemizedlist>
@@ -7043,17 +7028,17 @@ version:1
 dn:cn=mydatabase,dc=mycompany,dc=com
 changetype:add
 objectclass:top
-objectclass:groupOfUniqueNames
+objectclass:device
 cn:mydatabase
-uniqueMember:host=dbserver.mycompany.com
-uniqueMember:port=5439
-uniqueMember:dbname=mydb
-uniqueMember:user=mydb_user
-uniqueMember:sslmode=require
+description:host=dbserver.mycompany.com
+description:port=5439
+description:dbname=mydb
+description:user=mydb_user
+description:sslmode=require
 </programlisting>
    might be queried with the following LDAP URL:
 <programlisting>
-ldap://ldap.mycompany.com/dc=mycompany,dc=com?uniqueMember?one?(cn=mydatabase)
+ldap://ldap.mycompany.com/dc=mycompany,dc=com?description?one?(cn=mydatabase)
 </programlisting>
   </para>
 
@@ -7158,7 +7143,7 @@ ldap://ldap.acme.com/cn=dbserver,cn=hosts?pgconnectinfo?base?(objectclass=*)
     For backwards compatibility with earlier versions of PostgreSQL, if a
     root CA file exists, the behavior of
     <literal>sslmode</literal>=<literal>require</literal> will be the same
-    as that of <literal>verify-ca</literal>, meaning the sever certificate
+    as that of <literal>verify-ca</literal>, meaning the server certificate
     is validated against the CA. Relying on this behavior is discouraged,
     and applications that need certificate validation should always use
     <literal>verify-ca</literal> or <literal>verify-full</literal>.
@@ -7200,7 +7185,7 @@ ldap://ldap.acme.com/cn=dbserver,cn=hosts?pgconnectinfo?base?(objectclass=*)
   </para>
 
   <para>
-   Note that the client's <filename>~/.postgresql/root.crt</> lists the top-level CAs 
+   Note that the client's <filename>~/.postgresql/root.crt</> lists the top-level CAs
    that are considered trusted for signing server certificates.  In principle it need
    not list the CA that signed the client's certificate, though in most cases
    that CA would also be trusted for server certificates.

@@ -307,7 +307,7 @@ sub GenerateConversionScript
 
 	print "Generating conversion proc script...";
 	my $mf = read_file('src/backend/utils/mb/conversion_procs/Makefile');
-	$mf =~ s{\\\s*[\r\n]+}{}mg;
+	$mf =~ s{\\\r?\n}{}g;
 	$mf =~ /^CONVERSIONS\s*=\s*(.*)$/m
 	  || die "Could not find CONVERSIONS line in conversions Makefile\n";
 	my @pieces = split /\s+/, $1;
@@ -341,7 +341,7 @@ sub GenerateTimezoneFiles
 	my $target = shift;
 	my $conf   = shift;
 	my $mf     = read_file("src/timezone/Makefile");
-	$mf =~ s{\\\s*[\r\n]+}{}mg;
+	$mf =~ s{\\\r?\n}{}g;
 	$mf =~ /^TZDATA\s*:?=\s*(.*)$/m
 	  || die "Could not find TZDATA row in timezone makefile\n";
 	my @tzfiles = split /\s+/, $1;
@@ -360,7 +360,7 @@ sub GenerateTsearchFiles
 	my $F;
 	my $tmpl = read_file('src/backend/snowball/snowball.sql.in');
 	my $mf   = read_file('src/backend/snowball/Makefile');
-	$mf =~ s{\\\s*[\r\n]+}{}mg;
+	$mf =~ s{\\\r?\n}{}g;
 	$mf =~ /^LANGUAGES\s*=\s*(.*)$/m
 	  || die "Could not find LANGUAGES line in snowball Makefile\n";
 	my @pieces = split /\s+/, $1;
@@ -408,13 +408,14 @@ sub CopyContribFiles
 		next
 		  if ($insttype eq "client" && !grep { $_ eq $d } @client_contribs);
 
+		# these configuration-based exclusions must match vcregress.pl
 		next if ($d eq "uuid-ossp" && !defined($config->{uuid}));
 		next if ($d eq "sslinfo"   && !defined($config->{openssl}));
 		next if ($d eq "xml2"      && !defined($config->{xml}));
 		next if ($d eq "sepgsql");
 
 		my $mf = read_file("contrib/$d/Makefile");
-		$mf =~ s{\\s*[\r\n]+}{}mg;
+		$mf =~ s{\\\r?\n}{}g;
 
 		# Note: we currently don't support setting MODULEDIR in the makefile
 		my $moduledir = 'contrib';
@@ -586,7 +587,7 @@ qq{xcopy /s /i /q /r /y src\\include\\$d\\*.h "$ctarget\\include\\server\\$d\\"}
 	closedir($D);
 
 	my $mf = read_file('src/interfaces/ecpg/include/Makefile');
-	$mf =~ s{\\s*[\r\n]+}{}mg;
+	$mf =~ s{\\\r?\n}{}g;
 	$mf =~ /^ecpg_headers\s*=\s*(.*)$/m
 	  || croak "Could not find ecpg_headers line\n";
 	CopyFiles(

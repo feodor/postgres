@@ -14,7 +14,8 @@
 #ifndef TABLESPACE_H
 #define TABLESPACE_H
 
-#include "access/xlog.h"
+#include "access/xlogreader.h"
+#include "lib/stringinfo.h"
 #include "nodes/parsenodes.h"
 
 /* XLOG stuff */
@@ -43,7 +44,6 @@ extern Oid	CreateTableSpace(CreateTableSpaceStmt *stmt);
 extern void DropTableSpace(DropTableSpaceStmt *stmt);
 extern Oid	RenameTableSpace(const char *oldname, const char *newname);
 extern Oid	AlterTableSpaceOptions(AlterTableSpaceOptionsStmt *stmt);
-extern Oid	AlterTableSpaceMove(AlterTableSpaceMoveStmt *stmt);
 
 extern void TablespaceCreateDbspace(Oid spcNode, Oid dbNode, bool isRedo);
 
@@ -56,7 +56,8 @@ extern char *get_tablespace_name(Oid spc_oid);
 
 extern bool directory_is_empty(const char *path);
 
-extern void tblspc_redo(XLogRecPtr lsn, XLogRecord *rptr);
-extern void tblspc_desc(StringInfo buf, uint8 xl_info, char *rec);
+extern void tblspc_redo(XLogReaderState *rptr);
+extern void tblspc_desc(StringInfo buf, XLogReaderState *rptr);
+extern const char *tblspc_identify(uint8 info);
 
 #endif   /* TABLESPACE_H */

@@ -328,6 +328,8 @@ extern FILE *pgwin32_popen(const char *command, const char *type);
 #ifndef HAVE_GETTIMEOFDAY
 /* Last parameter not used */
 extern int	gettimeofday(struct timeval * tp, struct timezone * tzp);
+/* On windows we need to call some backend start setup for accurate timing */
+extern void init_win32_gettimeofday(void);
 #endif
 #else							/* !WIN32 */
 
@@ -390,6 +392,10 @@ extern int	getpeereid(int sock, uid_t *uid, gid_t *gid);
 extern int	isinf(double x);
 #endif
 
+#ifndef HAVE_MKDTEMP
+extern char *mkdtemp(char *path);
+#endif
+
 #ifndef HAVE_RINT
 extern double rint(double x);
 #endif
@@ -418,6 +424,10 @@ extern void unsetenv(const char *name);
 
 #ifndef HAVE_SRANDOM
 extern void srandom(unsigned int seed);
+#endif
+
+#ifndef HAVE_SSL_GET_CURRENT_COMPRESSION
+#define SSL_get_current_compression(x) 0
 #endif
 
 /* thread.h */

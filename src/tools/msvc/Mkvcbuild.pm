@@ -44,7 +44,7 @@ my @contrib_uselibpgcommon = (
 	'pg_test_fsync', 'pg_test_timing',
 	'pg_upgrade',    'pg_xlogdump',
 	'vacuumlo');
-my $contrib_extralibs = { 'pgbench' => ['wsock32.lib'] };
+my $contrib_extralibs = { 'pgbench' => ['ws2_32.lib'] };
 my $contrib_extraincludes =
   { 'tsearch2' => ['contrib/tsearch2'], 'dblink' => ['src/backend'] };
 my $contrib_extrasource = {
@@ -69,7 +69,7 @@ sub mkvcbuild
 	  srandom.c getaddrinfo.c gettimeofday.c inet_net_ntop.c kill.c open.c
 	  erand48.c snprintf.c strlcat.c strlcpy.c dirmod.c noblock.c path.c
 	  pgcheckdir.c pg_crc.c pgmkdirp.c pgsleep.c pgstrcasecmp.c pqsignal.c
-	  qsort.c qsort_arg.c quotes.c system.c
+	  mkdtemp.c qsort.c qsort_arg.c quotes.c system.c
 	  sprompt.c tar.c thread.c getopt.c getopt_long.c dirent.c
 	  win32env.c win32error.c win32setlocale.c);
 
@@ -106,6 +106,9 @@ sub mkvcbuild
 	$postgres->AddFiles('src\port',   @pgportfiles);
 	$postgres->AddFiles('src\common', @pgcommonbkndfiles);
 	$postgres->AddDir('src\timezone');
+	# We need source files from src\timezone, but that directory's resource
+	# file pertains to "zic", not to the backend.
+	$postgres->RemoveFile('src\timezone\win32ver.rc');
 	$postgres->AddFiles('src\backend\parser', 'scan.l', 'gram.y');
 	$postgres->AddFiles('src\backend\bootstrap', 'bootscanner.l',
 		'bootparse.y');
@@ -113,18 +116,24 @@ sub mkvcbuild
 	$postgres->AddFiles('src\backend\replication', 'repl_scanner.l',
 		'repl_gram.y');
 	$postgres->AddDefine('BUILDING_DLL');
-	$postgres->AddLibrary('wsock32.lib');
-	$postgres->AddLibrary('ws2_32.lib');
 	$postgres->AddLibrary('secur32.lib');
+	$postgres->AddLibrary('ws2_32.lib');
 	$postgres->AddLibrary('wldap32.lib') if ($solution->{options}->{ldap});
 	$postgres->FullExportDLL('postgres.lib');
+	# The OBJS scraper doesn't know about ifdefs, so remove be-secure-openssl.c
+	# if building without OpenSSL
+	if (!$solution->{options}->{openssl})
+	{
+		$postgres->RemoveFile('src\backend\libpq\be-secure-openssl.c');
+	}
 
 	my $snowball = $solution->AddProject('dict_snowball', 'dll', '',
 		'src\backend\snowball');
+	# This Makefile uses VPATH to find most source files in a subdirectory.
 	$snowball->RelocateFiles(
 		'src\backend\snowball\libstemmer',
 		sub {
-			return shift !~ /dict_snowball.c$/;
+			return shift !~ /(dict_snowball.c|win32ver.rc)$/;
 		});
 	$snowball->AddIncludeDir('src\include\snowball');
 	$snowball->AddReference($postgres);
@@ -270,7 +279,6 @@ sub mkvcbuild
 	$libpq->AddDefine('FRONTEND');
 	$libpq->AddDefine('UNSAFE_STAT_OK');
 	$libpq->AddIncludeDir('src\port');
-	$libpq->AddLibrary('wsock32.lib');
 	$libpq->AddLibrary('secur32.lib');
 	$libpq->AddLibrary('ws2_32.lib');
 	$libpq->AddLibrary('wldap32.lib') if ($solution->{options}->{ldap});
@@ -278,6 +286,12 @@ sub mkvcbuild
 	$libpq->ReplaceFile('src\interfaces\libpq\libpqrc.c',
 		'src\interfaces\libpq\libpq.rc');
 	$libpq->AddReference($libpgport);
+	# The OBJS scraper doesn't know about ifdefs, so remove fe-secure-openssl.c
+	# if building without OpenSSL
+	if (!$solution->{options}->{openssl})
+	{
+		$libpq->RemoveFile('src\interfaces\libpq\fe-secure-openssl.c');
+	}
 
 	my $libpqwalreceiver =
 	  $solution->AddProject('libpqwalreceiver', 'dll', '',
@@ -300,7 +314,7 @@ sub mkvcbuild
 	$libecpg->AddIncludeDir('src\interfaces\libpq');
 	$libecpg->AddIncludeDir('src\port');
 	$libecpg->UseDef('src\interfaces\ecpg\ecpglib\ecpglib.def');
-	$libecpg->AddLibrary('wsock32.lib');
+	$libecpg->AddLibrary('ws2_32.lib');
 	$libecpg->AddReference($libpq, $pgtypes, $libpgport);
 
 	my $libecpgcompat = $solution->AddProject(
@@ -318,7 +332,7 @@ sub mkvcbuild
 	$ecpg->AddPrefixInclude('src\interfaces\ecpg\preproc');
 	$ecpg->AddFiles('src\interfaces\ecpg\preproc', 'pgc.l', 'preproc.y');
 	$ecpg->AddDefine('MAJOR_VERSION=4');
-	$ecpg->AddDefine('MINOR_VERSION=10');
+	$ecpg->AddDefine('MINOR_VERSION=11');
 	$ecpg->AddDefine('PATCHLEVEL=0');
 	$ecpg->AddDefine('ECPG_COMPILE');
 	$ecpg->AddReference($libpgcommon, $libpgport);
@@ -331,6 +345,7 @@ sub mkvcbuild
 	$pgregress_ecpg->AddIncludeDir('src\test\regress');
 	$pgregress_ecpg->AddDefine('HOST_TUPLE="i686-pc-win32vc"');
 	$pgregress_ecpg->AddDefine('FRONTEND');
+	$pgregress_ecpg->AddDirResourceFile('src\interfaces\ecpg\test');
 	$pgregress_ecpg->AddReference($libpgcommon, $libpgport);
 
 	my $isolation_tester =
@@ -345,7 +360,8 @@ sub mkvcbuild
 	$isolation_tester->AddIncludeDir('src\interfaces\libpq');
 	$isolation_tester->AddDefine('HOST_TUPLE="i686-pc-win32vc"');
 	$isolation_tester->AddDefine('FRONTEND');
-	$isolation_tester->AddLibrary('wsock32.lib');
+	$isolation_tester->AddLibrary('ws2_32.lib');
+	$isolation_tester->AddDirResourceFile('src\test\isolation');
 	$isolation_tester->AddReference($libpq, $libpgcommon, $libpgport);
 
 	my $pgregress_isolation =
@@ -356,6 +372,7 @@ sub mkvcbuild
 	$pgregress_isolation->AddIncludeDir('src\test\regress');
 	$pgregress_isolation->AddDefine('HOST_TUPLE="i686-pc-win32vc"');
 	$pgregress_isolation->AddDefine('FRONTEND');
+	$pgregress_isolation->AddDirResourceFile('src\test\isolation');
 	$pgregress_isolation->AddReference($libpgcommon, $libpgport);
 
 	# src/bin
@@ -363,7 +380,6 @@ sub mkvcbuild
 	$initdb->AddIncludeDir('src\interfaces\libpq');
 	$initdb->AddIncludeDir('src\timezone');
 	$initdb->AddDefine('FRONTEND');
-	$initdb->AddLibrary('wsock32.lib');
 	$initdb->AddLibrary('ws2_32.lib');
 
 	my $pgbasebackup = AddSimpleFrontend('pg_basebackup', 1);
@@ -390,8 +406,8 @@ sub mkvcbuild
 
 	my $pgevent = $solution->AddProject('pgevent', 'dll', 'bin');
 	$pgevent->AddFiles('src\bin\pgevent', 'pgevent.c', 'pgmsgevent.rc');
-	$pgevent->AddResourceFile('src\bin\pgevent',
-		'Eventlog message formatter');
+	$pgevent->AddResourceFile('src\bin\pgevent', 'Eventlog message formatter',
+		'win32');
 	$pgevent->RemoveFile('src\bin\pgevent\win32ver.rc');
 	$pgevent->UseDef('src\bin\pgevent\pgevent.def');
 	$pgevent->DisableLinkerWarnings('4104');
@@ -439,6 +455,7 @@ sub mkvcbuild
 	my $zic = $solution->AddProject('zic', 'exe', 'utils');
 	$zic->AddFiles('src\timezone', 'zic.c', 'ialloc.c', 'scheck.c',
 		'localtime.c');
+	$zic->AddDirResourceFile('src\timezone');
 	$zic->AddReference($libpgcommon, $libpgport);
 
 	if ($solution->{options}->{xml})
@@ -474,8 +491,10 @@ sub mkvcbuild
 		push @contrib_excludes, 'uuid-ossp';
 	}
 
-	# Pgcrypto makefile too complex to parse....
-	my $pgcrypto = $solution->AddProject('pgcrypto', 'dll', 'crypto');
+	# AddProject() does not recognize the constructs used to populate OBJS in
+	# the pgcrypto Makefile, so it will discover no files.
+	my $pgcrypto =
+	  $solution->AddProject('pgcrypto', 'dll', 'crypto', 'contrib\\pgcrypto');
 	$pgcrypto->AddFiles(
 		'contrib\pgcrypto', 'pgcrypto.c',
 		'px.c',             'px-hmac.c',
@@ -505,7 +524,7 @@ sub mkvcbuild
 			'pgp-mpi-internal.c', 'imath.c');
 	}
 	$pgcrypto->AddReference($postgres);
-	$pgcrypto->AddLibrary('wsock32.lib');
+	$pgcrypto->AddLibrary('ws2_32.lib');
 	my $mf = Project::read_file('contrib/pgcrypto/Makefile');
 	GenerateContribSqlFiles('pgcrypto', $mf);
 
@@ -522,28 +541,19 @@ sub mkvcbuild
 
 	$mf =
 	  Project::read_file('src\backend\utils\mb\conversion_procs\Makefile');
-	$mf =~ s{\\s*[\r\n]+}{}mg;
+	$mf =~ s{\\\r?\n}{}g;
 	$mf =~ m{SUBDIRS\s*=\s*(.*)$}m
 	  || die 'Could not match in conversion makefile' . "\n";
 	foreach my $sub (split /\s+/, $1)
 	{
-		my $mf = Project::read_file(
-			'src\backend\utils\mb\conversion_procs\\' . $sub . '\Makefile');
-		my $p = $solution->AddProject($sub, 'dll', 'conversion procs');
-		$p->AddFile('src\backend\utils\mb\conversion_procs\\'
-			  . $sub . '\\'
-			  . $sub
-			  . '.c');
-		if ($mf =~ m{^SRCS\s*\+=\s*(.*)$}m)
-		{
-			$p->AddFile(
-				'src\backend\utils\mb\conversion_procs\\' . $sub . '\\' . $1);
-		}
+		my $dir = 'src\backend\utils\mb\conversion_procs\\' . $sub;
+		my $p = $solution->AddProject($sub, 'dll', 'conversion procs', $dir);
+		$p->AddFile("$dir\\$sub.c");    # implicit source file
 		$p->AddReference($postgres);
 	}
 
 	$mf = Project::read_file('src\bin\scripts\Makefile');
-	$mf =~ s{\\s*[\r\n]+}{}mg;
+	$mf =~ s{\\\r?\n}{}g;
 	$mf =~ m{PROGRAMS\s*=\s*(.*)$}m
 	  || die 'Could not match in bin\scripts\Makefile' . "\n";
 	foreach my $prg (split /\s+/, $1)
@@ -580,13 +590,14 @@ sub mkvcbuild
 		$proj->AddIncludeDir('src\bin\pg_dump');
 		$proj->AddIncludeDir('src\bin\psql');
 		$proj->AddReference($libpq, $libpgcommon, $libpgport);
-		$proj->AddResourceFile('src\bin\scripts', 'PostgreSQL Utility');
+		$proj->AddDirResourceFile('src\bin\scripts');
 		$proj->AddLibrary('ws2_32.lib');
 	}
 
 	# Regression DLL and EXE
 	my $regress = $solution->AddProject('regress', 'dll', 'misc');
 	$regress->AddFile('src\test\regress\regress.c');
+	$regress->AddDirResourceFile('src\test\regress');
 	$regress->AddReference($postgres);
 
 	my $pgregress = $solution->AddProject('pg_regress', 'exe', 'misc');
@@ -594,6 +605,7 @@ sub mkvcbuild
 	$pgregress->AddFile('src\test\regress\pg_regress_main.c');
 	$pgregress->AddIncludeDir('src\port');
 	$pgregress->AddDefine('HOST_TUPLE="i686-pc-win32vc"');
+	$pgregress->AddDirResourceFile('src\test\regress');
 	$pgregress->AddReference($libpgcommon, $libpgport);
 
 	# fix up pg_xlogdump once it's been set up
@@ -646,44 +658,17 @@ sub AddContrib
 	if ($mf =~ /^MODULE_big\s*=\s*(.*)$/mg)
 	{
 		my $dn = $1;
-		$mf =~ s{\\\s*[\r\n]+}{}mg;
-		my $proj = $solution->AddProject($dn, 'dll', 'contrib');
-		$mf =~ /^OBJS\s*=\s*(.*)$/gm
-		  || croak "Could not find objects in MODULE_big for $n\n";
-		my $objs = $1;
-		while ($objs =~ /\b([\w-]+\.o)\b/g)
-		{
-			my $o = $1;
-			$o =~ s/\.o$/.c/;
-			$proj->AddFile('contrib\\' . $n . '\\' . $o);
-		}
+		my $proj =
+		  $solution->AddProject($dn, 'dll', 'contrib', 'contrib\\' . $n);
 		$proj->AddReference($postgres);
-		if ($mf =~ /^SUBDIRS\s*:?=\s*(.*)$/mg)
-		{
-			foreach my $d (split /\s+/, $1)
-			{
-				my $mf2 = Project::read_file(
-					'contrib\\' . $n . '\\' . $d . '\Makefile');
-				$mf2 =~ s{\\\s*[\r\n]+}{}mg;
-				$mf2 =~ /^SUBOBJS\s*=\s*(.*)$/gm
-				  || croak
-				  "Could not find objects in MODULE_big for $n, subdir $d\n";
-				$objs = $1;
-				while ($objs =~ /\b([\w-]+\.o)\b/g)
-				{
-					my $o = $1;
-					$o =~ s/\.o$/.c/;
-					$proj->AddFile('contrib\\' . $n . '\\' . $d . '\\' . $o);
-				}
-			}
-		}
 		AdjustContribProj($proj);
 	}
 	elsif ($mf =~ /^MODULES\s*=\s*(.*)$/mg)
 	{
 		foreach my $mod (split /\s+/, $1)
 		{
-			my $proj = $solution->AddProject($mod, 'dll', 'contrib');
+			my $proj =
+			  $solution->AddProject($mod, 'dll', 'contrib', 'contrib\\' . $n);
 			$proj->AddFile('contrib\\' . $n . '\\' . $mod . '.c');
 			$proj->AddReference($postgres);
 			AdjustContribProj($proj);
@@ -691,17 +676,8 @@ sub AddContrib
 	}
 	elsif ($mf =~ /^PROGRAM\s*=\s*(.*)$/mg)
 	{
-		my $proj = $solution->AddProject($1, 'exe', 'contrib');
-		$mf =~ s{\\\s*[\r\n]+}{}mg;
-		$mf =~ /^OBJS\s*=\s*(.*)$/gm
-		  || croak "Could not find objects in PROGRAM for $n\n";
-		my $objs = $1;
-		while ($objs =~ /\b([\w-]+\.o)\b/g)
-		{
-			my $o = $1;
-			$o =~ s/\.o$/.c/;
-			$proj->AddFile('contrib\\' . $n . '\\' . $o);
-		}
+		my $proj =
+		  $solution->AddProject($1, 'exe', 'contrib', 'contrib\\' . $n);
 		AdjustContribProj($proj);
 	}
 	else
@@ -717,6 +693,7 @@ sub GenerateContribSqlFiles
 {
 	my $n  = shift;
 	my $mf = shift;
+	$mf =~ s{\\\r?\n}{}g;
 	if ($mf =~ /^DATA_built\s*=\s*(.*)$/mg)
 	{
 		my $l = $1;

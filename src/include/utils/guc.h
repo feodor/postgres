@@ -18,6 +18,21 @@
 #include "utils/array.h"
 
 
+/* upper limit for GUC variables measured in kilobytes of memory */
+/* note that various places assume the byte size fits in a "long" variable */
+#if SIZEOF_SIZE_T > 4 && SIZEOF_LONG > 4
+#define MAX_KILOBYTES	INT_MAX
+#else
+#define MAX_KILOBYTES	(INT_MAX / 1024)
+#endif
+
+/*
+ * Automatic configuration file name for ALTER SYSTEM.
+ * This file will be used to store values of configuration parameters
+ * set by ALTER SYSTEM command.
+ */
+#define PG_AUTOCONF_FILENAME		"postgresql.auto.conf"
+
 /*
  * Certain options can only be set at certain times. The rules are
  * like this:
@@ -36,15 +51,17 @@
  * certain point in their main loop. It's safer to wait than to read a
  * file asynchronously.)
  *
- * BACKEND options can only be set at postmaster startup, from the
- * configuration file, or by client request in the connection startup
- * packet (e.g., from libpq's PGOPTIONS variable).  Furthermore, an
- * already-started backend will ignore changes to such an option in the
- * configuration file.  The idea is that these options are fixed for a
- * given backend once it's started, but they can vary across backends.
+ * BACKEND and SU_BACKEND options can only be set at postmaster startup,
+ * from the configuration file, or by client request in the connection
+ * startup packet (e.g., from libpq's PGOPTIONS variable).  SU_BACKEND
+ * options can be set from the startup packet only when the user is a
+ * superuser.  Furthermore, an already-started backend will ignore changes
+ * to such an option in the configuration file.  The idea is that these
+ * options are fixed for a given backend once it's started, but they can
+ * vary across backends.
  *
  * SUSET options can be set at postmaster startup, with the SIGHUP
- * mechanism, or from SQL if you're a superuser.
+ * mechanism, or from the startup packet or SQL if you're a superuser.
  *
  * USERSET options can be set by anyone any time.
  */
@@ -53,6 +70,7 @@ typedef enum
 	PGC_INTERNAL,
 	PGC_POSTMASTER,
 	PGC_SIGHUP,
+	PGC_SU_BACKEND,
 	PGC_BACKEND,
 	PGC_SUSET,
 	PGC_USERSET
@@ -195,6 +213,8 @@ typedef enum
 #define GUC_UNIT_TIME			0x7000	/* mask for MS, S, MIN */
 
 #define GUC_NOT_WHILE_SEC_REST	0x8000	/* can't set if security restricted */
+#define GUC_DISALLOW_IN_AUTO_FILE	0x00010000	/* can't set in
+												 * PG_AUTOCONF_FILENAME */
 
 /* GUC vars that are actually declared in guc.c, rather than elsewhere */
 extern bool log_duration;
@@ -223,6 +243,7 @@ extern int	temp_file_limit;
 
 extern int	num_temp_buffers;
 
+extern char *cluster_name;
 extern char *data_directory;
 extern char *ConfigFileName;
 extern char *HbaFileName;
@@ -325,7 +346,8 @@ extern bool parse_int(const char *value, int *result, int flags,
 extern bool parse_real(const char *value, double *result);
 extern int set_config_option(const char *name, const char *value,
 				  GucContext context, GucSource source,
-				  GucAction action, bool changeVal, int elevel);
+				  GucAction action, bool changeVal, int elevel,
+				  bool is_reload);
 extern void AlterSystemSetConfigFile(AlterSystemStmt *setstmt);
 extern char *GetConfigOptionByName(const char *name, const char **varname);
 extern void GetConfigOptionByNum(int varnum, const char **values, bool *noshow);
@@ -348,6 +370,11 @@ extern ArrayType *GUCArrayReset(ArrayType *array);
 extern void write_nondefault_variables(GucContext context);
 extern void read_nondefault_variables(void);
 #endif
+
+/* GUC serialization */
+extern Size EstimateGUCStateSpace(void);
+extern void SerializeGUCState(Size maxsize, char *start_address);
+extern void RestoreGUCState(void *gucstate);
 
 /* Support for messages reported from GUC check hooks */
 

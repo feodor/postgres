@@ -219,8 +219,12 @@ sub contribcheck
 	my $mstat = 0;
 	foreach my $module (glob("*"))
 	{
-		next if ($module eq 'sepgsql');
-		next if ($module eq 'xml2' && !$config->{xml});
+		# these configuration-based exclusions must match Install.pm
+		next if ($module eq "uuid-ossp" && !defined($config->{uuid}));
+		next if ($module eq "sslinfo"   && !defined($config->{openssl}));
+		next if ($module eq "xml2"      && !defined($config->{xml}));
+		next if ($module eq "sepgsql");
+
 		next
 		  unless -d "$module/sql"
 			  && -d "$module/expected"
@@ -327,9 +331,13 @@ sub fetchRegressOpts
 	if ($m =~ /^\s*REGRESS_OPTS\s*=(.*)/m)
 	{
 
-		# ignore options that use makefile variables - can't handle those
-		# ignore anything that isn't an option staring with --
-		@opts = grep { $_ !~ /\$\(/ && $_ =~ /^--/ } split(/\s+/, $1);
+		# Substitute known Makefile variables, then ignore options that retain
+		# an unhandled variable reference.  Ignore anything that isn't an
+		# option starting with "--".
+		@opts = grep {
+			s/\Q$(top_builddir)\E/\"$topdir\"/;
+			$_ !~ /\$\(/ && $_ =~ /^--/
+		} split(/\s+/, $1);
 	}
 	if ($m =~ /^\s*ENCODING\s*=\s*(\S+)/m)
 	{
@@ -354,7 +362,7 @@ sub fetchTests
 	close($handle);
 	my $t = "";
 
-	$m =~ s/\\[\r\n]*//gs;
+	$m =~ s{\\\r?\n}{}g;
 	if ($m =~ /^REGRESS\s*=\s*(.*)$/gm)
 	{
 		$t = $1;

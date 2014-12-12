@@ -1353,6 +1353,32 @@ pg_matviews| SELECT n.nspname AS schemaname,
      LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
      LEFT JOIN pg_tablespace t ON ((t.oid = c.reltablespace)))
   WHERE (c.relkind = 'm'::"char");
+pg_policies| SELECT n.nspname AS schemaname,
+    c.relname AS tablename,
+    pol.polname AS policyname,
+        CASE
+            WHEN (pol.polroles = '{0}'::oid[]) THEN (string_to_array('public'::text, ''::text))::name[]
+            ELSE ARRAY( SELECT pg_authid.rolname
+               FROM pg_authid
+              WHERE (pg_authid.oid = ANY (pol.polroles))
+              ORDER BY pg_authid.rolname)
+        END AS roles,
+        CASE
+            WHEN (pol.polcmd IS NULL) THEN 'ALL'::text
+            ELSE
+            CASE pol.polcmd
+                WHEN 'r'::"char" THEN 'SELECT'::text
+                WHEN 'a'::"char" THEN 'INSERT'::text
+                WHEN 'u'::"char" THEN 'UPDATE'::text
+                WHEN 'd'::"char" THEN 'DELETE'::text
+                ELSE NULL::text
+            END
+        END AS cmd,
+    pg_get_expr(pol.polqual, pol.polrelid) AS qual,
+    pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+   FROM ((pg_policy pol
+     JOIN pg_class c ON ((c.oid = pol.polrelid)))
+     LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)));
 pg_prepared_statements| SELECT p.name,
     p.statement,
     p.prepare_time,
@@ -1389,6 +1415,7 @@ pg_roles| SELECT pg_authid.rolname,
     pg_authid.rolconnlimit,
     '********'::text AS rolpassword,
     pg_authid.rolvaliduntil,
+    pg_authid.rolbypassrls,
     s.setconfig AS rolconfig,
     pg_authid.oid
    FROM (pg_authid
@@ -2018,7 +2045,8 @@ pg_tables| SELECT n.nspname AS schemaname,
     t.spcname AS tablespace,
     c.relhasindex AS hasindexes,
     c.relhasrules AS hasrules,
-    c.relhastriggers AS hastriggers
+    c.relhastriggers AS hastriggers,
+    c.relrowsecurity AS rowsecurity
    FROM ((pg_class c
      LEFT JOIN pg_namespace n ON ((n.oid = c.relnamespace)))
      LEFT JOIN pg_tablespace t ON ((t.oid = c.reltablespace)))
@@ -2117,7 +2145,7 @@ shoe_ready| SELECT rsh.shoename,
     int4smaller(rsh.sh_avail, rsl.sl_avail) AS total_avail
    FROM shoe rsh,
     shoelace rsl
-  WHERE (((rsl.sl_color = rsh.slcolor) AND (rsl.sl_len_cm >= rsh.slminlen_cm)) AND (rsl.sl_len_cm <= rsh.slmaxlen_cm));
+  WHERE ((rsl.sl_color = rsh.slcolor) AND (rsl.sl_len_cm >= rsh.slminlen_cm) AND (rsl.sl_len_cm <= rsh.slmaxlen_cm));
 shoelace| SELECT s.sl_name,
     s.sl_avail,
     s.sl_color,

@@ -15,6 +15,7 @@
 #define RELATION_H
 
 #include "access/sdir.h"
+#include "lib/stringinfo.h"
 #include "nodes/params.h"
 #include "nodes/parsenodes.h"
 #include "storage/block.h"
@@ -99,6 +100,9 @@ typedef struct PlannerGlobal
 	Index		lastRowMarkId;	/* highest PlanRowMark ID assigned */
 
 	bool		transientPlan;	/* redo plan when TransactionXmin changes? */
+
+	bool		hasRowSecurity;	/* row security applied? */
+
 } PlannerGlobal;
 
 /* macro for fetching the Plan associated with a SubPlan node */
@@ -189,6 +193,9 @@ typedef struct PlannerInfo
 	List	   *init_plans;		/* init SubPlans for query */
 
 	List	   *cte_plan_ids;	/* per-CTE-item list of subplan IDs */
+
+	List	   *multiexpr_params;		/* List of Lists of Params for
+										 * MULTIEXPR subquery outputs */
 
 	List	   *eq_classes;		/* list of active EquivalenceClasses */
 
@@ -877,6 +884,52 @@ typedef struct ForeignPath
 	Path		path;
 	List	   *fdw_private;
 } ForeignPath;
+
+/*
+ * CustomPath represents a table scan done by some out-of-core extension.
+ *
+ * We provide a set of hooks here - which the provider must take care to set
+ * up correctly - to allow extensions to supply their own methods of scanning
+ * a relation.  For example, a provider might provide GPU acceleration, a
+ * cache-based scan, or some other kind of logic we haven't dreamed up yet.
+ *
+ * CustomPaths can be injected into the planning process for a relation by
+ * set_rel_pathlist_hook functions.
+ *
+ * Core code must avoid assuming that the CustomPath is only as large as
+ * the structure declared here; providers are allowed to make it the first
+ * element in a larger structure.  (Since the planner never copies Paths,
+ * this doesn't add any complication.)  However, for consistency with the
+ * FDW case, we provide a "custom_private" field in CustomPath; providers
+ * may prefer to use that rather than define another struct type.
+ */
+struct CustomPath;
+
+#define CUSTOMPATH_SUPPORT_BACKWARD_SCAN	0x0001
+#define CUSTOMPATH_SUPPORT_MARK_RESTORE		0x0002
+
+typedef struct CustomPathMethods
+{
+	const char *CustomName;
+
+	/* Convert Path to a Plan */
+	struct Plan *(*PlanCustomPath) (PlannerInfo *root,
+												RelOptInfo *rel,
+												struct CustomPath *best_path,
+												List *tlist,
+												List *clauses);
+	/* Optional: print additional fields besides "private" */
+	void		(*TextOutCustomPath) (StringInfo str,
+											  const struct CustomPath *node);
+} CustomPathMethods;
+
+typedef struct CustomPath
+{
+	Path		path;
+	uint32		flags;			/* mask of CUSTOMPATH_* flags, see above */
+	List	   *custom_private;
+	const CustomPathMethods *methods;
+} CustomPath;
 
 /*
  * AppendPath represents an Append plan, ie, successive execution of

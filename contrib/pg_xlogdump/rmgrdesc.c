@@ -8,7 +8,9 @@
 #define FRONTEND 1
 #include "postgres.h"
 
+#include "access/brin_xlog.h"
 #include "access/clog.h"
+#include "access/commit_ts.h"
 #include "access/gin.h"
 #include "access/gist_private.h"
 #include "access/hash.h"
@@ -27,8 +29,8 @@
 #include "storage/standby.h"
 #include "utils/relmapper.h"
 
-#define PG_RMGR(symname,name,redo,desc,startup,cleanup) \
-	{ name, desc, },
+#define PG_RMGR(symname,name,redo,desc,identify,startup,cleanup) \
+	{ name, desc, identify},
 
 const RmgrDescData RmgrDescTable[RM_MAX_ID + 1] = {
 #include "access/rmgrlist.h"

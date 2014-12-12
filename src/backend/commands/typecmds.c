@@ -72,6 +72,7 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
 #include "utils/tqual.h"
@@ -546,6 +547,52 @@ DefineType(List *names, List *parameters)
 					   NameListToString(analyzeName));
 #endif
 
+	/*
+	 * Print warnings if any of the type's I/O functions are marked volatile.
+	 * There is a general assumption that I/O functions are stable or
+	 * immutable; this allows us for example to mark record_in/record_out
+	 * stable rather than volatile.  Ideally we would throw errors not just
+	 * warnings here; but since this check is new as of 9.5, and since the
+	 * volatility marking might be just an error-of-omission and not a true
+	 * indication of how the function behaves, we'll let it pass as a warning
+	 * for now.
+	 */
+	if (inputOid && func_volatile(inputOid) == PROVOLATILE_VOLATILE)
+		ereport(WARNING,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("type input function %s should not be volatile",
+						NameListToString(inputName))));
+	if (outputOid && func_volatile(outputOid) == PROVOLATILE_VOLATILE)
+		ereport(WARNING,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("type output function %s should not be volatile",
+						NameListToString(outputName))));
+	if (receiveOid && func_volatile(receiveOid) == PROVOLATILE_VOLATILE)
+		ereport(WARNING,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("type receive function %s should not be volatile",
+						NameListToString(receiveName))));
+	if (sendOid && func_volatile(sendOid) == PROVOLATILE_VOLATILE)
+		ereport(WARNING,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("type send function %s should not be volatile",
+						NameListToString(sendName))));
+	if (typmodinOid && func_volatile(typmodinOid) == PROVOLATILE_VOLATILE)
+		ereport(WARNING,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("type modifier input function %s should not be volatile",
+						NameListToString(typmodinName))));
+	if (typmodoutOid && func_volatile(typmodoutOid) == PROVOLATILE_VOLATILE)
+		ereport(WARNING,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("type modifier output function %s should not be volatile",
+						NameListToString(typmodoutName))));
+
+	/*
+	 * OK, we're done checking, time to make the type.  We must assign the
+	 * array type OID ahead of calling TypeCreate, since the base type and
+	 * array type each refer to the other.
+	 */
 	array_oid = AssignTypeArrayOid();
 
 	/*
@@ -596,37 +643,37 @@ DefineType(List *names, List *parameters)
 	/* alignment must be 'i' or 'd' for arrays */
 	alignment = (alignment == 'd') ? 'd' : 'i';
 
-	typoid = TypeCreate(array_oid,		/* force assignment of this type OID */
-						array_type,		/* type name */
-						typeNamespace,	/* namespace */
-						InvalidOid,		/* relation oid (n/a here) */
-						0,		/* relation kind (ditto) */
-						GetUserId(),	/* owner's ID */
-						-1,		/* internal size (always varlena) */
-						TYPTYPE_BASE,	/* type-type (base type) */
-						TYPCATEGORY_ARRAY,		/* type-category (array) */
-						false,	/* array types are never preferred */
-						delimiter,		/* array element delimiter */
-						F_ARRAY_IN,		/* input procedure */
-						F_ARRAY_OUT,	/* output procedure */
-						F_ARRAY_RECV,	/* receive procedure */
-						F_ARRAY_SEND,	/* send procedure */
-						typmodinOid,	/* typmodin procedure */
-						typmodoutOid,	/* typmodout procedure */
-						F_ARRAY_TYPANALYZE,		/* analyze procedure */
-						typoid, /* element type ID */
-						true,	/* yes this is an array type */
-						InvalidOid,		/* no further array type */
-						InvalidOid,		/* base type ID */
-						NULL,	/* never a default type value */
-						NULL,	/* binary default isn't sent either */
-						false,	/* never passed by value */
-						alignment,		/* see above */
-						'x',	/* ARRAY is always toastable */
-						-1,		/* typMod (Domains only) */
-						0,		/* Array dimensions of typbasetype */
-						false,	/* Type NOT NULL */
-						collation);		/* type's collation */
+	TypeCreate(array_oid,		/* force assignment of this type OID */
+			   array_type,		/* type name */
+			   typeNamespace,	/* namespace */
+			   InvalidOid,		/* relation oid (n/a here) */
+			   0,		/* relation kind (ditto) */
+			   GetUserId(),	/* owner's ID */
+			   -1,		/* internal size (always varlena) */
+			   TYPTYPE_BASE,	/* type-type (base type) */
+			   TYPCATEGORY_ARRAY,		/* type-category (array) */
+			   false,	/* array types are never preferred */
+			   delimiter,		/* array element delimiter */
+			   F_ARRAY_IN,		/* input procedure */
+			   F_ARRAY_OUT,	/* output procedure */
+			   F_ARRAY_RECV,	/* receive procedure */
+			   F_ARRAY_SEND,	/* send procedure */
+			   typmodinOid,	/* typmodin procedure */
+			   typmodoutOid,	/* typmodout procedure */
+			   F_ARRAY_TYPANALYZE,		/* analyze procedure */
+			   typoid, /* element type ID */
+			   true,	/* yes this is an array type */
+			   InvalidOid,		/* no further array type */
+			   InvalidOid,		/* base type ID */
+			   NULL,	/* never a default type value */
+			   NULL,	/* binary default isn't sent either */
+			   false,	/* never passed by value */
+			   alignment,		/* see above */
+			   'x',	/* ARRAY is always toastable */
+			   -1,		/* typMod (Domains only) */
+			   0,		/* Array dimensions of typbasetype */
+			   false,	/* Type NOT NULL */
+			   collation);		/* type's collation */
 
 	pfree(array_type);
 
@@ -1986,9 +2033,14 @@ AssignTypeArrayOid(void)
 {
 	Oid			type_array_oid;
 
-	/* Use binary-upgrade override for pg_type.typarray, if supplied. */
-	if (IsBinaryUpgrade && OidIsValid(binary_upgrade_next_array_pg_type_oid))
+	/* Use binary-upgrade override for pg_type.typarray? */
+	if (IsBinaryUpgrade)
 	{
+		if (!OidIsValid(binary_upgrade_next_array_pg_type_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("pg_type array OID value not set when in binary upgrade mode")));
+
 		type_array_oid = binary_upgrade_next_array_pg_type_oid;
 		binary_upgrade_next_array_pg_type_oid = InvalidOid;
 	}

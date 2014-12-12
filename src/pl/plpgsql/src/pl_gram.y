@@ -106,6 +106,7 @@ static	void			 check_labels(const char *start_label,
 static	PLpgSQL_expr	*read_cursor_args(PLpgSQL_var *cursor,
 										  int until, const char *expected);
 static	List			*read_raise_options(void);
+static	void			check_raise_parameters(PLpgSQL_stmt_raise *stmt);
 
 %}
 
@@ -187,7 +188,7 @@ static	List			*read_raise_options(void);
 
 %type <str>		any_identifier opt_block_label opt_label option_value
 
-%type <list>	proc_sect proc_stmts stmt_elsifs stmt_else
+%type <list>	proc_sect stmt_elsifs stmt_else
 %type <loop_body>	loop_body
 %type <stmt>	proc_stmt pl_block
 %type <stmt>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit
@@ -317,8 +318,8 @@ static	List			*read_raise_options(void);
 %token <keyword>	K_RETURN
 %token <keyword>	K_RETURNED_SQLSTATE
 %token <keyword>	K_REVERSE
-%token <keyword>	K_ROWTYPE
 %token <keyword>	K_ROW_COUNT
+%token <keyword>	K_ROWTYPE
 %token <keyword>	K_SCHEMA
 %token <keyword>	K_SCHEMA_NAME
 %token <keyword>	K_SCROLL
@@ -837,24 +838,14 @@ assign_operator	: '='
 
 proc_sect		:
 					{ $$ = NIL; }
-				| proc_stmts
-					{ $$ = $1; }
-				;
-
-proc_stmts		: proc_stmts proc_stmt
-						{
-							if ($2 == NULL)
-								$$ = $1;
-							else
-								$$ = lappend($1, $2);
-						}
-				| proc_stmt
-						{
-							if ($1 == NULL)
-								$$ = NIL;
-							else
-								$$ = list_make1($1);
-						}
+				| proc_sect proc_stmt
+					{
+						/* don't bother linking null statements into list */
+						if ($2 == NULL)
+							$$ = $1;
+						else
+							$$ = lappend($1, $2);
+					}
 				;
 
 proc_stmt		: pl_block ';'
@@ -1849,6 +1840,8 @@ stmt_raise		: K_RAISE
 								new->options = read_raise_options();
 						}
 
+						check_raise_parameters(new);
+
 						$$ = (PLpgSQL_stmt *)new;
 					}
 				;
@@ -2322,42 +2315,58 @@ unreserved_keyword	:
 				| K_ALIAS
 				| K_ARRAY
 				| K_BACKWARD
+				| K_CLOSE
+				| K_COLLATE
 				| K_COLUMN
 				| K_COLUMN_NAME
 				| K_CONSTANT
 				| K_CONSTRAINT
 				| K_CONSTRAINT_NAME
+				| K_CONTINUE
 				| K_CURRENT
 				| K_CURSOR
 				| K_DATATYPE
 				| K_DEBUG
+				| K_DEFAULT
 				| K_DETAIL
+				| K_DIAGNOSTICS
 				| K_DUMP
+				| K_ELSIF
 				| K_ERRCODE
 				| K_ERROR
+				| K_EXCEPTION
+				| K_EXIT
+				| K_FETCH
 				| K_FIRST
 				| K_FORWARD
+				| K_GET
 				| K_HINT
 				| K_INFO
+				| K_INSERT
 				| K_IS
 				| K_LAST
 				| K_LOG
 				| K_MESSAGE
 				| K_MESSAGE_TEXT
+				| K_MOVE
 				| K_NEXT
 				| K_NO
 				| K_NOTICE
+				| K_OPEN
 				| K_OPTION
+				| K_PERFORM
 				| K_PG_CONTEXT
 				| K_PG_DATATYPE_NAME
 				| K_PG_EXCEPTION_CONTEXT
 				| K_PG_EXCEPTION_DETAIL
 				| K_PG_EXCEPTION_HINT
-				| K_PRIOR
 				| K_PRINT_STRICT_PARAMS
+				| K_PRIOR
 				| K_QUERY
+				| K_RAISE
 				| K_RELATIVE
 				| K_RESULT_OID
+				| K_RETURN
 				| K_RETURNED_SQLSTATE
 				| K_REVERSE
 				| K_ROW_COUNT
@@ -3765,6 +3774,41 @@ read_raise_options(void)
 	}
 
 	return result;
+}
+
+/*
+ * Check that the number of parameter placeholders in the message matches the
+ * number of parameters passed to it, if a message was given.
+ */
+static void
+check_raise_parameters(PLpgSQL_stmt_raise *stmt)
+{
+	char	   *cp;
+	int			expected_nparams = 0;
+
+	if (stmt->message == NULL)
+		return;
+
+	for (cp = stmt->message; *cp; cp++)
+	{
+		if (cp[0] == '%')
+		{
+			/* ignore literal % characters */
+			if (cp[1] == '%')
+				cp++;
+			else
+				expected_nparams++;
+		}
+	}
+
+	if (expected_nparams < list_length(stmt->params))
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("too many parameters specified for RAISE")));
+	if (expected_nparams > list_length(stmt->params))
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				errmsg("too few parameters specified for RAISE")));
 }
 
 /*

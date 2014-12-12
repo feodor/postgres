@@ -60,6 +60,7 @@
 #include "sys/mman.h"
 #endif
 
+#include "catalog/catalog.h"
 #include "common/username.h"
 #include "mb/pg_wchar.h"
 #include "getaddrinfo.h"
@@ -185,6 +186,7 @@ static const char *subdirs[] = {
 	"pg_xlog",
 	"pg_xlog/archive_status",
 	"pg_clog",
+	"pg_commit_ts",
 	"pg_dynshmem",
 	"pg_notify",
 	"pg_serial",
@@ -199,9 +201,9 @@ static const char *subdirs[] = {
 	"pg_tblspc",
 	"pg_stat",
 	"pg_stat_tmp",
-	"pg_llog",
-	"pg_llog/snapshots",
-	"pg_llog/mappings"
+	"pg_logical",
+	"pg_logical/snapshots",
+	"pg_logical/mappings"
 };
 
 
@@ -218,6 +220,7 @@ static char **filter_lines_with_token(char **lines, const char *token);
 static char **readfile(const char *path);
 static void writefile(char *path, char **lines);
 static void walkdir(char *path, void (*action) (char *fname, bool isdir));
+static void walktblspc_links(char *path, void (*action) (char *fname, bool isdir));
 static void pre_sync_fname(char *fname, bool isdir);
 static void fsync_fname(char *fname, bool isdir);
 static FILE *popen_check(const char *command, const char *mode);
@@ -585,6 +588,55 @@ walkdir(char *path, void (*action) (char *fname, bool isdir))
 	 * it's been an issue for ext3 and other filesystems in the past.
 	 */
 	(*action) (path, true);
+}
+
+/*
+ * walktblspc_links: call walkdir on each entry under the given
+ * pg_tblspc directory, or do nothing if pg_tblspc doesn't exist.
+ */
+static void
+walktblspc_links(char *path, void (*action) (char *fname, bool isdir))
+{
+	DIR		   *dir;
+	struct dirent *direntry;
+	char		subpath[MAXPGPATH];
+
+	dir = opendir(path);
+	if (dir == NULL)
+	{
+		if (errno == ENOENT)
+			return;
+		fprintf(stderr, _("%s: could not open directory \"%s\": %s\n"),
+				progname, path, strerror(errno));
+		exit_nicely();
+	}
+
+	while (errno = 0, (direntry = readdir(dir)) != NULL)
+	{
+		if (strcmp(direntry->d_name, ".") == 0 ||
+			strcmp(direntry->d_name, "..") == 0)
+			continue;
+
+		/* fsync the version specific tablespace subdirectory */
+		snprintf(subpath, sizeof(subpath), "%s/%s/%s",
+				 path, direntry->d_name, TABLESPACE_VERSION_DIRECTORY);
+
+		walkdir(subpath, action);
+	}
+
+	if (errno)
+	{
+		fprintf(stderr, _("%s: could not read directory \"%s\": %s\n"),
+				progname, path, strerror(errno));
+		exit_nicely();
+	}
+
+	if (closedir(dir))
+	{
+		fprintf(stderr, _("%s: could not close directory \"%s\": %s\n"),
+				progname, path, strerror(errno));
+		exit_nicely();
+	}
 }
 
 /*
@@ -1288,6 +1340,12 @@ setup_config(void)
 	conflines = replace_token(conflines, "#dynamic_shared_memory_type = posix",
 							  repltok);
 
+#ifndef USE_PREFETCH
+	conflines = replace_token(conflines,
+							  "#effective_io_concurrency = 1",
+							  "#effective_io_concurrency = 0");
+#endif
+
 	snprintf(path, sizeof(path), "%s/postgresql.conf", pg_data);
 
 	writefile(path, conflines);
@@ -1308,7 +1366,7 @@ setup_config(void)
 	autoconflines[1] = pg_strdup("# It will be overwritten by the ALTER SYSTEM command.\n");
 	autoconflines[2] = NULL;
 
-	sprintf(path, "%s/%s", pg_data, PG_AUTOCONF_FILENAME);
+	sprintf(path, "%s/postgresql.auto.conf", pg_data);
 
 	writefile(path, autoconflines);
 	if (chmod(path, S_IRUSR | S_IWUSR) != 0)
@@ -1605,8 +1663,12 @@ get_set_pwd(void)
 		}
 		if (!fgets(pwdbuf, sizeof(pwdbuf), pwf))
 		{
-			fprintf(stderr, _("%s: could not read password from file \"%s\": %s\n"),
-					progname, pwfilename, strerror(errno));
+			if (ferror(pwf))
+				fprintf(stderr, _("%s: could not read password from file \"%s\": %s\n"),
+						progname, pwfilename, strerror(errno));
+			else
+				fprintf(stderr, _("%s: password file \"%s\" is empty\n"),
+						progname, pwfilename);
 			exit_nicely();
 		}
 		fclose(pwf);
@@ -2288,11 +2350,7 @@ make_template0(void)
 	PG_CMD_DECL;
 	const char **line;
 	static const char *template0_setup[] = {
-		"CREATE DATABASE template0;\n",
-		"UPDATE pg_database SET "
-		"	datistemplate = 't', "
-		"	datallowconn = 'f' "
-		"    WHERE datname = 'template0';\n",
+		"CREATE DATABASE template0 IS_TEMPLATE = true ALLOW_CONNECTIONS = false;\n",
 
 		/*
 		 * We use the OID of template0 to determine lastsysoid
@@ -2375,6 +2433,7 @@ static void
 perform_fsync(void)
 {
 	char		pdir[MAXPGPATH];
+	char		pg_tblspc[MAXPGPATH];
 
 	fputs(_("syncing data to disk ... "), stdout);
 	fflush(stdout);
@@ -2393,8 +2452,12 @@ perform_fsync(void)
 	/* first the parent of the PGDATA directory */
 	pre_sync_fname(pdir, true);
 
-	/* then recursively through the directory */
+	/* then recursively through the data directory */
 	walkdir(pg_data, pre_sync_fname);
+
+	/* now do the same thing for everything under pg_tblspc */
+	snprintf(pg_tblspc, MAXPGPATH, "%s/pg_tblspc", pg_data);
+	walktblspc_links(pg_tblspc, pre_sync_fname);
 
 	/*
 	 * Now, do the fsync()s in the same order.
@@ -2403,8 +2466,11 @@ perform_fsync(void)
 	/* first the parent of the PGDATA directory */
 	fsync_fname(pdir, true);
 
-	/* then recursively through the directory */
+	/* then recursively through the data directory */
 	walkdir(pg_data, fsync_fname);
+
+	/* and now the same for all tablespaces */
+	walktblspc_links(pg_tblspc, fsync_fname);
 
 	check_ok();
 }
@@ -2552,7 +2618,7 @@ check_locale_name(int category, const char *locale, char **canonname)
 	save = setlocale(category, NULL);
 	if (!save)
 	{
-		fprintf(stderr, _("%s: setlocale failed\n"),
+		fprintf(stderr, _("%s: setlocale() failed\n"),
 				progname);
 		exit(1);
 	}

@@ -3196,10 +3196,19 @@ eval_const_expressions_mutator(Node *node,
 				 * But it can arise while simplifying functions.)  Also, we
 				 * can optimize field selection from a RowExpr construct.
 				 *
-				 * We must however check that the declared type of the field
-				 * is still the same as when the FieldSelect was created ---
-				 * this can change if someone did ALTER COLUMN TYPE on the
-				 * rowtype.
+				 * However, replacing a whole-row Var in this way has a
+				 * pitfall: if we've already built the reltargetlist for the
+				 * source relation, then the whole-row Var is scheduled to be
+				 * produced by the relation scan, but the simple Var probably
+				 * isn't, which will lead to a failure in setrefs.c.  This is
+				 * not a problem when handling simple single-level queries, in
+				 * which expression simplification always happens first.  It
+				 * is a risk for lateral references from subqueries, though.
+				 * To avoid such failures, don't optimize uplevel references.
+				 *
+				 * We must also check that the declared type of the field is
+				 * still the same as when the FieldSelect was created --- this
+				 * can change if someone did ALTER COLUMN TYPE on the rowtype.
 				 */
 				FieldSelect *fselect = (FieldSelect *) node;
 				FieldSelect *newfselect;
@@ -3208,7 +3217,8 @@ eval_const_expressions_mutator(Node *node,
 				arg = eval_const_expressions_mutator((Node *) fselect->arg,
 													 context);
 				if (arg && IsA(arg, Var) &&
-					((Var *) arg)->varattno == InvalidAttrNumber)
+					((Var *) arg)->varattno == InvalidAttrNumber &&
+					((Var *) arg)->varlevelsup == 0)
 				{
 					if (rowtype_field_matches(((Var *) arg)->vartype,
 											  fselect->fieldnum,
@@ -3447,12 +3457,15 @@ simplify_or_arguments(List *args,
 	List	   *unprocessed_args;
 
 	/*
-	 * Since the parser considers OR to be a binary operator, long OR lists
-	 * become deeply nested expressions.  We must flatten these into long
-	 * argument lists of a single OR operator.  To avoid blowing out the stack
-	 * with recursion of eval_const_expressions, we resort to some tenseness
-	 * here: we keep a list of not-yet-processed inputs, and handle flattening
-	 * of nested ORs by prepending to the to-do list instead of recursing.
+	 * We want to ensure that any OR immediately beneath another OR gets
+	 * flattened into a single OR-list, so as to simplify later reasoning.
+	 *
+	 * To avoid stack overflow from recursion of eval_const_expressions, we
+	 * resort to some tenseness here: we keep a list of not-yet-processed
+	 * inputs, and handle flattening of nested ORs by prepending to the to-do
+	 * list instead of recursing.  Now that the parser generates N-argument
+	 * ORs from simple lists, this complexity is probably less necessary than
+	 * it once was, but we might as well keep the logic.
 	 */
 	unprocessed_args = list_copy(args);
 	while (unprocessed_args)

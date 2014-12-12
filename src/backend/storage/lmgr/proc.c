@@ -376,7 +376,6 @@ InitProcess(void)
 	MyProc->waitLock = NULL;
 	MyProc->waitProcLock = NULL;
 #ifdef USE_ASSERT_CHECKING
-	if (assert_enabled)
 	{
 		int			i;
 
@@ -412,8 +411,9 @@ InitProcess(void)
 
 	/*
 	 * Now that we have a PGPROC, we could try to acquire locks, so initialize
-	 * the deadlock checker.
+	 * local state needed for LWLocks, and the deadlock checker.
 	 */
+	InitLWLockAccess();
 	InitDeadLockChecking();
 }
 
@@ -539,7 +539,6 @@ InitAuxiliaryProcess(void)
 	MyProc->waitLock = NULL;
 	MyProc->waitProcLock = NULL;
 #ifdef USE_ASSERT_CHECKING
-	if (assert_enabled)
 	{
 		int			i;
 
@@ -782,7 +781,6 @@ ProcKill(int code, Datum arg)
 	SyncRepCleanupAtProcExit();
 
 #ifdef USE_ASSERT_CHECKING
-	if (assert_enabled)
 	{
 		int			i;
 

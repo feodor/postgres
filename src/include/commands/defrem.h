@@ -30,8 +30,7 @@ extern Oid DefineIndex(Oid relationId,
 			bool quiet);
 extern Oid	ReindexIndex(RangeVar *indexRelation);
 extern Oid	ReindexTable(RangeVar *relation);
-extern Oid ReindexDatabase(const char *databaseName,
-				bool do_system, bool do_user);
+extern Oid ReindexObject(const char *databaseName, ReindexObjectType kind);
 extern char *makeObjectName(const char *name1, const char *name2,
 			   const char *label);
 extern char *ChooseRelationName(const char *name1, const char *name2,
@@ -124,6 +123,7 @@ extern Oid	AlterUserMapping(AlterUserMappingStmt *stmt);
 extern Oid	RemoveUserMapping(DropUserMappingStmt *stmt);
 extern void RemoveUserMappingById(Oid umId);
 extern void CreateForeignTable(CreateForeignTableStmt *stmt, Oid relid);
+extern void ImportForeignSchema(ImportForeignSchemaStmt *stmt);
 extern Datum transformGenericOptions(Oid catalogId,
 						Datum oldOptions,
 						List *options,

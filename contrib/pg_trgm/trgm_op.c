@@ -11,7 +11,6 @@
 #include "tsearch/ts_locale.h"
 #include "utils/memutils.h"
 
-
 PG_MODULE_MAGIC;
 
 float4		trgm_limit = 0.3f;
@@ -109,9 +108,9 @@ compact_trigram(trgm *tptr, char *str, int bytelen)
 	{
 		pg_crc32	crc;
 
-		INIT_CRC32(crc);
-		COMP_CRC32(crc, str, bytelen);
-		FIN_CRC32(crc);
+		INIT_LEGACY_CRC32(crc);
+		COMP_LEGACY_CRC32(crc, str, bytelen);
+		FIN_LEGACY_CRC32(crc);
 
 		/*
 		 * use only 3 upper bytes from crc, hope, it's good enough hashing

@@ -76,11 +76,10 @@
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 
-
 PG_MODULE_MAGIC;
 
 /* Location of permanent stats file (valid when database is shut down) */
-#define PGSS_DUMP_FILE	"global/pg_stat_statements.stat"
+#define PGSS_DUMP_FILE	PGSTAT_STAT_PERMANENT_DIRECTORY "/pg_stat_statements.stat"
 
 /*
  * Location of external query text file.  We don't keep it in the core
@@ -955,10 +954,13 @@ pgss_ProcessUtility(Node *parsetree, const char *queryString,
 	 * calculated from the query tree) would be used to accumulate costs of
 	 * ensuing EXECUTEs.  This would be confusing, and inconsistent with other
 	 * cases where planning time is not included at all.
+	 *
+	 * Likewise, we don't track execution of DEALLOCATE.
 	 */
 	if (pgss_track_utility && pgss_enabled() &&
 		!IsA(parsetree, ExecuteStmt) &&
-		!IsA(parsetree, PrepareStmt))
+		!IsA(parsetree, PrepareStmt) &&
+		!IsA(parsetree, DeallocateStmt))
 	{
 		instr_time	start;
 		instr_time	duration;
@@ -2396,6 +2398,7 @@ JumbleExpr(pgssJumbleState *jstate, Node *node)
 				SubLink    *sublink = (SubLink *) node;
 
 				APP_JUMB(sublink->subLinkType);
+				APP_JUMB(sublink->subLinkId);
 				JumbleExpr(jstate, (Node *) sublink->testexpr);
 				JumbleQuery(jstate, (Query *) sublink->subselect);
 			}

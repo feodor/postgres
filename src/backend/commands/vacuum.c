@@ -23,6 +23,7 @@
 #include <math.h>
 
 #include "access/clog.h"
+#include "access/commit_ts.h"
 #include "access/genam.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
@@ -66,7 +67,10 @@ static BufferAccessStrategy vac_strategy;
 
 /* non-export function prototypes */
 static List *get_rel_oids(Oid relid, const RangeVar *vacrel);
-static void vac_truncate_clog(TransactionId frozenXID, MultiXactId minMulti);
+static void vac_truncate_clog(TransactionId frozenXID,
+				  MultiXactId minMulti,
+				  TransactionId lastSaneFrozenXid,
+				  MultiXactId lastSaneMinMulti);
 static bool vacuum_rel(Oid relid, VacuumStmt *vacstmt, bool do_toast,
 		   bool for_wraparound);
 
@@ -203,6 +207,8 @@ vacuum(VacuumStmt *vacstmt, Oid relid, bool do_toast,
 	 */
 	if (use_own_xacts)
 	{
+		Assert(!in_outer_xact);
+
 		/* ActiveSnapshot is not set by autovacuum */
 		if (ActiveSnapshotSet())
 			PopActiveSnapshot();
@@ -248,7 +254,7 @@ vacuum(VacuumStmt *vacstmt, Oid relid, bool do_toast,
 					PushActiveSnapshot(GetTransactionSnapshot());
 				}
 
-				analyze_rel(relid, vacstmt, vac_strategy);
+				analyze_rel(relid, vacstmt, in_outer_xact, vac_strategy);
 
 				if (use_own_xacts)
 				{
@@ -645,22 +651,30 @@ vac_estimate_reltuples(Relation relation, bool is_analyze,
  *
  *		We violate transaction semantics here by overwriting the rel's
  *		existing pg_class tuple with the new values.  This is reasonably
- *		safe since the new values are correct whether or not this transaction
- *		commits.  The reason for this is that if we updated these tuples in
- *		the usual way, vacuuming pg_class itself wouldn't work very well ---
- *		by the time we got done with a vacuum cycle, most of the tuples in
- *		pg_class would've been obsoleted.  Of course, this only works for
- *		fixed-size never-null columns, but these are.
- *
- *		Note another assumption: that two VACUUMs/ANALYZEs on a table can't
- *		run in parallel, nor can VACUUM/ANALYZE run in parallel with a
- *		schema alteration such as adding an index, rule, or trigger.  Otherwise
- *		our updates of relhasindex etc might overwrite uncommitted updates.
+ *		safe as long as we're sure that the new values are correct whether or
+ *		not this transaction commits.  The reason for doing this is that if
+ *		we updated these tuples in the usual way, vacuuming pg_class itself
+ *		wouldn't work very well --- by the time we got done with a vacuum
+ *		cycle, most of the tuples in pg_class would've been obsoleted.  Of
+ *		course, this only works for fixed-size not-null columns, but these are.
  *
  *		Another reason for doing it this way is that when we are in a lazy
- *		VACUUM and have PROC_IN_VACUUM set, we mustn't do any updates ---
- *		somebody vacuuming pg_class might think they could delete a tuple
+ *		VACUUM and have PROC_IN_VACUUM set, we mustn't do any regular updates.
+ *		Somebody vacuuming pg_class might think they could delete a tuple
  *		marked with xmin = our xid.
+ *
+ *		In addition to fundamentally nontransactional statistics such as
+ *		relpages and relallvisible, we try to maintain certain lazily-updated
+ *		DDL flags such as relhasindex, by clearing them if no longer correct.
+ *		It's safe to do this in VACUUM, which can't run in parallel with
+ *		CREATE INDEX/RULE/TRIGGER and can't be part of a transaction block.
+ *		However, it's *not* safe to do it in an ANALYZE that's within an
+ *		outer transaction, because for example the current transaction might
+ *		have dropped the last index; then we'd think relhasindex should be
+ *		cleared, but if the transaction later rolls back this would be wrong.
+ *		So we refrain from updating the DDL flags if we're inside an outer
+ *		transaction.  This is OK since postponing the flag maintenance is
+ *		always allowable.
  *
  *		This routine is shared by VACUUM and ANALYZE.
  */
@@ -669,7 +683,8 @@ vac_update_relstats(Relation relation,
 					BlockNumber num_pages, double num_tuples,
 					BlockNumber num_all_visible_pages,
 					bool hasindex, TransactionId frozenxid,
-					MultiXactId minmulti)
+					MultiXactId minmulti,
+					bool in_outer_xact)
 {
 	Oid			relid = RelationGetRelid(relation);
 	Relation	rd;
@@ -686,7 +701,7 @@ vac_update_relstats(Relation relation,
 			 relid);
 	pgcform = (Form_pg_class) GETSTRUCT(ctup);
 
-	/* Apply required updates, if any, to copied tuple */
+	/* Apply statistical updates, if any, to copied tuple */
 
 	dirty = false;
 	if (pgcform->relpages != (int32) num_pages)
@@ -704,48 +719,71 @@ vac_update_relstats(Relation relation,
 		pgcform->relallvisible = (int32) num_all_visible_pages;
 		dirty = true;
 	}
-	if (pgcform->relhasindex != hasindex)
+
+	/* Apply DDL updates, but not inside an outer transaction (see above) */
+
+	if (!in_outer_xact)
 	{
-		pgcform->relhasindex = hasindex;
-		dirty = true;
+		/*
+		 * If we didn't find any indexes, reset relhasindex.
+		 */
+		if (pgcform->relhasindex && !hasindex)
+		{
+			pgcform->relhasindex = false;
+			dirty = true;
+		}
+
+		/*
+		 * If we have discovered that there are no indexes, then there's no
+		 * primary key either.  This could be done more thoroughly...
+		 */
+		if (pgcform->relhaspkey && !hasindex)
+		{
+			pgcform->relhaspkey = false;
+			dirty = true;
+		}
+
+		/* We also clear relhasrules and relhastriggers if needed */
+		if (pgcform->relhasrules && relation->rd_rules == NULL)
+		{
+			pgcform->relhasrules = false;
+			dirty = true;
+		}
+		if (pgcform->relhastriggers && relation->trigdesc == NULL)
+		{
+			pgcform->relhastriggers = false;
+			dirty = true;
+		}
 	}
 
 	/*
-	 * If we have discovered that there are no indexes, then there's no
-	 * primary key either.  This could be done more thoroughly...
-	 */
-	if (pgcform->relhaspkey && !hasindex)
-	{
-		pgcform->relhaspkey = false;
-		dirty = true;
-	}
-
-	/* We also clear relhasrules and relhastriggers if needed */
-	if (pgcform->relhasrules && relation->rd_rules == NULL)
-	{
-		pgcform->relhasrules = false;
-		dirty = true;
-	}
-	if (pgcform->relhastriggers && relation->trigdesc == NULL)
-	{
-		pgcform->relhastriggers = false;
-		dirty = true;
-	}
-
-	/*
-	 * relfrozenxid should never go backward.  Caller can pass
-	 * InvalidTransactionId if it has no new data.
+	 * Update relfrozenxid, unless caller passed InvalidTransactionId
+	 * indicating it has no new data.
+	 *
+	 * Ordinarily, we don't let relfrozenxid go backwards: if things are
+	 * working correctly, the only way the new frozenxid could be older would
+	 * be if a previous VACUUM was done with a tighter freeze_min_age, in
+	 * which case we don't want to forget the work it already did.  However,
+	 * if the stored relfrozenxid is "in the future", then it must be corrupt
+	 * and it seems best to overwrite it with the cutoff we used this time.
+	 * This should match vac_update_datfrozenxid() concerning what we consider
+	 * to be "in the future".
 	 */
 	if (TransactionIdIsNormal(frozenxid) &&
-		TransactionIdPrecedes(pgcform->relfrozenxid, frozenxid))
+		pgcform->relfrozenxid != frozenxid &&
+		(TransactionIdPrecedes(pgcform->relfrozenxid, frozenxid) ||
+		 TransactionIdPrecedes(ReadNewTransactionId(),
+							   pgcform->relfrozenxid)))
 	{
 		pgcform->relfrozenxid = frozenxid;
 		dirty = true;
 	}
 
-	/* relminmxid must never go backward, either */
+	/* Similarly for relminmxid */
 	if (MultiXactIdIsValid(minmulti) &&
-		MultiXactIdPrecedes(pgcform->relminmxid, minmulti))
+		pgcform->relminmxid != minmulti &&
+		(MultiXactIdPrecedes(pgcform->relminmxid, minmulti) ||
+		 MultiXactIdPrecedes(ReadNextMultiXactId(), pgcform->relminmxid)))
 	{
 		pgcform->relminmxid = minmulti;
 		dirty = true;
@@ -772,8 +810,8 @@ vac_update_relstats(Relation relation,
  *		truncate pg_clog and pg_multixact.
  *
  *		We violate transaction semantics here by overwriting the database's
- *		existing pg_database tuple with the new value.  This is reasonably
- *		safe since the new value is correct whether or not this transaction
+ *		existing pg_database tuple with the new values.  This is reasonably
+ *		safe since the new values are correct whether or not this transaction
  *		commits.  As with vac_update_relstats, this avoids leaving dead tuples
  *		behind after a VACUUM.
  */
@@ -787,6 +825,9 @@ vac_update_datfrozenxid(void)
 	HeapTuple	classTup;
 	TransactionId newFrozenXid;
 	MultiXactId newMinMulti;
+	TransactionId lastSaneFrozenXid;
+	MultiXactId lastSaneMinMulti;
+	bool		bogus = false;
 	bool		dirty = false;
 
 	/*
@@ -802,6 +843,14 @@ vac_update_datfrozenxid(void)
 	 * used on pg_class for new tables.  See AddNewRelationTuple().
 	 */
 	newMinMulti = GetOldestMultiXactId();
+
+	/*
+	 * Identify the latest relfrozenxid and relminmxid values that we could
+	 * validly see during the scan.  These are conservative values, but it's
+	 * not really worth trying to be more exact.
+	 */
+	lastSaneFrozenXid = ReadNewTransactionId();
+	lastSaneMinMulti = ReadNextMultiXactId();
 
 	/*
 	 * We must seqscan pg_class to find the minimum Xid, because there is no
@@ -828,6 +877,21 @@ vac_update_datfrozenxid(void)
 		Assert(TransactionIdIsNormal(classForm->relfrozenxid));
 		Assert(MultiXactIdIsValid(classForm->relminmxid));
 
+		/*
+		 * If things are working properly, no relation should have a
+		 * relfrozenxid or relminmxid that is "in the future".  However, such
+		 * cases have been known to arise due to bugs in pg_upgrade.  If we
+		 * see any entries that are "in the future", chicken out and don't do
+		 * anything.  This ensures we won't truncate clog before those
+		 * relations have been scanned and cleaned up.
+		 */
+		if (TransactionIdPrecedes(lastSaneFrozenXid, classForm->relfrozenxid) ||
+			MultiXactIdPrecedes(lastSaneMinMulti, classForm->relminmxid))
+		{
+			bogus = true;
+			break;
+		}
+
 		if (TransactionIdPrecedes(classForm->relfrozenxid, newFrozenXid))
 			newFrozenXid = classForm->relfrozenxid;
 
@@ -838,6 +902,10 @@ vac_update_datfrozenxid(void)
 	/* we're done with pg_class */
 	systable_endscan(scan);
 	heap_close(relation, AccessShareLock);
+
+	/* chicken out if bogus data found */
+	if (bogus)
+		return;
 
 	Assert(TransactionIdIsNormal(newFrozenXid));
 	Assert(MultiXactIdIsValid(newMinMulti));
@@ -852,21 +920,30 @@ vac_update_datfrozenxid(void)
 	dbform = (Form_pg_database) GETSTRUCT(tuple);
 
 	/*
-	 * Don't allow datfrozenxid to go backward (probably can't happen anyway);
-	 * and detect the common case where it doesn't go forward either.
+	 * As in vac_update_relstats(), we ordinarily don't want to let
+	 * datfrozenxid go backward; but if it's "in the future" then it must be
+	 * corrupt and it seems best to overwrite it.
 	 */
-	if (TransactionIdPrecedes(dbform->datfrozenxid, newFrozenXid))
+	if (dbform->datfrozenxid != newFrozenXid &&
+		(TransactionIdPrecedes(dbform->datfrozenxid, newFrozenXid) ||
+		 TransactionIdPrecedes(lastSaneFrozenXid, dbform->datfrozenxid)))
 	{
 		dbform->datfrozenxid = newFrozenXid;
 		dirty = true;
 	}
+	else
+		newFrozenXid = dbform->datfrozenxid;
 
-	/* ditto */
-	if (MultiXactIdPrecedes(dbform->datminmxid, newMinMulti))
+	/* Ditto for datminmxid */
+	if (dbform->datminmxid != newMinMulti &&
+		(MultiXactIdPrecedes(dbform->datminmxid, newMinMulti) ||
+		 MultiXactIdPrecedes(lastSaneMinMulti, dbform->datminmxid)))
 	{
 		dbform->datminmxid = newMinMulti;
 		dirty = true;
 	}
+	else
+		newMinMulti = dbform->datminmxid;
 
 	if (dirty)
 		heap_inplace_update(relation, tuple);
@@ -875,12 +952,13 @@ vac_update_datfrozenxid(void)
 	heap_close(relation, RowExclusiveLock);
 
 	/*
-	 * If we were able to advance datfrozenxid, see if we can truncate
-	 * pg_clog. Also do it if the shared XID-wrap-limit info is stale, since
-	 * this action will update that too.
+	 * If we were able to advance datfrozenxid or datminmxid, see if we can
+	 * truncate pg_clog and/or pg_multixact.  Also do it if the shared
+	 * XID-wrap-limit info is stale, since this action will update that too.
 	 */
 	if (dirty || ForceTransactionIdLimitUpdate())
-		vac_truncate_clog(newFrozenXid, newMinMulti);
+		vac_truncate_clog(newFrozenXid, newMinMulti,
+						  lastSaneFrozenXid, lastSaneMinMulti);
 }
 
 
@@ -890,16 +968,22 @@ vac_update_datfrozenxid(void)
  *		Scan pg_database to determine the system-wide oldest datfrozenxid,
  *		and use it to truncate the transaction commit log (pg_clog).
  *		Also update the XID wrap limit info maintained by varsup.c.
+ *		Likewise for datminmxid.
  *
- *		The passed XID is simply the one I just wrote into my pg_database
- *		entry.  It's used to initialize the "min" calculation.
+ *		The passed frozenXID and minMulti are the updated values for my own
+ *		pg_database entry. They're used to initialize the "min" calculations.
+ *		The caller also passes the "last sane" XID and MXID, since it has
+ *		those at hand already.
  *
  *		This routine is only invoked when we've managed to change our
- *		DB's datfrozenxid entry, or we found that the shared XID-wrap-limit
- *		info is stale.
+ *		DB's datfrozenxid/datminmxid values, or we found that the shared
+ *		XID-wrap-limit info is stale.
  */
 static void
-vac_truncate_clog(TransactionId frozenXID, MultiXactId minMulti)
+vac_truncate_clog(TransactionId frozenXID,
+				  MultiXactId minMulti,
+				  TransactionId lastSaneFrozenXid,
+				  MultiXactId lastSaneMinMulti)
 {
 	TransactionId myXID = GetCurrentTransactionId();
 	Relation	relation;
@@ -907,14 +991,15 @@ vac_truncate_clog(TransactionId frozenXID, MultiXactId minMulti)
 	HeapTuple	tuple;
 	Oid			oldestxid_datoid;
 	Oid			minmulti_datoid;
+	bool		bogus = false;
 	bool		frozenAlreadyWrapped = false;
 
-	/* init oldest datoids to sync with my frozen values */
+	/* init oldest datoids to sync with my frozenXID/minMulti values */
 	oldestxid_datoid = MyDatabaseId;
 	minmulti_datoid = MyDatabaseId;
 
 	/*
-	 * Scan pg_database to compute the minimum datfrozenxid
+	 * Scan pg_database to compute the minimum datfrozenxid/datminmxid
 	 *
 	 * Note: we need not worry about a race condition with new entries being
 	 * inserted by CREATE DATABASE.  Any such entry will have a copy of some
@@ -935,6 +1020,19 @@ vac_truncate_clog(TransactionId frozenXID, MultiXactId minMulti)
 
 		Assert(TransactionIdIsNormal(dbform->datfrozenxid));
 		Assert(MultiXactIdIsValid(dbform->datminmxid));
+
+		/*
+		 * If things are working properly, no database should have a
+		 * datfrozenxid or datminmxid that is "in the future".  However, such
+		 * cases have been known to arise due to bugs in pg_upgrade.  If we
+		 * see any entries that are "in the future", chicken out and don't do
+		 * anything.  This ensures we won't truncate clog before those
+		 * databases have been scanned and cleaned up.  (We will issue the
+		 * "already wrapped" warning if appropriate, though.)
+		 */
+		if (TransactionIdPrecedes(lastSaneFrozenXid, dbform->datfrozenxid) ||
+			MultiXactIdPrecedes(lastSaneMinMulti, dbform->datminmxid))
+			bogus = true;
 
 		if (TransactionIdPrecedes(myXID, dbform->datfrozenxid))
 			frozenAlreadyWrapped = true;
@@ -969,9 +1067,17 @@ vac_truncate_clog(TransactionId frozenXID, MultiXactId minMulti)
 		return;
 	}
 
-	/* Truncate CLOG and Multi to the oldest computed value */
+	/* chicken out if data is bogus in any other way */
+	if (bogus)
+		return;
+
+	/*
+	 * Truncate CLOG and CommitTs to the oldest computed value.
+	 * Note we don't truncate multixacts; that will be done by the next
+	 * checkpoint.
+	 */
 	TruncateCLOG(frozenXID);
-	TruncateMultiXact(minMulti);
+	TruncateCommitTs(frozenXID);
 
 	/*
 	 * Update the wrap limit for GetNewTransactionId and creation of new
@@ -980,7 +1086,8 @@ vac_truncate_clog(TransactionId frozenXID, MultiXactId minMulti)
 	 * signalling twice?
 	 */
 	SetTransactionIdLimit(frozenXID, oldestxid_datoid);
-	MultiXactAdvanceOldest(minMulti, minmulti_datoid);
+	SetMultiXactIdLimit(minMulti, minmulti_datoid);
+	AdvanceOldestCommitTs(frozenXID);
 }
 
 

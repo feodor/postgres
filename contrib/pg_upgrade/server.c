@@ -104,22 +104,22 @@ cluster_conn_opts(ClusterInfo *cluster)
 PGresult *
 executeQueryOrDie(PGconn *conn, const char *fmt,...)
 {
-	static char command[8192];
+	static char query[QUERY_ALLOC];
 	va_list		args;
 	PGresult   *result;
 	ExecStatusType status;
 
 	va_start(args, fmt);
-	vsnprintf(command, sizeof(command), fmt, args);
+	vsnprintf(query, sizeof(query), fmt, args);
 	va_end(args);
 
-	pg_log(PG_VERBOSE, "executing: %s\n", command);
-	result = PQexec(conn, command);
+	pg_log(PG_VERBOSE, "executing: %s\n", query);
+	result = PQexec(conn, query);
 	status = PQresultStatus(result);
 
 	if ((status != PGRES_TUPLES_OK) && (status != PGRES_COMMAND_OK))
 	{
-		pg_log(PG_REPORT, "SQL command failed\n%s\n%s\n", command,
+		pg_log(PG_REPORT, "SQL command failed\n%s\n%s\n", query,
 			   PQerrorMessage(conn));
 		PQclear(result);
 		PQfinish(conn);
@@ -202,11 +202,13 @@ start_postmaster(ClusterInfo *cluster, bool throw_error)
 #endif
 
 	/*
-	 * Using autovacuum=off disables cleanup vacuum and analyze, but freeze
-	 * vacuums can still happen, so we set autovacuum_freeze_max_age to its
-	 * maximum.  We assume all datfrozenxid and relfrozen values are less than
-	 * a gap of 2000000000 from the current xid counter, so autovacuum will
-	 * not touch them.
+	 * Since PG 9.1, we have used -b to disable autovacuum.  For earlier
+	 * releases, setting autovacuum=off disables cleanup vacuum and analyze,
+	 * but freeze vacuums can still happen, so we set autovacuum_freeze_max_age
+	 * to its maximum.  (autovacuum_multixact_freeze_max_age was introduced
+	 * after 9.1, so there is no need to set that.)  We assume all datfrozenxid
+	 * and relfrozenxid values are less than a gap of 2000000000 from the current
+	 * xid counter, so autovacuum will not touch them.
 	 *
 	 * Turn off durability requirements to improve object creation speed, and
 	 * we only modify the new cluster, so only use it there.  If there is a

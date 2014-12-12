@@ -18,24 +18,34 @@
 
 
 void
-clog_desc(StringInfo buf, uint8 xl_info, char *rec)
+clog_desc(StringInfo buf, XLogReaderState *record)
 {
-	uint8		info = xl_info & ~XLR_INFO_MASK;
+	char	   *rec = XLogRecGetData(record);
+	uint8		info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
-	if (info == CLOG_ZEROPAGE)
+	if (info == CLOG_ZEROPAGE || info == CLOG_TRUNCATE)
 	{
 		int			pageno;
 
 		memcpy(&pageno, rec, sizeof(int));
-		appendStringInfo(buf, "zeropage: %d", pageno);
+		appendStringInfo(buf, "%d", pageno);
 	}
-	else if (info == CLOG_TRUNCATE)
-	{
-		int			pageno;
+}
 
-		memcpy(&pageno, rec, sizeof(int));
-		appendStringInfo(buf, "truncate before: %d", pageno);
+const char *
+clog_identify(uint8 info)
+{
+	const char *id = NULL;
+
+	switch (info & ~XLR_INFO_MASK)
+	{
+		case CLOG_ZEROPAGE:
+			id = "ZEROPAGE";
+			break;
+		case CLOG_TRUNCATE:
+			id = "TRUNCATE";
+			break;
 	}
-	else
-		appendStringInfoString(buf, "UNKNOWN");
+
+	return id;
 }

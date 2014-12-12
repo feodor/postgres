@@ -22,14 +22,6 @@
 
 #include <unistd.h>
 
-#if defined(__alpha) && defined(__osf__)		/* no __alpha__ ? */
-#include <sys/sysinfo.h>
-#include "machine/hal_sysinfo.h"
-#define ASSEMBLER
-#include <sys/proc.h>
-#undef ASSEMBLER
-#endif
-
 #if defined(__NetBSD__)
 #include <sys/param.h>
 #endif
@@ -38,6 +30,7 @@
 #include "common/username.h"
 #include "postmaster/postmaster.h"
 #include "storage/barrier.h"
+#include "storage/s_lock.h"
 #include "storage/spin.h"
 #include "tcop/tcopprot.h"
 #include "utils/help_config.h"
@@ -245,27 +238,6 @@ static void
 startup_hacks(const char *progname)
 {
 	/*
-	 * On some platforms, unaligned memory accesses result in a kernel trap;
-	 * the default kernel behavior is to emulate the memory access, but this
-	 * results in a significant performance penalty.  We want PG never to make
-	 * such unaligned memory accesses, so this code disables the kernel
-	 * emulation: unaligned accesses will result in SIGBUS instead.
-	 */
-#ifdef NOFIXADE
-
-#if defined(__alpha)			/* no __alpha__ ? */
-	{
-		int			buffer[] = {SSIN_UACPROC, UAC_SIGBUS | UAC_NOPRINT};
-
-		if (setsysinfo(SSI_NVPAIRS, buffer, 1, (caddr_t) NULL,
-					   (unsigned long) NULL) < 0)
-			write_stderr("%s: setsysinfo failed: %s\n",
-						 progname, strerror(errno));
-	}
-#endif   /* __alpha */
-#endif   /* NOFIXADE */
-
-	/*
 	 * Windows-specific execution environment hacking.
 	 */
 #ifdef WIN32
@@ -288,6 +260,12 @@ startup_hacks(const char *progname)
 
 		/* In case of general protection fault, don't show GUI popup box */
 		SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+
+#ifndef HAVE_GETTIMEOFDAY
+		/* Figure out which syscall to use to capture timestamp information */
+		init_win32_gettimeofday();
+#endif
+
 	}
 #endif   /* WIN32 */
 
@@ -313,9 +291,6 @@ help(const char *progname)
 	printf(_("%s is the PostgreSQL server.\n\n"), progname);
 	printf(_("Usage:\n  %s [OPTION]...\n\n"), progname);
 	printf(_("Options:\n"));
-#ifdef USE_ASSERT_CHECKING
-	printf(_("  -A 1|0             enable/disable run-time assert checking\n"));
-#endif
 	printf(_("  -B NBUFFERS        number of shared buffers\n"));
 	printf(_("  -c NAME=VALUE      set run-time parameter\n"));
 	printf(_("  -C NAME            print value of run-time parameter, then exit\n"));

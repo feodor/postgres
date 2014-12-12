@@ -28,7 +28,7 @@
  *
  * As the percentage of transactions modifying the catalog normally is fairly
  * small in comparisons to ones only manipulating user data, we keep track of
- * the committed catalog modifying ones inside (xmin, xmax) instead of keeping
+ * the committed catalog modifying ones inside [xmin, xmax) instead of keeping
  * track of all running transactions like it's done in a normal snapshot. Note
  * that we're generally only looking at transactions that have acquired an
  * xid. That is we keep a list of transactions between snapshot->(xmin, xmax)
@@ -153,11 +153,11 @@ struct SnapBuild
 	TransactionId xmax;
 
 	/*
-	 * Don't replay commits from an LSN <= this LSN. This can be set
+	 * Don't replay commits from an LSN < this LSN. This can be set
 	 * externally but it will also be advanced (never retreat) from within
 	 * snapbuild.c.
 	 */
-	XLogRecPtr	transactions_after;
+	XLogRecPtr	start_decoding_at;
 
 	/*
 	 * Don't start decoding WAL until the "xl_running_xacts" information
@@ -243,8 +243,8 @@ struct SnapBuild
  * Starting a transaction -- which we need to do while exporting a snapshot --
  * removes knowledge about the previously used resowner, so we save it here.
  */
-ResourceOwner SavedResourceOwnerDuringExport = NULL;
-bool		ExportInProgress = false;
+static ResourceOwner SavedResourceOwnerDuringExport = NULL;
+static bool	ExportInProgress = false;
 
 /* transaction state manipulation functions */
 static void SnapBuildEndTxn(SnapBuild *builder, XLogRecPtr lsn, TransactionId xid);
@@ -309,7 +309,7 @@ AllocateSnapshotBuilder(ReorderBuffer *reorder,
 	builder->committed.includes_all_transactions = true;
 
 	builder->initial_xmin_horizon = xmin_horizon;
-	builder->transactions_after = start_lsn;
+	builder->start_decoding_at = start_lsn;
 
 	MemoryContextSwitchTo(oldcontext);
 
@@ -375,7 +375,7 @@ SnapBuildCurrentState(SnapBuild *builder)
 bool
 SnapBuildXactNeedsSkip(SnapBuild *builder, XLogRecPtr ptr)
 {
-	return ptr <= builder->transactions_after;
+	return ptr < builder->start_decoding_at;
 }
 
 /*
@@ -598,8 +598,10 @@ SnapBuildExportSnapshot(SnapBuild *builder)
 	snapname = ExportSnapshot(snap);
 
 	ereport(LOG,
-			(errmsg("exported logical decoding snapshot: \"%s\" with %u xids",
-					snapname, snap->xcnt)));
+			(errmsg_plural("exported logical decoding snapshot: \"%s\" with %u transaction ID",
+						   "exported logical decoding snapshot: \"%s\" with %u transaction IDs",
+						   snap->xcnt,
+						   snapname, snap->xcnt)));
 	return snapname;
 }
 
@@ -697,7 +699,7 @@ SnapBuildProcessNewCid(SnapBuild *builder, TransactionId xid,
 	ReorderBufferXidSetCatalogChanges(builder->reorder, xid, lsn);
 
 	ReorderBufferAddNewTupleCids(builder->reorder, xlrec->top_xid, lsn,
-								 xlrec->target.node, xlrec->target.tid,
+								 xlrec->target_node, xlrec->target_tid,
 								 xlrec->cmin, xlrec->cmax,
 								 xlrec->combocid);
 
@@ -901,7 +903,7 @@ SnapBuildEndTxn(SnapBuild *builder, XLogRecPtr lsn, TransactionId xid)
 			ereport(LOG,
 				  (errmsg("logical decoding found consistent point at %X/%X",
 						  (uint32) (lsn >> 32), (uint32) lsn),
-				errdetail("xid %u finished, no running transactions anymore",
+				errdetail("Transaction ID %u finished; no more running transactions.",
 						  xid)));
 			builder->state = SNAPBUILD_CONSISTENT;
 		}
@@ -955,8 +957,8 @@ SnapBuildCommitTxn(SnapBuild *builder, XLogRecPtr lsn, TransactionId xid,
 	if (builder->state < SNAPBUILD_CONSISTENT)
 	{
 		/* ensure that only commits after this are getting replayed */
-		if (builder->transactions_after < lsn)
-			builder->transactions_after = lsn;
+		if (builder->start_decoding_at <= lsn)
+			builder->start_decoding_at = lsn + 1;
 
 		/*
 		 * We could avoid treating !SnapBuildTxnIsRunning transactions as
@@ -1228,9 +1230,9 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 									builder->initial_xmin_horizon))
 	{
 		ereport(DEBUG1,
-				(errmsg("skipping snapshot at %X/%X while building logical decoding snapshot, xmin horizon too low",
+				(errmsg_internal("skipping snapshot at %X/%X while building logical decoding snapshot, xmin horizon too low",
 						(uint32) (lsn >> 32), (uint32) lsn),
-				 errdetail("initial xmin horizon of %u vs the snapshot's %u",
+				 errdetail_internal("initial xmin horizon of %u vs the snapshot's %u",
 				 builder->initial_xmin_horizon, running->oldestRunningXid)));
 		return true;
 	}
@@ -1243,14 +1245,16 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 	 */
 	if (running->xcnt == 0)
 	{
-		if (builder->transactions_after == InvalidXLogRecPtr ||
-			builder->transactions_after < lsn)
-			builder->transactions_after = lsn;
+		if (builder->start_decoding_at == InvalidXLogRecPtr ||
+			builder->start_decoding_at <= lsn)
+			/* can decode everything after this */
+			builder->start_decoding_at = lsn + 1;
 
-		builder->xmin = running->oldestRunningXid;
-		builder->xmax = running->latestCompletedXid;
-		TransactionIdAdvance(builder->xmax);
+		/* As no transactions were running xmin/xmax can be trivially set. */
+		builder->xmin = running->nextXid; /* < are finished */
+		builder->xmax = running->nextXid; /* >= are running */
 
+		/* so we can safely use the faster comparisons */
 		Assert(TransactionIdIsNormal(builder->xmin));
 		Assert(TransactionIdIsNormal(builder->xmax));
 
@@ -1264,7 +1268,7 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 		ereport(LOG,
 				(errmsg("logical decoding found consistent point at %X/%X",
 						(uint32) (lsn >> 32), (uint32) lsn),
-				 errdetail("running xacts with xcnt == 0")));
+				 errdetail("There are no running transactions.")));
 
 		return false;
 	}
@@ -1291,9 +1295,14 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 		 * instead of running transactions we don't need to know anything
 		 * about uncommitted subtransactions.
 		 */
-		builder->xmin = running->oldestRunningXid;
-		builder->xmax = running->latestCompletedXid;
-		TransactionIdAdvance(builder->xmax);
+
+		/*
+		 * Start with an xmin/xmax that's correct for future, when all the
+		 * currently running transactions have finished. We'll update both
+		 * while waiting for the pending transactions to finish.
+		 */
+		builder->xmin = running->nextXid; /* < are finished */
+		builder->xmax = running->nextXid;  /* >= are running */
 
 		/* so we can safely use the faster comparisons */
 		Assert(TransactionIdIsNormal(builder->xmin));
@@ -1323,7 +1332,10 @@ SnapBuildFindSnapshot(SnapBuild *builder, XLogRecPtr lsn, xl_running_xacts *runn
 		ereport(LOG,
 			(errmsg("logical decoding found initial starting point at %X/%X",
 					(uint32) (lsn >> 32), (uint32) lsn),
-			 errdetail("%u xacts need to finish", (uint32) builder->running.xcnt)));
+			 errdetail_plural("%u transaction needs to finish.",
+							  "%u transactions need to finish.",
+							  builder->running.xcnt,
+							  (uint32) builder->running.xcnt)));
 
 		/*
 		 * Iterate through all xids, wait for them to finish.
@@ -1400,7 +1412,7 @@ typedef struct SnapBuildOnDisk
 	offsetof(SnapBuildOnDisk, version)
 
 #define SNAPBUILD_MAGIC 0x51A1E001
-#define SNAPBUILD_VERSION 1
+#define SNAPBUILD_VERSION 2
 
 /*
  * Store/Load a snapshot from disk, depending on the snapshot builder's state.
@@ -1451,7 +1463,7 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 	 * unless the user used pg_resetxlog or similar. If a user did so, there's
 	 * no hope continuing to decode anyway.
 	 */
-	sprintf(path, "pg_llog/snapshots/%X-%X.snap",
+	sprintf(path, "pg_logical/snapshots/%X-%X.snap",
 			(uint32) (lsn >> 32), (uint32) lsn);
 
 	/*
@@ -1477,7 +1489,7 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 		 * be safely on disk.
 		 */
 		fsync_fname(path, false);
-		fsync_fname("pg_llog/snapshots", true);
+		fsync_fname("pg_logical/snapshots", true);
 
 		builder->last_serialized_snapshot = lsn;
 		goto out;
@@ -1493,7 +1505,7 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 	elog(DEBUG1, "serializing snapshot to %s", path);
 
 	/* to make sure only we will write to this tempfile, include pid */
-	sprintf(tmppath, "pg_llog/snapshots/%X-%X.snap.%u.tmp",
+	sprintf(tmppath, "pg_logical/snapshots/%X-%X.snap.%u.tmp",
 			(uint32) (lsn >> 32), (uint32) lsn, MyProcPid);
 
 	/*
@@ -1505,7 +1517,7 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 	if (unlink(tmppath) != 0 && errno != ENOENT)
 		ereport(ERROR,
 				(errcode_for_file_access(),
-				 errmsg("could not unlink file \"%s\": %m", path)));
+				 errmsg("could not remove file \"%s\": %m", path)));
 
 	needed_length = sizeof(SnapBuildOnDisk) +
 		sizeof(TransactionId) * builder->running.xcnt_space +
@@ -1516,9 +1528,9 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 	ondisk->magic = SNAPBUILD_MAGIC;
 	ondisk->version = SNAPBUILD_VERSION;
 	ondisk->length = needed_length;
-	INIT_CRC32(ondisk->checksum);
-	COMP_CRC32(ondisk->checksum,
-			   ((char *) ondisk) + SnapBuildOnDiskNotChecksummedSize,
+	INIT_CRC32C(ondisk->checksum);
+	COMP_CRC32C(ondisk->checksum,
+				((char *) ondisk) + SnapBuildOnDiskNotChecksummedSize,
 			SnapBuildOnDiskConstantSize - SnapBuildOnDiskNotChecksummedSize);
 	ondisk_c += sizeof(SnapBuildOnDisk);
 
@@ -1530,21 +1542,23 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 	ondisk->builder.running.xip = NULL;
 	ondisk->builder.committed.xip = NULL;
 
-	COMP_CRC32(ondisk->checksum,
-			   &ondisk->builder,
-			   sizeof(SnapBuild));
+	COMP_CRC32C(ondisk->checksum,
+				&ondisk->builder,
+				sizeof(SnapBuild));
 
 	/* copy running xacts */
 	sz = sizeof(TransactionId) * builder->running.xcnt_space;
 	memcpy(ondisk_c, builder->running.xip, sz);
-	COMP_CRC32(ondisk->checksum, ondisk_c, sz);
+	COMP_CRC32C(ondisk->checksum, ondisk_c, sz);
 	ondisk_c += sz;
 
 	/* copy committed xacts */
 	sz = sizeof(TransactionId) * builder->committed.xcnt;
 	memcpy(ondisk_c, builder->committed.xip, sz);
-	COMP_CRC32(ondisk->checksum, ondisk_c, sz);
+	COMP_CRC32C(ondisk->checksum, ondisk_c, sz);
 	ondisk_c += sz;
+
+	FIN_CRC32C(ondisk->checksum);
 
 	/* we have valid data now, open tempfile and write it there */
 	fd = OpenTransientFile(tmppath,
@@ -1579,7 +1593,7 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 	}
 	CloseTransientFile(fd);
 
-	fsync_fname("pg_llog/snapshots", true);
+	fsync_fname("pg_logical/snapshots", true);
 
 	/*
 	 * We may overwrite the work from some other backend, but that's ok, our
@@ -1595,7 +1609,7 @@ SnapBuildSerialize(SnapBuild *builder, XLogRecPtr lsn)
 
 	/* make sure we persist */
 	fsync_fname(path, false);
-	fsync_fname("pg_llog/snapshots", true);
+	fsync_fname("pg_logical/snapshots", true);
 
 	/*
 	 * Now there's no way we can loose the dumped state anymore, remember this
@@ -1626,7 +1640,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 	if (builder->state == SNAPBUILD_CONSISTENT)
 		return false;
 
-	sprintf(path, "pg_llog/snapshots/%X-%X.snap",
+	sprintf(path, "pg_logical/snapshots/%X-%X.snap",
 			(uint32) (lsn >> 32), (uint32) lsn);
 
 	fd = OpenTransientFile(path, O_RDONLY | PG_BINARY, 0);
@@ -1647,7 +1661,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 	 * ----
 	 */
 	fsync_fname(path, false);
-	fsync_fname("pg_llog/snapshots", true);
+	fsync_fname("pg_logical/snapshots", true);
 
 
 	/* read statically sized portion of snapshot */
@@ -1671,8 +1685,8 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 				(errmsg("snapbuild state file \"%s\" has unsupported version %u instead of %u",
 						path, ondisk.version, SNAPBUILD_VERSION)));
 
-	INIT_CRC32(checksum);
-	COMP_CRC32(checksum,
+	INIT_CRC32C(checksum);
+	COMP_CRC32C(checksum,
 			   ((char *) &ondisk) + SnapBuildOnDiskNotChecksummedSize,
 			SnapBuildOnDiskConstantSize - SnapBuildOnDiskNotChecksummedSize);
 
@@ -1686,7 +1700,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 				 errmsg("could not read file \"%s\", read %d of %d: %m",
 						path, readBytes, (int) sizeof(SnapBuild))));
 	}
-	COMP_CRC32(checksum, &ondisk.builder, sizeof(SnapBuild));
+	COMP_CRC32C(checksum, &ondisk.builder, sizeof(SnapBuild));
 
 	/* restore running xacts information */
 	sz = sizeof(TransactionId) * ondisk.builder.running.xcnt_space;
@@ -1700,7 +1714,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 				 errmsg("could not read file \"%s\", read %d of %d: %m",
 						path, readBytes, (int) sz)));
 	}
-	COMP_CRC32(checksum, ondisk.builder.running.xip, sz);
+	COMP_CRC32C(checksum, ondisk.builder.running.xip, sz);
 
 	/* restore committed xacts information */
 	sz = sizeof(TransactionId) * ondisk.builder.committed.xcnt;
@@ -1714,12 +1728,14 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 				 errmsg("could not read file \"%s\", read %d of %d: %m",
 						path, readBytes, (int) sz)));
 	}
-	COMP_CRC32(checksum, ondisk.builder.committed.xip, sz);
+	COMP_CRC32C(checksum, ondisk.builder.committed.xip, sz);
 
 	CloseTransientFile(fd);
 
+	FIN_CRC32C(checksum);
+
 	/* verify checksum of what we've read */
-	if (!EQ_CRC32(checksum, ondisk.checksum))
+	if (!EQ_CRC32C(checksum, ondisk.checksum))
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("snapbuild state file %s: checksum mismatch, is %u, should be %u",
@@ -1783,7 +1799,7 @@ SnapBuildRestore(SnapBuild *builder, XLogRecPtr lsn)
 	ereport(LOG,
 			(errmsg("logical decoding found consistent point at %X/%X",
 					(uint32) (lsn >> 32), (uint32) lsn),
-			 errdetail("found initial snapshot in snapbuild file")));
+			 errdetail("Logical decoding will begin using saved snapshot.")));
 	return true;
 
 snapshot_not_interesting:
@@ -1824,8 +1840,8 @@ CheckPointSnapBuild(void)
 	if (redo < cutoff)
 		cutoff = redo;
 
-	snap_dir = AllocateDir("pg_llog/snapshots");
-	while ((snap_de = ReadDir(snap_dir, "pg_llog/snapshots")) != NULL)
+	snap_dir = AllocateDir("pg_logical/snapshots");
+	while ((snap_de = ReadDir(snap_dir, "pg_logical/snapshots")) != NULL)
 	{
 		uint32		hi;
 		uint32		lo;
@@ -1836,7 +1852,7 @@ CheckPointSnapBuild(void)
 			strcmp(snap_de->d_name, "..") == 0)
 			continue;
 
-		snprintf(path, MAXPGPATH, "pg_llog/snapshots/%s", snap_de->d_name);
+		snprintf(path, MAXPGPATH, "pg_logical/snapshots/%s", snap_de->d_name);
 
 		if (lstat(path, &statbuf) == 0 && !S_ISREG(statbuf.st_mode))
 		{
@@ -1856,7 +1872,7 @@ CheckPointSnapBuild(void)
 		if (sscanf(snap_de->d_name, "%X-%X.snap", &hi, &lo) != 2)
 		{
 			ereport(LOG,
-					(errmsg("could not parse filename \"%s\"", path)));
+					(errmsg("could not parse file name \"%s\"", path)));
 			continue;
 		}
 
@@ -1876,7 +1892,7 @@ CheckPointSnapBuild(void)
 			{
 				ereport(LOG,
 						(errcode_for_file_access(),
-						 errmsg("could not unlink file \"%s\": %m",
+						 errmsg("could not remove file \"%s\": %m",
 								path)));
 				continue;
 			}

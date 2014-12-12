@@ -21,6 +21,8 @@
 #include "funcapi.h"
 #include "miscadmin.h"
 
+#include "access/xlog_internal.h"
+
 #include "catalog/pg_type.h"
 
 #include "nodes/makefuncs.h"
@@ -394,14 +396,16 @@ pg_logical_slot_get_changes_guts(FunctionCallInfo fcinfo, bool confirm, bool bin
 		MemoryContextSwitchTo(oldcontext);
 
 		/*
-		 * Check whether the output pluggin writes textual output if that's
+		 * Check whether the output plugin writes textual output if that's
 		 * what we need.
 		 */
 		if (!binary &&
 			ctx->options.output_type != OUTPUT_PLUGIN_TEXTUAL_OUTPUT)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("output plugin cannot produce binary output")));
+					 errmsg("logical decoding output plugin \"%s\" produces binary output, but \"%s\" expects textual data",
+							NameStr(MyReplicationSlot->data.plugin),
+							format_procedure(fcinfo->flinfo->fn_oid))));
 
 		ctx->output_writer_private = p;
 
@@ -429,7 +433,7 @@ pg_logical_slot_get_changes_guts(FunctionCallInfo fcinfo, bool confirm, bool bin
 			 * store the description into our tuplestore.
 			 */
 			if (record != NULL)
-				LogicalDecodingProcessRecord(ctx, record);
+				LogicalDecodingProcessRecord(ctx, ctx->reader);
 
 			/* check limits */
 			if (upto_lsn != InvalidXLogRecPtr &&
@@ -438,6 +442,7 @@ pg_logical_slot_get_changes_guts(FunctionCallInfo fcinfo, bool confirm, bool bin
 			if (upto_nchanges != 0 &&
 				upto_nchanges <= p->returned_rows)
 				break;
+			CHECK_FOR_INTERRUPTS();
 		}
 	}
 	PG_CATCH();

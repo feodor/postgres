@@ -161,7 +161,7 @@ static int	pg_SSPI_recvauth(Port *port);
  * RADIUS Authentication
  *----------------------------------------------------------------
  */
-#ifdef USE_SSL
+#ifdef USE_OPENSSL
 #include <openssl/rand.h>
 #endif
 static int	CheckRADIUSAuth(Port *port);
@@ -330,7 +330,7 @@ ClientAuthentication(Port *port)
 		 * already if it didn't verify ok.
 		 */
 #ifdef USE_SSL
-		if (!port->peer)
+		if (!port->peer_cert_valid)
 		{
 			ereport(FATAL,
 					(errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
@@ -378,7 +378,7 @@ ClientAuthentication(Port *port)
 					   (errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
 						errmsg("pg_hba.conf rejects replication connection for host \"%s\", user \"%s\", %s",
 							   hostinfo, port->user_name,
-							   port->ssl ? _("SSL on") : _("SSL off"))));
+							   port->ssl_in_use ? _("SSL on") : _("SSL off"))));
 #else
 					ereport(FATAL,
 					   (errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
@@ -394,7 +394,7 @@ ClientAuthentication(Port *port)
 						errmsg("pg_hba.conf rejects connection for host \"%s\", user \"%s\", database \"%s\", %s",
 							   hostinfo, port->user_name,
 							   port->database_name,
-							   port->ssl ? _("SSL on") : _("SSL off"))));
+							   port->ssl_in_use ? _("SSL on") : _("SSL off"))));
 #else
 					ereport(FATAL,
 					   (errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
@@ -452,7 +452,7 @@ ClientAuthentication(Port *port)
 					   (errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
 						errmsg("no pg_hba.conf entry for replication connection from host \"%s\", user \"%s\", %s",
 							   hostinfo, port->user_name,
-							   port->ssl ? _("SSL on") : _("SSL off")),
+							   port->ssl_in_use ? _("SSL on") : _("SSL off")),
 						HOSTNAME_LOOKUP_DETAIL(port)));
 #else
 					ereport(FATAL,
@@ -470,7 +470,7 @@ ClientAuthentication(Port *port)
 						errmsg("no pg_hba.conf entry for host \"%s\", user \"%s\", database \"%s\", %s",
 							   hostinfo, port->user_name,
 							   port->database_name,
-							   port->ssl ? _("SSL on") : _("SSL off")),
+							   port->ssl_in_use ? _("SSL on") : _("SSL off")),
 						HOSTNAME_LOOKUP_DETAIL(port)));
 #else
 					ereport(FATAL,
@@ -1590,7 +1590,7 @@ auth_peer(hbaPort *port)
 	if (!pw)
 	{
 		ereport(LOG,
-				(errmsg("failed to look up local user id %ld: %s",
+				(errmsg("could not to look up local user ID %ld: %s",
 		   (long) uid, errno ? strerror(errno) : _("user does not exist"))));
 		return STATUS_ERROR;
 	}
@@ -2315,7 +2315,7 @@ CheckRADIUSAuth(Port *port)
 	/* Construct RADIUS packet */
 	packet->code = RADIUS_ACCESS_REQUEST;
 	packet->length = RADIUS_HEADER_LENGTH;
-#ifdef USE_SSL
+#ifdef USE_OPENSSL
 	if (RAND_bytes(packet->vector, RADIUS_VECTOR_LENGTH) != 1)
 	{
 		ereport(LOG,

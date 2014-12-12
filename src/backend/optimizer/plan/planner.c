@@ -177,6 +177,7 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	glob->lastPHId = 0;
 	glob->lastRowMarkId = 0;
 	glob->transientPlan = false;
+	glob->hasRowSecurity = false;
 
 	/* Determine what fraction of the plan is likely to be scanned */
 	if (cursorOptions & CURSOR_OPT_FAST_PLAN)
@@ -254,6 +255,7 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	result->relationOids = glob->relationOids;
 	result->invalItems = glob->invalItems;
 	result->nParamExec = glob->nParamExec;
+	result->hasRowSecurity = glob->hasRowSecurity;
 
 	return result;
 }
@@ -310,6 +312,7 @@ subquery_planner(PlannerGlobal *glob, Query *parse,
 	root->planner_cxt = CurrentMemoryContext;
 	root->init_plans = NIL;
 	root->cte_plan_ids = NIL;
+	root->multiexpr_params = NIL;
 	root->eq_classes = NIL;
 	root->append_rel_list = NIL;
 	root->rowMarks = NIL;
@@ -1205,6 +1208,7 @@ grouping_planner(PlannerInfo *root, double tuple_fraction)
 		 * This may add new security barrier subquery RTEs to the rangetable.
 		 */
 		expand_security_quals(root, tlist);
+		root->glob->hasRowSecurity = parse->hasRowSecurity;
 
 		/*
 		 * Locate any window functions in the tlist.  (We don't need to look
@@ -2228,7 +2232,7 @@ preprocess_rowmarks(PlannerInfo *root)
 				newrc->markType = ROW_MARK_KEYSHARE;
 				break;
 		}
-		newrc->noWait = rc->noWait;
+		newrc->waitPolicy = rc->waitPolicy;
 		newrc->isParent = false;
 
 		prowmarks = lappend(prowmarks, newrc);
@@ -2256,7 +2260,7 @@ preprocess_rowmarks(PlannerInfo *root)
 			newrc->markType = ROW_MARK_REFERENCE;
 		else
 			newrc->markType = ROW_MARK_COPY;
-		newrc->noWait = false;	/* doesn't matter */
+		newrc->waitPolicy = LockWaitBlock;	/* doesn't matter */
 		newrc->isParent = false;
 
 		prowmarks = lappend(prowmarks, newrc);
@@ -2334,7 +2338,7 @@ preprocess_limit(PlannerInfo *root, double tuple_fraction,
 			{
 				*offset_est = DatumGetInt64(((Const *) est)->constvalue);
 				if (*offset_est < 0)
-					*offset_est = 0;	/* less than 0 is same as 0 */
+					*offset_est = 0;	/* treat as not present */
 			}
 		}
 		else
@@ -2495,9 +2499,8 @@ limit_needed(Query *parse)
 			{
 				int64		offset = DatumGetInt64(((Const *) node)->constvalue);
 
-				/* Executor would treat less-than-zero same as zero */
-				if (offset > 0)
-					return true;	/* OFFSET with a positive value */
+				if (offset != 0)
+					return true;	/* OFFSET with a nonzero value */
 			}
 		}
 		else

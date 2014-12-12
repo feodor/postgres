@@ -16,7 +16,7 @@
 #include "foreign/foreign.h"
 #include "lib/stringinfo.h"
 #include "nodes/relation.h"
-#include "utils/rel.h"
+#include "utils/relcache.h"
 
 #include "libpq-fe.h"
 
@@ -73,5 +73,6 @@ extern void deparseDeleteSql(StringInfo buf, PlannerInfo *root,
 extern void deparseAnalyzeSizeSql(StringInfo buf, Relation rel);
 extern void deparseAnalyzeSql(StringInfo buf, Relation rel,
 				  List **retrieved_attrs);
+extern void deparseStringLiteral(StringInfo buf, const char *val);
 
 #endif   /* POSTGRES_FDW_H */

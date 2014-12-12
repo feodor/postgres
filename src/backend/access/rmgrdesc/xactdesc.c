@@ -137,47 +137,41 @@ xact_desc_assignment(StringInfo buf, xl_xact_assignment *xlrec)
 }
 
 void
-xact_desc(StringInfo buf, uint8 xl_info, char *rec)
+xact_desc(StringInfo buf, XLogReaderState *record)
 {
-	uint8		info = xl_info & ~XLR_INFO_MASK;
+	char	   *rec = XLogRecGetData(record);
+	uint8		info = XLogRecGetInfo(record) & ~XLR_INFO_MASK;
 
 	if (info == XLOG_XACT_COMMIT_COMPACT)
 	{
 		xl_xact_commit_compact *xlrec = (xl_xact_commit_compact *) rec;
 
-		appendStringInfoString(buf, "commit: ");
 		xact_desc_commit_compact(buf, xlrec);
 	}
 	else if (info == XLOG_XACT_COMMIT)
 	{
 		xl_xact_commit *xlrec = (xl_xact_commit *) rec;
 
-		appendStringInfoString(buf, "commit: ");
 		xact_desc_commit(buf, xlrec);
 	}
 	else if (info == XLOG_XACT_ABORT)
 	{
 		xl_xact_abort *xlrec = (xl_xact_abort *) rec;
 
-		appendStringInfoString(buf, "abort: ");
 		xact_desc_abort(buf, xlrec);
-	}
-	else if (info == XLOG_XACT_PREPARE)
-	{
-		appendStringInfoString(buf, "prepare");
 	}
 	else if (info == XLOG_XACT_COMMIT_PREPARED)
 	{
 		xl_xact_commit_prepared *xlrec = (xl_xact_commit_prepared *) rec;
 
-		appendStringInfo(buf, "commit prepared %u: ", xlrec->xid);
+		appendStringInfo(buf, "%u: ", xlrec->xid);
 		xact_desc_commit(buf, &xlrec->crec);
 	}
 	else if (info == XLOG_XACT_ABORT_PREPARED)
 	{
 		xl_xact_abort_prepared *xlrec = (xl_xact_abort_prepared *) rec;
 
-		appendStringInfo(buf, "abort prepared %u: ", xlrec->xid);
+		appendStringInfo(buf, "%u: ", xlrec->xid);
 		xact_desc_abort(buf, &xlrec->arec);
 	}
 	else if (info == XLOG_XACT_ASSIGNMENT)
@@ -189,9 +183,40 @@ xact_desc(StringInfo buf, uint8 xl_info, char *rec)
 		 * interested in the top-level xid that issued the record and which
 		 * xids are being reported here.
 		 */
-		appendStringInfo(buf, "xid assignment xtop %u: ", xlrec->xtop);
+		appendStringInfo(buf, "xtop %u: ", xlrec->xtop);
 		xact_desc_assignment(buf, xlrec);
 	}
-	else
-		appendStringInfoString(buf, "UNKNOWN");
+}
+
+const char *
+xact_identify(uint8 info)
+{
+	const char *id = NULL;
+
+	switch (info & ~XLR_INFO_MASK)
+	{
+		case XLOG_XACT_COMMIT:
+			id = "COMMIT";
+			break;
+		case XLOG_XACT_PREPARE:
+			id = "PREPARE";
+			break;
+		case XLOG_XACT_ABORT:
+			id = "ABORT";
+			break;
+		case XLOG_XACT_COMMIT_PREPARED:
+			id = "COMMIT_PREPARED";
+			break;
+		case XLOG_XACT_ABORT_PREPARED:
+			id = "ABORT_PREPARED";
+			break;
+		case XLOG_XACT_ASSIGNMENT:
+			id = "ASSIGNMENT";
+			break;
+		case XLOG_XACT_COMMIT_COMPACT:
+			id = "COMMIT_COMPACT";
+			break;
+	}
+
+	return id;
 }

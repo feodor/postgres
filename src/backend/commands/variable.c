@@ -20,6 +20,7 @@
 
 #include "access/htup_details.h"
 #include "access/xact.h"
+#include "access/xlog.h"
 #include "catalog/pg_authid.h"
 #include "commands/variable.h"
 #include "miscadmin.h"
@@ -347,6 +348,13 @@ check_timezone(char **newval, void **extra, GucSource source)
 				return false;
 			}
 		}
+	}
+
+	/* Test for failure in pg_tzset_offset, which we assume is out-of-range */
+	if (!new_tz)
+	{
+		GUC_check_errdetail("UTC timezone offset is out of range.");
+		return false;
 	}
 
 	/*
