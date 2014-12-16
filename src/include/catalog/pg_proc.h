@@ -844,6 +844,7 @@ DATA(insert OID = 726 (  dist_lb		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 70
 DATA(insert OID = 727 (  dist_sl		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 701 "601 628" _null_ _null_ _null_ _null_	dist_sl _null_ _null_ _null_ ));
 DATA(insert OID = 728 (  dist_cpoly		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 701 "718 604" _null_ _null_ _null_ _null_	dist_cpoly _null_ _null_ _null_ ));
 DATA(insert OID = 729 (  poly_distance	   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 701 "604 604" _null_ _null_ _null_ _null_	poly_distance _null_ _null_ _null_ ));
+DATA(insert OID = 3275 (  dist_ppoly	   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 701 "600 604" _null_ _null_ _null_ _null_	dist_ppoly _null_ _null_ _null_ ));
 
 DATA(insert OID = 740 (  text_lt		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "25 25" _null_ _null_ _null_ _null_ text_lt _null_ _null_ _null_ ));
 DATA(insert OID = 741 (  text_le		   PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 16 "25 25" _null_ _null_ _null_ _null_ text_le _null_ _null_ _null_ ));
@@ -4292,6 +4293,8 @@ DATA(insert OID = 3203 (  json_object	 PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 
 DESCR("map text arrays of keys and values to json object");
 DATA(insert OID = 3176 (  to_json	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 114 "2283" _null_ _null_ _null_ _null_ to_json _null_ _null_ _null_ ));
 DESCR("map input to json");
+DATA(insert OID = 3261 (  json_strip_nulls	   PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 114 "114" _null_ _null_ _null_ _null_ json_strip_nulls _null_ _null_ _null_ ));
+DESCR("remove object fields with null values from json");
 
 DATA(insert OID = 3947 (  json_object_field			PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 114 "114 25" _null_ _null_ "{from_json, field_name}" _null_ json_object_field _null_ _null_ _null_ ));
 DATA(insert OID = 3948 (  json_object_field_text	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 25  "114 25" _null_ _null_ "{from_json, field_name}" _null_ json_object_field_text _null_ _null_ _null_ ));
@@ -4653,6 +4656,35 @@ DATA(insert OID =  3804 (  jsonb_out		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 2
 DESCR("I/O");
 DATA(insert OID =  3803 (  jsonb_send		PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 17 "3802" _null_ _null_ _null_ _null_	jsonb_send _null_ _null_ _null_ ));
 DESCR("I/O");
+
+DATA(insert OID = 3263 (  jsonb_object	 PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3802 "1009" _null_ _null_ _null_ _null_ jsonb_object _null_ _null_ _null_ ));
+DESCR("map text array of key value pairs to jsonb object");
+DATA(insert OID = 3264 (  jsonb_object	 PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 3802 "1009 1009" _null_ _null_ _null_ _null_ jsonb_object_two_arg _null_ _null_ _null_ ));
+DESCR("map text array of key value pairs to jsonb object");
+DATA(insert OID = 3787 (  to_jsonb	   PGNSP PGUID 12 1 0 0 0 f f f f t f s 1 0 3802 "2283" _null_ _null_ _null_ _null_ to_jsonb _null_ _null_ _null_ ));
+DESCR("map input to jsonb");
+DATA(insert OID = 3265 (  jsonb_agg_transfn	 PGNSP PGUID 12 1 0 0 0 f f f f f f s 2 0 2281 "2281 2283" _null_ _null_ _null_ _null_ jsonb_agg_transfn _null_ _null_ _null_ ));
+DESCR("jsonb aggregate transition function");
+DATA(insert OID = 3266 (  jsonb_agg_finalfn	 PGNSP PGUID 12 1 0 0 0 f f f f f f s 1 0 3802 "2281" _null_ _null_ _null_ _null_ jsonb_agg_finalfn _null_ _null_ _null_ ));
+DESCR("jsonb aggregate final function");
+DATA(insert OID = 3267 (  jsonb_agg		   PGNSP PGUID 12 1 0 0 0 t f f f f f s 1 0 3802 "2283" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("aggregate input into jsonb");
+DATA(insert OID = 3268 (  jsonb_object_agg_transfn	 PGNSP PGUID 12 1 0 0 0 f f f f f f s 3 0 2281 "2281 2276 2276" _null_ _null_ _null_ _null_ jsonb_object_agg_transfn _null_ _null_ _null_ ));
+DESCR("jsonb object aggregate transition function");
+DATA(insert OID = 3269 (  jsonb_object_agg_finalfn	 PGNSP PGUID 12 1 0 0 0 f f f f f f s 1 0 3802 "2281" _null_ _null_ _null_ _null_ jsonb_object_agg_finalfn _null_ _null_ _null_ ));
+DESCR("jsonb object aggregate final function");
+DATA(insert OID = 3270 (  jsonb_object_agg		   PGNSP PGUID 12 1 0 0 0 t f f f f f i 2 0 3802 "2276 2276" _null_ _null_ _null_ _null_ aggregate_dummy _null_ _null_ _null_ ));
+DESCR("aggregate inputs into jsonb object");
+DATA(insert OID = 3271 (  jsonb_build_array	   PGNSP PGUID 12 1 0 2276 0 f f f f f f s 1 0 3802 "2276" "{2276}" "{v}" _null_ _null_ jsonb_build_array _null_ _null_ _null_ ));
+DESCR("build a jsonb array from any inputs");
+DATA(insert OID = 3272 (  jsonb_build_array	   PGNSP PGUID 12 1 0 0 0 f f f f f f s 0 0 3802  "" _null_ _null_ _null_ _null_ jsonb_build_array_noargs _null_ _null_ _null_ ));
+DESCR("build an empty jsonb array");
+DATA(insert OID = 3273 (  jsonb_build_object    PGNSP PGUID 12 1 0 2276 0 f f f f f f s 1 0 3802 "2276" "{2276}" "{v}" _null_ _null_ jsonb_build_object _null_ _null_ _null_ ));
+DESCR("build a jsonb object from pairwise key/value inputs");
+DATA(insert OID = 3274 (  jsonb_build_object    PGNSP PGUID 12 1 0 0 0 f f f f f f s 0 0 3802  "" _null_ _null_ _null_ _null_ jsonb_build_object_noargs _null_ _null_ _null_ ));
+DESCR("build an empty jsonb object");
+DATA(insert OID = 3262 (  jsonb_strip_nulls	   PGNSP PGUID 12 1 0 0 0 f f f f t f i 1 0 3802 "3802" _null_ _null_ _null_ _null_ jsonb_strip_nulls _null_ _null_ _null_ ));
+DESCR("remove object fields with null values from jsonb");
 
 DATA(insert OID = 3478 (  jsonb_object_field			PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 3802 "3802 25" _null_ _null_ "{from_json, field_name}" _null_ jsonb_object_field _null_ _null_ _null_ ));
 DATA(insert OID = 3214 (  jsonb_object_field_text	PGNSP PGUID 12 1 0 0 0 f f f f t f i 2 0 25  "3802 25" _null_ _null_ "{from_json, field_name}" _null_ jsonb_object_field_text _null_ _null_ _null_ ));

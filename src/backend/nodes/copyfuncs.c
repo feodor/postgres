@@ -3319,6 +3319,7 @@ _copyCreateTableAsStmt(const CreateTableAsStmt *from)
 	COPY_NODE_FIELD(into);
 	COPY_SCALAR_FIELD(relkind);
 	COPY_SCALAR_FIELD(is_select_into);
+	COPY_SCALAR_FIELD(if_not_exists);
 
 	return newnode;
 }
