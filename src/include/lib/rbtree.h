@@ -3,10 +3,10 @@
  * rbtree.h
  *	  interface for PostgreSQL generic Red-Black binary tree package
  *
- * Copyright (c) 2009-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2009-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
- *		src/include/utils/rbtree.h
+ *		src/include/lib/rbtree.h
  *
  *-------------------------------------------------------------------------
  */

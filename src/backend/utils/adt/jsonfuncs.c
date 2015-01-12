@@ -3,7 +3,7 @@
  * jsonfuncs.c
  *		Functions to process JSON data types.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -3182,7 +3182,7 @@ jsonb_strip_nulls(PG_FUNCTION_ARGS)
 				continue;
 
 			/* otherwise, do a delayed push of the key */
-			res = pushJsonbValue(&parseState, WJB_KEY, &k);
+			(void) pushJsonbValue(&parseState, WJB_KEY, &k);
 		}
 
 		if (type == WJB_VALUE || type == WJB_ELEM)
@@ -3190,6 +3190,8 @@ jsonb_strip_nulls(PG_FUNCTION_ARGS)
 		else
 			res = pushJsonbValue(&parseState, type, NULL);
 	}
+
+	Assert(res != NULL);
 
 	PG_RETURN_POINTER(JsonbValueToJsonb(res));
 }

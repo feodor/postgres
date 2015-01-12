@@ -6,7 +6,7 @@
  * See src/backend/utils/misc/README for more information.
  *
  *
- * Copyright (c) 2000-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2015, PostgreSQL Global Development Group
  * Written by Peter Eisentraut <peter_e@gmx.net>.
  *
  * IDENTIFICATION
@@ -2920,7 +2920,7 @@ static struct config_string ConfigureNamesString[] =
 	},
 
 	{
-		{"local_preload_libraries", PGC_BACKEND, CLIENT_CONN_PRELOAD,
+		{"local_preload_libraries", PGC_USERSET, CLIENT_CONN_PRELOAD,
 			gettext_noop("Lists unprivileged shared libraries to preload into each backend."),
 			NULL,
 			GUC_LIST_INPUT | GUC_LIST_QUOTE

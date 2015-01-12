@@ -3,7 +3,7 @@
  * twophase.c
  *		Two-phase commit support functions.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -390,7 +390,6 @@ MarkAsPreparing(TransactionId xid, const char *gid,
 	proc->roleId = owner;
 	proc->lwWaiting = false;
 	proc->lwWaitMode = 0;
-	proc->lwWaitLink = NULL;
 	proc->waitLock = NULL;
 	proc->waitProcLock = NULL;
 	for (i = 0; i < NUM_LOCK_PARTITIONS; i++)

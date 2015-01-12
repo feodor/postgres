@@ -207,6 +207,37 @@ DROP ROLE regression_bob;
 DROP EVENT TRIGGER regress_event_trigger_drop_objects;
 DROP EVENT TRIGGER undroppable;
 
+CREATE OR REPLACE FUNCTION event_trigger_report_dropped()
+ RETURNS event_trigger
+ LANGUAGE plpgsql
+AS $$
+DECLARE r record;
+BEGIN
+    FOR r IN SELECT * from pg_event_trigger_dropped_objects()
+    LOOP
+    IF NOT r.normal AND NOT r.original THEN
+        CONTINUE;
+    END IF;
+    RAISE NOTICE 'NORMAL: orig=% normal=% type=% identity=% name=% args=%',
+        r.original, r.normal, r.object_type, r.object_identity,
+		r.address_names, r.address_args;
+    END LOOP;
+END; $$;
+CREATE EVENT TRIGGER regress_event_trigger_report_dropped ON sql_drop
+    EXECUTE PROCEDURE event_trigger_report_dropped();
+CREATE SCHEMA evttrig
+	CREATE TABLE one (col_a SERIAL PRIMARY KEY, col_b text DEFAULT 'forty two')
+	CREATE INDEX one_idx ON one (col_b)
+	CREATE TABLE two (col_c INTEGER CHECK (col_c > 0) REFERENCES one DEFAULT 42);
+
+ALTER TABLE evttrig.two DROP COLUMN col_c;
+ALTER TABLE evttrig.one ALTER COLUMN col_b DROP DEFAULT;
+ALTER TABLE evttrig.one DROP CONSTRAINT one_pkey;
+DROP INDEX evttrig.one_idx;
+DROP SCHEMA evttrig CASCADE;
+
+DROP EVENT TRIGGER regress_event_trigger_report_dropped;
+
 -- only allowed from within an event trigger function, should fail
 select pg_event_trigger_table_rewrite_oid();
 
@@ -248,3 +279,46 @@ alter table rewriteme alter column foo type numeric(12,4);
 drop table rewriteme;
 drop event trigger no_rewrite_allowed;
 drop function test_evtrig_no_rewrite();
+
+-- test Row Security Event Trigger
+RESET SESSION AUTHORIZATION;
+CREATE TABLE event_trigger_test (a integer, b text);
+
+CREATE OR REPLACE FUNCTION start_command()
+RETURNS event_trigger AS $$
+BEGIN
+RAISE NOTICE '% - ddl_command_start', tg_tag;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION end_command()
+RETURNS event_trigger AS $$
+BEGIN
+RAISE NOTICE '% - ddl_command_end', tg_tag;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION drop_sql_command()
+RETURNS event_trigger AS $$
+BEGIN
+RAISE NOTICE '% - sql_drop', tg_tag;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE EVENT TRIGGER start_rls_command ON ddl_command_start
+    WHEN TAG IN ('CREATE POLICY', 'ALTER POLICY', 'DROP POLICY') EXECUTE PROCEDURE start_command();
+
+CREATE EVENT TRIGGER end_rls_command ON ddl_command_end
+    WHEN TAG IN ('CREATE POLICY', 'ALTER POLICY', 'DROP POLICY') EXECUTE PROCEDURE end_command();
+
+CREATE EVENT TRIGGER sql_drop_command ON sql_drop
+    WHEN TAG IN ('DROP POLICY') EXECUTE PROCEDURE drop_sql_command();
+
+CREATE POLICY p1 ON event_trigger_test USING (FALSE);
+ALTER POLICY p1 ON event_trigger_test USING (TRUE);
+ALTER POLICY p1 ON event_trigger_test RENAME TO p2;
+DROP POLICY p2 ON event_trigger_test;
+
+DROP EVENT TRIGGER start_rls_command;
+DROP EVENT TRIGGER end_rls_command;
+DROP EVENT TRIGGER sql_drop_command;

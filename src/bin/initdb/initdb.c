@@ -38,7 +38,7 @@
  *
  * This code is released under the terms of the PostgreSQL License.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/bin/initdb/initdb.c
@@ -2815,7 +2815,8 @@ CreateRestrictedProcess(char *cmd, PROCESS_INFORMATION *processInfo)
 	SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_POWER_USERS, 0, 0, 0, 0, 0,
 								  0, &dropSids[1].Sid))
 	{
-		fprintf(stderr, _("%s: could not to allocate SIDs: error code %lu\n"), progname, GetLastError());
+		fprintf(stderr, _("%s: could not allocate SIDs: error code %lu\n"),
+				progname, GetLastError());
 		return 0;
 	}
 

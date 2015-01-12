@@ -10,7 +10,7 @@
  * the location.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/parsenodes.h
@@ -1208,11 +1208,12 @@ typedef enum ObjectType
 	OBJECT_ATTRIBUTE,			/* type's attribute, when distinct from column */
 	OBJECT_CAST,
 	OBJECT_COLUMN,
-	OBJECT_CONSTRAINT,
 	OBJECT_COLLATION,
 	OBJECT_CONVERSION,
 	OBJECT_DATABASE,
+	OBJECT_DEFAULT,
 	OBJECT_DOMAIN,
+	OBJECT_DOMCONSTRAINT,
 	OBJECT_EVENT_TRIGGER,
 	OBJECT_EXTENSION,
 	OBJECT_FDW,
@@ -1231,6 +1232,7 @@ typedef enum ObjectType
 	OBJECT_RULE,
 	OBJECT_SCHEMA,
 	OBJECT_SEQUENCE,
+	OBJECT_TABCONSTRAINT,
 	OBJECT_TABLE,
 	OBJECT_TABLESPACE,
 	OBJECT_TRIGGER,
@@ -2737,8 +2739,6 @@ typedef struct ReindexStmt
 	ReindexObjectType	kind;	/* REINDEX_OBJECT_INDEX, REINDEX_OBJECT_TABLE, etc. */
 	RangeVar   *relation;		/* Table or index to reindex */
 	const char *name;			/* name of database to reindex */
-	bool		do_system;		/* include system tables in database case */
-	bool		do_user;		/* include user tables in database case */
 } ReindexStmt;
 
 /* ----------------------

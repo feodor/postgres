@@ -3,7 +3,7 @@
  * sequence.c
  *	  PostgreSQL sequences support code.
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -986,10 +986,9 @@ create_seq_hashtable(void)
 	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(Oid);
 	ctl.entrysize = sizeof(SeqTableData);
-	ctl.hash = oid_hash;
 
 	seqhashtab = hash_create("Sequence values", 16, &ctl,
-							 HASH_ELEM | HASH_FUNCTION);
+							 HASH_ELEM | HASH_BLOBS);
 }
 
 /*

@@ -3,7 +3,7 @@
  * path.c
  *	  portable path handling routines
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -777,7 +777,8 @@ get_home_path(char *ret_path)
 	struct passwd pwdstr;
 	struct passwd *pwd = NULL;
 
-	if (pqGetpwuid(geteuid(), &pwdstr, pwdbuf, sizeof(pwdbuf), &pwd) != 0)
+	(void) pqGetpwuid(geteuid(), &pwdstr, pwdbuf, sizeof(pwdbuf), &pwd);
+	if (pwd == NULL)
 		return false;
 	strlcpy(ret_path, pwd->pw_dir, MAXPGPATH);
 	return true;

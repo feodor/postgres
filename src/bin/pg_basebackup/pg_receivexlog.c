@@ -5,7 +5,7 @@
  *
  * Author: Magnus Hagander <magnus@hagander.net>
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/bin/pg_basebackup/pg_receivexlog.c
@@ -342,7 +342,7 @@ StreamLog(void)
 
 	ReceiveXlogStream(conn, startpos, starttli, NULL, basedir,
 					  stop_streaming, standby_message_timeout, ".partial",
-					  synchronous);
+					  synchronous, false);
 
 	PQfinish(conn);
 	conn = NULL;

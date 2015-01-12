@@ -2,7 +2,7 @@
  *
  * pg_xlogdump.c - decode and display WAL
  *
- * Copyright (c) 2013-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2013-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  contrib/pg_xlogdump/pg_xlogdump.c
@@ -171,7 +171,7 @@ fuzzy_open_file(const char *directory, const char *fname)
 		fd = open(fname, O_RDONLY | PG_BINARY, 0);
 		if (fd < 0 && errno != ENOENT)
 			return -1;
-		else if (fd > 0)
+		else if (fd >= 0)
 			return fd;
 
 		/* XLOGDIR / fname */
@@ -180,7 +180,7 @@ fuzzy_open_file(const char *directory, const char *fname)
 		fd = open(fpath, O_RDONLY | PG_BINARY, 0);
 		if (fd < 0 && errno != ENOENT)
 			return -1;
-		else if (fd > 0)
+		else if (fd >= 0)
 			return fd;
 
 		datadir = getenv("PGDATA");
@@ -192,7 +192,7 @@ fuzzy_open_file(const char *directory, const char *fname)
 			fd = open(fpath, O_RDONLY | PG_BINARY, 0);
 			if (fd < 0 && errno != ENOENT)
 				return -1;
-			else if (fd > 0)
+			else if (fd >= 0)
 				return fd;
 		}
 	}
@@ -204,7 +204,7 @@ fuzzy_open_file(const char *directory, const char *fname)
 		fd = open(fpath, O_RDONLY | PG_BINARY, 0);
 		if (fd < 0 && errno != ENOENT)
 			return -1;
-		else if (fd > 0)
+		else if (fd >= 0)
 			return fd;
 
 		/* directory / XLOGDIR / fname */
@@ -213,7 +213,7 @@ fuzzy_open_file(const char *directory, const char *fname)
 		fd = open(fpath, O_RDONLY | PG_BINARY, 0);
 		if (fd < 0 && errno != ENOENT)
 			return -1;
-		else if (fd > 0)
+		else if (fd >= 0)
 			return fd;
 	}
 	return -1;

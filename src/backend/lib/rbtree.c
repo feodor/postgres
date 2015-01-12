@@ -17,16 +17,16 @@
  * longest path from root to leaf is only about twice as long as the shortest,
  * so lookups are guaranteed to run in O(lg n) time.
  *
- * Copyright (c) 2009-2014, PostgreSQL Global Development Group
+ * Copyright (c) 2009-2015, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
- *	  src/backend/utils/misc/rbtree.c
+ *	  src/backend/lib/rbtree.c
  *
  *-------------------------------------------------------------------------
  */
 #include "postgres.h"
 
-#include "utils/rbtree.h"
+#include "lib/rbtree.h"
 
 
 /*

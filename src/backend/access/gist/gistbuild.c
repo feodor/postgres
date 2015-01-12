@@ -4,7 +4,7 @@
  *	  build algorithm for GiST indexes implementation.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -1142,12 +1142,10 @@ gistInitParentMap(GISTBuildState *buildstate)
 	hashCtl.keysize = sizeof(BlockNumber);
 	hashCtl.entrysize = sizeof(ParentMapEntry);
 	hashCtl.hcxt = CurrentMemoryContext;
-	hashCtl.hash = oid_hash;
 	buildstate->parentMap = hash_create("gistbuild parent map",
 										1024,
 										&hashCtl,
-										HASH_ELEM | HASH_CONTEXT
-										| HASH_FUNCTION);
+									  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
 }
 
 static void

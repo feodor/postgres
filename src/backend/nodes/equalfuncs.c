@@ -18,7 +18,7 @@
  * "x" to be considered equal() to another reference to "x" in the query.
  *
  *
- * Portions Copyright (c) 1996-2014, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -1901,8 +1901,6 @@ _equalReindexStmt(const ReindexStmt *a, const ReindexStmt *b)
 	COMPARE_SCALAR_FIELD(kind);
 	COMPARE_NODE_FIELD(relation);
 	COMPARE_STRING_FIELD(name);
-	COMPARE_SCALAR_FIELD(do_system);
-	COMPARE_SCALAR_FIELD(do_user);
 
 	return true;
 }
