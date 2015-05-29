@@ -4878,7 +4878,7 @@ DATA(insert OID = 7645 (  unnest_element		   PGNSP PGUID 12 1 100 0 0 f f f f t 
 DESCR("expand elements from jsonb");
 DATA(insert OID = 7646 (  unnest_value		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 3802 "3802 16" _null_ _null_ _null_ _null_ _null_ jsonb_unnest_value _null_ _null_ _null_ ));
 DESCR("expand values from jsonb");
-DATA(insert OID = 7647 (  unnest_key		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 3802 "3802 16" _null_ _null_ _null_ _null_ _null_ jsonb_unnest_key _null_ _null_ _null_ ));
+DATA(insert OID = 7647 (  unnest_key		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 25 "3802 16" _null_ _null_ _null_ _null_ _null_ jsonb_unnest_key _null_ _null_ _null_ ));
 DESCR("expand keys from jsonb");
 /* txid */
 DATA(insert OID = 2939 (  txid_snapshot_in			PGNSP PGUID 12 1  0 0 0 f f f f t f i 1 0 2970 "2275" _null_ _null_ _null_ _null_ _null_ txid_snapshot_in _null_ _null_ _null_ ));

@@ -3907,6 +3907,29 @@ nextUnnest(UnnestState *state)
 	return (r == state->type) ? JsonbValueToJsonb(&v) : NULL;
 }
 
+static text*
+nextUnnestKey(UnnestState *state)
+{
+	MemoryContext	 oldcontext;
+	JsonbValue		 v;
+	int				 r;
+
+	/*
+	 * Iterator should work in long-lived memory context
+	 */
+	oldcontext = MemoryContextSwitchTo(state->ctx);
+
+	while((r = JsonbIteratorNext(&state->it, &v, state->skipNested)) != WJB_DONE)
+	{
+		if (r == state->type)
+			break;
+	}
+
+	MemoryContextSwitchTo(oldcontext);
+
+	return (r == state->type) ? cstring_to_text_with_len(v.val.string.val, v.val.string.len) : NULL;
+}
+
 static void
 finiUnnest(UnnestState *state)
 {
@@ -3977,12 +4000,12 @@ jsonb_unnest_key(PG_FUNCTION_ARGS)
 	funcctx = SRF_PERCALL_SETUP();
 	state = funcctx->user_fctx;
 
-	if (state == NULL || (r = nextUnnest(state)) == NULL)
+	if (state == NULL || (r = nextUnnestKey(state)) == NULL)
 	{
 		finiUnnest(state);
 		SRF_RETURN_DONE(funcctx);
 	}
 
-	SRF_RETURN_NEXT(funcctx, JsonbGetDatum(r));
+	SRF_RETURN_NEXT(funcctx, PointerGetDatum(r));
 }
 
