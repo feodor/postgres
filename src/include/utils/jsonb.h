@@ -404,6 +404,7 @@ extern Datum jsonb_concat(PG_FUNCTION_ARGS);
 
 /* unnesting function */
 extern Datum jsonb_unnest_element(PG_FUNCTION_ARGS);
+extern Datum jsonb_unnest_element_index(PG_FUNCTION_ARGS);
 extern Datum jsonb_unnest_value(PG_FUNCTION_ARGS);
 extern Datum jsonb_unnest_key(PG_FUNCTION_ARGS);
 

@@ -3900,6 +3900,8 @@ typedef struct UnnestState
 	JsonbIterator		*it;
 	bool				 skipNested;
 	JsonbIteratorToken	 type;
+	int32				 counter;
+	TupleDesc			 tupdesc;
 }
 UnnestState;
 
@@ -3907,7 +3909,7 @@ static void finiUnnest(UnnestState *state);
 
 static void
 initUnnest(FuncCallContext *funcctx, Datum jsonb, bool recursive,
-			JsonbIteratorToken type)
+			JsonbIteratorToken type, FunctionCallInfo fcinfo)
 {
 	MemoryContext	 oldcontext;
 	UnnestState		*state;
@@ -3932,6 +3934,10 @@ initUnnest(FuncCallContext *funcctx, Datum jsonb, bool recursive,
 		Assert(r == WJB_DONE);
 	}
 
+	if (r != WJB_DONE && fcinfo &&
+			get_call_result_type(fcinfo, NULL, &state->tupdesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+
 	MemoryContextSwitchTo(oldcontext);
 
 	if (r == WJB_DONE)
@@ -3939,6 +3945,7 @@ initUnnest(FuncCallContext *funcctx, Datum jsonb, bool recursive,
 		finiUnnest(state);
 		state = NULL;
 	}
+
 
 	funcctx->user_fctx = (void *) state;
 }
@@ -3962,6 +3969,8 @@ nextUnnest(UnnestState *state)
 	}
 
 	MemoryContextSwitchTo(oldcontext);
+
+	state->counter ++;
 
 	return (r == state->type) ? JsonbValueToJsonb(&v) : NULL;
 }
@@ -4008,7 +4017,7 @@ jsonb_unnest_element(PG_FUNCTION_ARGS)
 
 	if (SRF_IS_FIRSTCALL())
 		initUnnest(SRF_FIRSTCALL_INIT(), PG_GETARG_DATUM(0),
-				   PG_GETARG_BOOL(1), WJB_ELEM);
+				   PG_GETARG_BOOL(1), WJB_ELEM, NULL);
 
 	funcctx = SRF_PERCALL_SETUP();
 	state = funcctx->user_fctx;
@@ -4023,6 +4032,34 @@ jsonb_unnest_element(PG_FUNCTION_ARGS)
 }
 
 Datum
+jsonb_unnest_element_index(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	UnnestState     *state;
+	Jsonb			*r;
+	Datum			vals[2];
+	bool			nulls[2] = {false, false};
+
+	if (SRF_IS_FIRSTCALL())
+		initUnnest(SRF_FIRSTCALL_INIT(), PG_GETARG_DATUM(0),
+				   PG_GETARG_BOOL(1), WJB_ELEM, fcinfo);
+
+	funcctx = SRF_PERCALL_SETUP();
+	state = funcctx->user_fctx;
+
+	if (state == NULL || (r = nextUnnest(state)) == NULL)
+	{
+		finiUnnest(state);
+		SRF_RETURN_DONE(funcctx);
+	}
+
+	vals[0] = JsonbGetDatum(r);
+	vals[1] = Int32GetDatum(state->counter - 1);
+
+	SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(heap_form_tuple(state->tupdesc, vals, nulls)));
+}
+
+Datum
 jsonb_unnest_value(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
@@ -4031,7 +4068,7 @@ jsonb_unnest_value(PG_FUNCTION_ARGS)
 
 	if (SRF_IS_FIRSTCALL())
 		initUnnest(SRF_FIRSTCALL_INIT(), PG_GETARG_DATUM(0),
-				   PG_GETARG_BOOL(1), WJB_VALUE);
+				   PG_GETARG_BOOL(1), WJB_VALUE, NULL);
 
 	funcctx = SRF_PERCALL_SETUP();
 	state = funcctx->user_fctx;
@@ -4050,11 +4087,11 @@ jsonb_unnest_key(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	UnnestState     *state;
-	Jsonb			*r;
+	text			*r;
 
 	if (SRF_IS_FIRSTCALL())
 		initUnnest(SRF_FIRSTCALL_INIT(), PG_GETARG_DATUM(0),
-				   PG_GETARG_BOOL(1), WJB_KEY);
+				   PG_GETARG_BOOL(1), WJB_KEY, NULL);
 
 	funcctx = SRF_PERCALL_SETUP();
 	state = funcctx->user_fctx;

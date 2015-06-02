@@ -4876,6 +4876,8 @@ DATA(insert OID = 3306 (  jsonb_pretty	   PGNSP PGUID 12 1 0 0 0 f f f f t f i 1
 DESCR("Indented text from jsonb");
 DATA(insert OID = 7645 (  unnest_element		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 3802 "3802 16" _null_ _null_ _null_ _null_ _null_ jsonb_unnest_element _null_ _null_ _null_ ));
 DESCR("expand elements from jsonb");
+DATA(insert OID = 7652 (  unnest_element_index		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 2249 "3802 16" "{3802,16,3802,23}" "{i,i,o,o}" "{jsonb_in,recursive,element,index}" _null_ _null_ jsonb_unnest_element_index _null_ _null_ _null_ ));
+DESCR("expand elements from jsonb");
 DATA(insert OID = 7646 (  unnest_value		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 3802 "3802 16" _null_ _null_ _null_ _null_ _null_ jsonb_unnest_value _null_ _null_ _null_ ));
 DESCR("expand values from jsonb");
 DATA(insert OID = 7647 (  unnest_key		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 25 "3802 16" _null_ _null_ _null_ _null_ _null_ jsonb_unnest_key _null_ _null_ _null_ ));

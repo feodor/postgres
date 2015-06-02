@@ -177,7 +177,8 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 			   bool *no_inherit, core_yyscan_t yyscanner);
 static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 static SelectStmt * makeElementSubselect(int any_or_each, int kind, bool recursive, Node *of,
-										 const char *aliasname, Node *clause, int location);
+										 const char *aliasname, const char *indexname,
+										 Node *clause, int location);
 
 %}
 
@@ -292,6 +293,7 @@ static SelectStmt * makeElementSubselect(int any_or_each, int kind, bool recursi
 				opt_grant_grant_option opt_grant_admin_option
 				opt_nowait opt_if_exists opt_with_data
 				opt_anywhere
+%type <str>		opt_with_index
 %type <ival>	opt_nowait_or_skip
 
 %type <list>	OptRoleList AlterOptRoleList
@@ -12060,6 +12062,18 @@ c_expr:		columnref								{ $$ = $1; }
 				  g->location = @1;
 				  $$ = (Node *)g;
 			  }
+			| any_or_each ELEMENT opt_anywhere OF b_expr AS ColId opt_with_index SATISFIES '(' a_expr ')' 
+			  {
+					SubLink	*n = makeNode(SubLink);
+
+					n->subLinkType = EXPR_SUBLINK;
+					n->subLinkId = 0;
+					n->testexpr = NULL;
+					n->operName = NIL;
+					n->subselect = (Node*)makeElementSubselect($1, ELEMENT, $3, $5, $7, $8, $11, @1);
+					n->location = @1;
+					$$ = (Node *)n;
+			  }
 			| any_or_each any_or_each_kind opt_anywhere OF b_expr AS ColId SATISFIES '(' a_expr ')'
 			  {
 					SubLink	*n = makeNode(SubLink);
@@ -12068,7 +12082,7 @@ c_expr:		columnref								{ $$ = $1; }
 					n->subLinkId = 0;
 					n->testexpr = NULL;
 					n->operName = NIL;
-					n->subselect = (Node*)makeElementSubselect($1, $2, $3, $5, $7, $10, @1);
+					n->subselect = (Node*)makeElementSubselect($1, $2, $3, $5, $7, NULL, $10, @1);
 					n->location = @1;
 					$$ = (Node *)n;
 			  }
@@ -12080,10 +12094,14 @@ any_or_each:
 		;
 
 any_or_each_kind:
-			ELEMENT						{ $$ = ELEMENT; }
-			| KEY						{ $$ = KEY; }
+			KEY							{ $$ = KEY; }
 			| VALUE_P					{ $$ = VALUE_P; }
 		;
+
+opt_with_index:
+			WITH INDEX AS ColId 		{ $$ = $4; }
+			| /* empty */				{ $$ = NULL; }
+			;
 
 opt_anywhere:
 			ANYWHERE					{ $$ = true; }
@@ -14866,7 +14884,8 @@ makeRecursiveViewSelect(char *relname, List *aliases, Node *query)
 
 static SelectStmt *
 makeElementSubselect(int any_or_each, int kind, bool recursive, Node *of,
-					 const char *aliasname, Node *clause, int location)
+					 const char *aliasname, const char *indexname,
+					 Node *clause, int location)
 {
 	ResTarget 		*target = makeNode(ResTarget);
 	FuncCall		*unnest_call, *agg_call, *count_call;
@@ -14930,7 +14949,7 @@ makeElementSubselect(int any_or_each, int kind, bool recursive, Node *of,
 	switch(kind)
 	{
 		case ELEMENT:
-			unnest_name = "unnest_element";
+			unnest_name = indexname ? "unnest_element_index" : "unnest_element";
 			break;
 		case KEY:
 			unnest_name = "unnest_key";
@@ -14948,6 +14967,8 @@ makeElementSubselect(int any_or_each, int kind, bool recursive, Node *of,
 
 	table_ref->functions = list_make1(list_make2(unnest_call, NIL));
 	table_ref->alias = makeAlias(aliasname, NIL);
+	if (indexname)
+		table_ref->alias->colnames = list_make2(makeString(pstrdup(aliasname)), makeString(pstrdup(indexname)));
 	subselect->fromClause = list_make1(table_ref);
 
 	return subselect;
