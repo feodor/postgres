@@ -2174,6 +2174,12 @@ SELECT count(*) FROM testjsonb WHERE ANY KEY OF j AS k SATISFIES (
      4
 (1 row)
 
+SELECT ANY ELEMENT OF '[1,2,3]'::jsonb AS e with index as i SATISFIES (e > '1'::jsonb and i = 1);
+ bool_or_not_null 
+------------------
+ t
+(1 row)
+
 CREATE INDEX jidx ON testjsonb USING gin (j);
 SET enable_seqscan = off;
 SELECT count(*) FROM testjsonb WHERE j @> '{"wait":null}';

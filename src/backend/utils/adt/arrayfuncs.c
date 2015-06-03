@@ -5868,6 +5868,57 @@ array_fill_internal(ArrayType *dims, ArrayType *lbs,
 	return result;
 }
 
+typedef struct ArrayUnnestState
+{
+	AnyArrayType	*array;
+	array_iter		iter;
+	int				nextelem;
+	int				numelems;
+	int16			elmlen;
+	bool			elmbyval;
+	char			elmalign;
+	TupleDesc		tupdesc;
+} ArrayUnnestState;
+
+static void
+init_array_unnest(FuncCallContext *funcctx,  Datum array, FunctionCallInfo fcinfo)
+{
+	MemoryContext		 oldcontext;
+	ArrayUnnestState	*state;
+
+	oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+	state = palloc0(sizeof(*state));
+	/*
+	 * Get the array value and detoast if needed.  We can't do this
+	 * earlier because if we have to detoast, we want the detoasted copy
+	 * to be in multi_call_memory_ctx, so it will go away when we're done
+	 * and not before.  (If no detoast happens, we assume the originally
+	 * passed array will stick around till then.)
+	 */
+	state->array = DatumGetAnyArray(array);
+	array_iter_setup(&state->iter, state->array);
+	state->numelems = ArrayGetNItems(AARR_NDIM(state->array), AARR_DIMS(state->array));
+
+	if (VARATT_IS_EXPANDED_HEADER(state->array))
+	{
+		/* we can just grab the type data from expanded array */
+		state->elmlen = state->array->xpn.typlen;
+		state->elmbyval = state->array->xpn.typbyval;
+		state->elmalign = state->array->xpn.typalign;
+	}
+	else
+		get_typlenbyvalalign(AARR_ELEMTYPE(state->array),
+							 &state->elmlen,
+							 &state->elmbyval,
+							 &state->elmalign);
+
+	if (fcinfo && get_call_result_type(fcinfo, NULL, &state->tupdesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+
+	funcctx->user_fctx = state;
+	MemoryContextSwitchTo(oldcontext);
+}
 
 /*
  * UNNEST
@@ -5875,66 +5926,12 @@ array_fill_internal(ArrayType *dims, ArrayType *lbs,
 Datum
 array_unnest(PG_FUNCTION_ARGS)
 {
-	typedef struct
-	{
-		array_iter	iter;
-		int			nextelem;
-		int			numelems;
-		int16		elmlen;
-		bool		elmbyval;
-		char		elmalign;
-	} array_unnest_fctx;
-
-	FuncCallContext *funcctx;
-	array_unnest_fctx *fctx;
-	MemoryContext oldcontext;
+	FuncCallContext 	*funcctx;
+	ArrayUnnestState 	*fctx;
 
 	/* stuff done only on the first call of the function */
 	if (SRF_IS_FIRSTCALL())
-	{
-		AnyArrayType *arr;
-
-		/* create a function context for cross-call persistence */
-		funcctx = SRF_FIRSTCALL_INIT();
-
-		/*
-		 * switch to memory context appropriate for multiple function calls
-		 */
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-
-		/*
-		 * Get the array value and detoast if needed.  We can't do this
-		 * earlier because if we have to detoast, we want the detoasted copy
-		 * to be in multi_call_memory_ctx, so it will go away when we're done
-		 * and not before.  (If no detoast happens, we assume the originally
-		 * passed array will stick around till then.)
-		 */
-		arr = PG_GETARG_ANY_ARRAY(0);
-
-		/* allocate memory for user context */
-		fctx = (array_unnest_fctx *) palloc(sizeof(array_unnest_fctx));
-
-		/* initialize state */
-		array_iter_setup(&fctx->iter, arr);
-		fctx->nextelem = 0;
-		fctx->numelems = ArrayGetNItems(AARR_NDIM(arr), AARR_DIMS(arr));
-
-		if (VARATT_IS_EXPANDED_HEADER(arr))
-		{
-			/* we can just grab the type data from expanded array */
-			fctx->elmlen = arr->xpn.typlen;
-			fctx->elmbyval = arr->xpn.typbyval;
-			fctx->elmalign = arr->xpn.typalign;
-		}
-		else
-			get_typlenbyvalalign(AARR_ELEMTYPE(arr),
-								 &fctx->elmlen,
-								 &fctx->elmbyval,
-								 &fctx->elmalign);
-
-		funcctx->user_fctx = fctx;
-		MemoryContextSwitchTo(oldcontext);
-	}
+		init_array_unnest(SRF_FIRSTCALL_INIT(), PG_GETARG_DATUM(0), NULL);
 
 	/* stuff done on every call of the function */
 	funcctx = SRF_PERCALL_SETUP();
@@ -5949,6 +5946,46 @@ array_unnest(PG_FUNCTION_ARGS)
 							   fctx->elmlen, fctx->elmbyval, fctx->elmalign);
 
 		SRF_RETURN_NEXT(funcctx, elem);
+	}
+	else
+	{
+		/* do when there is no more left */
+		SRF_RETURN_DONE(funcctx);
+	}
+}
+
+Datum
+array_unnest_element_index(PG_FUNCTION_ARGS)
+{
+	FuncCallContext 	*funcctx;
+	ArrayUnnestState 	*fctx;
+
+	/* stuff done only on the first call of the function */
+	if (SRF_IS_FIRSTCALL())
+		init_array_unnest(SRF_FIRSTCALL_INIT(), PG_GETARG_DATUM(0), fcinfo);
+
+	/* stuff done on every call of the function */
+	funcctx = SRF_PERCALL_SETUP();
+	fctx = funcctx->user_fctx;
+
+	if (fctx->nextelem < fctx->numelems)
+	{
+		int			offset = fctx->nextelem++;
+		Datum		elem;
+		Datum		vals[2];
+		bool		nulls[2] = {false, false};
+		bool		isnull;
+
+		elem = array_iter_next(&fctx->iter, &isnull, offset,
+							   fctx->elmlen, fctx->elmbyval, fctx->elmalign);
+
+		if (isnull)
+			nulls[0] = true;
+		else
+			vals[0] = elem;
+		vals[1] = Int32GetDatum(fctx->nextelem);
+
+		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(heap_form_tuple(fctx->tupdesc, vals, nulls)));
 	}
 	else
 	{

@@ -2084,3 +2084,9 @@ SELECT a, (1 = ALL(a)), EACH ELEMENT OF a AS v SATISFIES (v = 1) FROM anytest;
  {NULL,2} | f        | f
 (8 rows)
 
+SELECT ANY ELEMENT OF '{1,2,3}'::int4[] AS e with index as i SATISFIES (e > 1 and i = 3);
+ bool_or_not_null 
+------------------
+ t
+(1 row)
+

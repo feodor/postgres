@@ -530,6 +530,8 @@ SELECT count(*) FROM testjsonb WHERE ANY ELEMENT OF j->'array' AS e SATISFIES ( 
 SELECT count(*) FROM testjsonb WHERE ANY KEY OF j AS k SATISFIES (
 	k = 'array' AND ANY ELEMENT OF j->k AS e SATISFIES ( e = '"baz"'::jsonb )
 );
+SELECT ANY ELEMENT OF '[1,2,3]'::jsonb AS e with index as i SATISFIES (e > '1'::jsonb and i = 1);
+
 
 CREATE INDEX jidx ON testjsonb USING gin (j);
 SET enable_seqscan = off;

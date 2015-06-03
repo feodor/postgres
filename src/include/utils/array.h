@@ -357,6 +357,7 @@ extern Datum array_fill(PG_FUNCTION_ARGS);
 extern Datum array_fill_with_lower_bounds(PG_FUNCTION_ARGS);
 extern Datum array_unnest(PG_FUNCTION_ARGS);
 extern Datum array_unnest_element(PG_FUNCTION_ARGS);
+extern Datum array_unnest_element_index(PG_FUNCTION_ARGS);
 extern Datum array_remove(PG_FUNCTION_ARGS);
 extern Datum array_replace(PG_FUNCTION_ARGS);
 extern Datum width_bucket_array(PG_FUNCTION_ARGS);

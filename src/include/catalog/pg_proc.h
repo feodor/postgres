@@ -927,6 +927,8 @@ DESCR("expand array to set of rows");
 /* just for compatibility with jsonb_unnest* for any/each element clause */
 DATA(insert OID = 7644 (  unnest_element		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 2283 "2277 16" _null_ _null_ _null_ _null_ _null_ array_unnest_element _null_ _null_ _null_ ));
 DESCR("expand array to set of rows");
+DATA(insert OID = 7653 (  unnest_element_index		   PGNSP PGUID 12 1 100 0 0 f f f f t t i 2 0 2249 "2277 16" "{2277,16,2283,23}" "{i,i,o,o}" "{array_in,recursive,element,index}" _null_ _null_ array_unnest_element_index _null_ _null_ _null_ ));
+DESCR("expand array to set of rows with index");
 DATA(insert OID = 3167 (  array_remove	   PGNSP PGUID 12 1 0 0 0 f f f f f f i 2 0 2277 "2277 2283" _null_ _null_ _null_ _null_ _null_ array_remove _null_ _null_ _null_ ));
 DESCR("remove any occurrences of an element from an array");
 DATA(insert OID = 3168 (  array_replace    PGNSP PGUID 12 1 0 0 0 f f f f f f i 3 0 2277 "2277 2283 2283" _null_ _null_ _null_ _null_ _null_ array_replace _null_ _null_ _null_ ));

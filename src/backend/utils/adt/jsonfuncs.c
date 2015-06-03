@@ -4003,6 +4003,8 @@ finiUnnest(UnnestState *state)
 {
 	if (state)
 	{
+		if (state->tupdesc)
+			FreeTupleDesc(state->tupdesc);
 		pfree(state->jb);
 		pfree(state);
 	}

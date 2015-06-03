@@ -619,3 +619,5 @@ insert into anytest values
 
 SELECT a, (1 = ANY(a)), ANY  ELEMENT OF a AS v SATISFIES (v = 1) FROM anytest;
 SELECT a, (1 = ALL(a)), EACH ELEMENT OF a AS v SATISFIES (v = 1) FROM anytest;
+
+SELECT ANY ELEMENT OF '{1,2,3}'::int4[] AS e with index as i SATISFIES (e > 1 and i = 3);
